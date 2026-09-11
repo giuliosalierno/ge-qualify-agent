@@ -59,10 +59,10 @@ Conduct the interview **one stage at a time**. Keep responses concise and engagi
   4. **Target Time Saved per Task (S):** How much time does the customer expect or target to save per task with Gemini Enterprise (or target completion duration)?
 - *Rule:* Zero speculative benchmarks. Never invent or apply arbitrary acceleration percentages. If customer timing estimates are not yet defined, note them as `[Pending Customer Input]`.
 - *Calculation Formula:*
-  - **Weekly Minutes Saved per User** = $T \times S$ *(based strictly on customer-confirmed time saved per task)*
-  - **Weekly Hours Saved per User** = $\text{Weekly Minutes Saved} / 60$
-  - **Annual Hours Saved per User** = $\text{Weekly Hours Saved} \times 50\text{ work weeks}$
-  - **Total Annual Team Hours Saved** = $\text{Annual Hours Saved per User} \times U$
+  - **Weekly Minutes Saved per User** = T * S *(based strictly on customer-confirmed time saved per task)*
+  - **Weekly Hours Saved per User** = Weekly Minutes Saved / 60
+  - **Annual Hours Saved per User** = Weekly Hours Saved * 50 work weeks
+  - **Total Annual Team Hours Saved** = Annual Hours Saved per User * U
 
 ### Turn 3: Summarize Stage 2 & Launch Stage 3 (GE App Agentic Capabilities Needed)
 - Present the calculated hours saved (or confirm `[Pending Customer Input]`).
@@ -123,9 +123,9 @@ Transfer this template to the `canvas` agent at kickoff. Notice that all unverif
 | **Task Frequency (T)** | ⚠️ [Pending Stage 2] | Customer confirmed tasks/week |
 | **Current Baseline Duration (M)** | ⚠️ [Pending Stage 2] | Customer confirmed minutes/task |
 | **Target Time Saved per Task (S)** | ⚠️ [Pending Stage 2] | Customer confirmed minutes saved/task |
-| **Weekly Hours Saved per User** | ⚠️ [Pending Stage 2] | $(T \times S) / 60$ |
-| **Annual Hours Saved per User** | ⚠️ [Pending Stage 2] | $\text{Weekly Hours Saved} \times 50$ |
-| **Total Annual Team Hours Saved** | ⚠️ **[Pending Stage 2]** | **Annual Hours per User $\times U$** |
+| **Weekly Hours Saved per User** | ⚠️ [Pending Stage 2] | (T * S) / 60 |
+| **Annual Hours Saved per User** | ⚠️ [Pending Stage 2] | Weekly Hours Saved * 50 |
+| **Total Annual Team Hours Saved** | ⚠️ **[Pending Stage 2]** | Annual Hours per User * U |
 
 ## 4. Execution & Adoption Plan
 - **Executive Sponsor:** ⚠️ [Pending Stage 4 Discovery]
@@ -176,9 +176,9 @@ Transfer this completed deliverable to the `canvas` agent when qualification is 
 | **Task Frequency (T)** | [Count] tasks/week | Customer confirmed |
 | **Current Baseline Duration (M)** | [Minutes] min/task | Customer confirmed |
 | **Target Time Saved per Task (S)** | [Minutes] min saved/task | Customer confirmed |
-| **Weekly Hours Saved per User** | [Hours] hrs/week | $(T \times S) / 60$ |
-| **Annual Hours Saved per User** | [Hours] hrs/year | $\text{Weekly Hours Saved} \times 50$ |
-| **Total Annual Team Hours Saved** | **[Total] hrs/year** | **Annual Hours per User $\times U$** |
+| **Weekly Hours Saved per User** | [Hours] hrs/week | (T * S) / 60 |
+| **Annual Hours Saved per User** | [Hours] hrs/year | Weekly Hours Saved * 50 |
+| **Total Annual Team Hours Saved** | **[Total] hrs/year** | Annual Hours per User * U |
 
 *(If numbers were not provided, mark table values as `[Pending Customer Input]`)*
 
