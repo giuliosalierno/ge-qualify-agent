@@ -82,21 +82,14 @@ anything. There is deliberately no sign-off, register or identity layer between
 the business and technical phases; that is deferred to a phase-2 custom agent.
 Treat the deliverables as evidence for a human decision, not as an approval.
 
-## Installation
+## Getting started
 
-### 1. Download Skills
-Download the pre-packaged zip files from the [GitHub Releases](https://github.com/giuliosalierno/ge-qualify-skills/releases) page:
-* `ge_intake_business.zip` — Front office business value qualification
-* `ge_tech_review.zip` — Back office technical review & security architecture
+- [`ge-intake-business`](https://github.com/giuliosalierno/ge-qualify-skills/releases/latest/download/ge_intake_business.zip) ([source](skills/ge_intake_business/SKILL.md))
+- [`ge-review-tech`](https://github.com/giuliosalierno/ge-qualify-skills/releases/latest/download/ge_tech_review.zip) ([source](skills/ge_tech_review/SKILL.md))
 
-### 2. Upload to Gemini Enterprise
-1. Open Gemini Enterprise.
-2. Navigate to your agent settings → **Skills** → **Add Skill**.
-3. Upload `ge_intake_business.zip` and `ge_tech_review.zip`.
+Invoke either skill in Gemini Enterprise and describe the workflow. Connect a Drive folder whenever you have one ready.
 
-### 3. Usage
-* Trigger business intake: `/ge-intake-business [initiative description]`
-* Trigger technical review: `/ge-review-tech [initiative or Business Value Brief]`
+Today the skills produce the documents; the decisions stay with people.
 
 ---
 
