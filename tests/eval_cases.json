@@ -1,0 +1,151 @@
+{
+  "eval_suite": "ge_qualify_eval_suite",
+  "version": "1.0.0",
+  "cases": [
+    {
+      "case_id": "hybrid_legacy_sap_001",
+      "description": "Enterprise customer with on-prem SAP and DB2 behind firewall requiring custom ADK agent and Cloud VPN",
+      "input": "We want to use Gemini Enterprise to search and extract customer order history. Our data resides in an on-premises SAP ECC system and an IBM DB2 database behind a corporate firewall. There is no existing Cloud VPN or Interconnect to GCP yet.",
+      "expected_skill": "ge-qualify-opportunity",
+      "expected_trajectory_mode": "IN_ORDER",
+      "expected_tool_calls": [
+        {
+          "tool": "run_command",
+          "args_pattern": "calculate_score.py"
+        }
+      ],
+      "expected_feasibility_indicator": "Custom Agent in GE App",
+      "expected_prerequisites": [
+        "Cloud VPN or Dedicated Interconnect to GCP",
+        "API or JDBC connectivity specs for SAP and DB2",
+        "DBA/system owner assignment for SAP and DB2"
+      ],
+      "rubric": [
+        "Pillar 2: Identifies on-prem SAP ECC and DB2 as systems with legacy interfaces",
+        "Pillar 3: Flags lack of hybrid network connectivity (Cloud VPN/Interconnect) as an infrastructure prerequisite",
+        "Pillar 4: Notes corporate firewall and on-prem authentication constraints",
+        "Identifies GE Fit Indicator as 'Custom Agent in GE App' rather than pure out-of-the-box connector",
+        "Outputs both an As-Is Discovery Dossier and an Access Checklist"
+      ]
+    },
+    {
+      "case_id": "cloud_native_saas_002",
+      "description": "Customer with Google Drive, BigQuery, and Salesforce looking for Q&A across standard data sources",
+      "input": "We have standard customer documentation in Google Drive, analytical logs in BigQuery, and accounts in Salesforce. We want our support reps to ask questions and search these repositories directly in Gemini Enterprise.",
+      "expected_skill": "ge-qualify-opportunity",
+      "expected_trajectory_mode": "IN_ORDER",
+      "expected_tool_calls": [
+        {
+          "tool": "run_command",
+          "args_pattern": "calculate_score.py"
+        }
+      ],
+      "expected_feasibility_indicator": "Pure GE App",
+      "expected_prerequisites": [
+        "Service accounts or OAuth setup for Salesforce connector",
+        "IAM permissions for BigQuery dataset",
+        "Google Workspace domain integration"
+      ],
+      "rubric": [
+        "Pillar 2: Identifies Google Drive, BigQuery, and Salesforce as native supported stores",
+        "Pillar 3: Confirms all systems are cloud/SaaS with no on-prem network barrier",
+        "Pillar 4: Recommends standard Google Workspace & IAM integration",
+        "Identifies GE Fit Indicator as 'Pure GE App' with managed connectors",
+        "Outputs As-Is Discovery Dossier and Access Checklist"
+      ]
+    },
+    {
+      "case_id": "airgap_high_risk_blocker_003",
+      "description": "Customer in airgapped environment with strict ban on cloud processing and undocumented data schemas",
+      "input": "We have an airgapped SCADA environment with no network path to any public cloud. Internal company policy strictly prohibits cloud-based data processing. Schemas are undocumented and the original developers have left.",
+      "expected_skill": "ge-qualify-opportunity",
+      "expected_trajectory_mode": "IN_ORDER",
+      "expected_tool_calls": [
+        {
+          "tool": "run_command",
+          "args_pattern": "calculate_score.py"
+        }
+      ],
+      "expected_feasibility_indicator": "Blockers / High Risk",
+      "expected_prerequisites": [
+        "Policy exception or private dedicated landing zone",
+        "Network bridge or hybrid egress path",
+        "Schema reverse-engineering and documentation"
+      ],
+      "rubric": [
+        "Pillar 3: Immediately flags airgapped network as critical blocker",
+        "Pillar 4: Flags strict cloud processing ban as critical policy blocker",
+        "Pillar 2: Flags undocumented schemas as high risk data blocker",
+        "Categorizes fit as 'Blockers / High Risk' requiring resolution prior to FDE engagement",
+        "Produces Access Checklist highlighting required blockers to resolve"
+      ]
+    },
+    {
+      "case_id": "business_intake_support_roi_006",
+      "description": "Front Office business intake sizing annualized hours saved for customer support triage",
+      "input": "We want to qualify an AI opportunity for our customer support team. 40 support agents manually review and triage incoming tickets 15 times a week, taking 25 minutes per ticket. We want to estimate hours saved and classify this on the delivery ladder.",
+      "expected_skill": "ge-intake-business",
+      "expected_trajectory_mode": "IN_ORDER",
+      "expected_tool_calls": [],
+      "rubric": [
+        "Pillar 1: Captures support agent persona and ticket triage workflow",
+        "Pillar 2: Calculates annualized hours saved based on customer-confirmed timing (users * tasks/wk * time saved * 50 wks / 60)",
+        "Pillar 3: Classifies use case onto Three-Tier Delivery Ladder",
+        "Pillar 4: Prompts for named business sponsor and handover readiness",
+        "Generates Business Value Brief & Intake Memo for technical handover"
+      ]
+    },
+    {
+      "case_id": "anti_trigger_billing_004",
+      "description": "Out-of-scope query regarding general GCP invoice and billing dispute",
+      "input": "Why is my monthly Google Cloud invoice showing $450 for Compute Engine egress bandwidth? How can I dispute this charge?",
+      "expected_skill": null,
+      "expected_trajectory_mode": "NONE",
+      "expected_tool_calls": [],
+      "rubric": [
+        "Skill must NOT activate for general cloud billing or invoice disputes",
+        "Agent handles through standard billing support guidance without loading qualification skills"
+      ]
+    },
+    {
+      "case_id": "anti_trigger_generic_coding_005",
+      "description": "Out-of-scope query asking to debug a generic python regex",
+      "input": "Can you write a python regex to match dates formatted as YYYY-MM-DD?",
+      "expected_skill": null,
+      "expected_trajectory_mode": "NONE",
+      "expected_tool_calls": [],
+      "rubric": [
+        "Skill must NOT activate for generic programming or regex questions",
+        "Agent answers directly without invoking qualification skills"
+      ]
+    },
+    {
+      "case_id": "pasted_doc_section_by_section_interview_007",
+      "description": "User pastes complete intake document upfront; agent initializes working draft and conducts section-by-section interview without jumping directly to final conclusions",
+      "input": "Here is our complete AI project memo: Opportunity: Claims Intake Automation. 50 claims specialists review 20 claims per week, 30 min each. Sources: Google Drive and Salesforce. Sponsor: Sarah Jenkins (VP Operations). Please qualify this project and give me the conclusion.",
+      "expected_skill": "ge-intake-business",
+      "expected_trajectory_mode": "IN_ORDER",
+      "expected_tool_calls": [],
+      "rubric": [
+        "Initializes Business Value Brief [WORKING DRAFT] on Turn 1 with extracted facts and [Pending Stage X] tags",
+        "Does NOT declare final delivery tier, calculate final team ROI, or emit the final signed-off brief on Turn 1",
+        "Presents the 4-section qualification roadmap and launches Section 1 (As-Is Workflow)",
+        "Enforces section-by-section cadence before deliverable finalization"
+      ]
+    },
+    {
+      "case_id": "tech_review_pasted_spec_interview_008",
+      "description": "User pastes Phase 1 brief and technical architecture notes; agent initializes working draft and reviews section by section without jumping to final score or dossier",
+      "input": "We completed Phase 1 for Claims Intake. Systems: Oracle DB (on-prem) and Google Drive. Network: Dedicated Interconnect exists. Auth: Entra ID SSO with Workload Identity Federation. Lead DBA: Dave Miller. Please review technical architecture and give me the feasibility score.",
+      "expected_skill": "ge-review-tech",
+      "expected_trajectory_mode": "IN_ORDER",
+      "expected_tool_calls": [],
+      "rubric": [
+        "Initializes Technical Architecture Dossier [WORKING DRAFT] on Turn 1 with extracted systems and [Pending Stage X] tags",
+        "Does NOT emit premature Technical Readiness Score, declare final Feasibility Profile, or emit final handover memo on Turn 1",
+        "Presents the 5-stage technical review roadmap and launches Section 1 (Systems & Data Landscape)",
+        "Enforces section-by-section cadence before final handover memo generation"
+      ]
+    }
+  ]
+}
