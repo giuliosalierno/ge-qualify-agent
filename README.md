@@ -62,26 +62,6 @@ turn replaces every placeholder with verified facts.
 Run them in order. The Business Value Brief from phase 1 is the input to
 phase 2.
 
-## Design principles
-
-- **Zero speculation.** The skills never infer pain points, systems, network
-  topologies or metrics. Unknown stays unknown and visibly marked.
-- **No fabricated numbers.** Missing sizing inputs are recorded as
-  `[Pending Customer Input]`, never estimated.
-- **Clean phase separation.** Business scope stops at hours saved and tiering;
-  network, IAM and schemas belong to phase 2.
-- **Blockers surface early.** Airgapped environments and enterprise bans on
-  cloud processing are flagged the moment they appear.
-- **Self-contained.** Each skill is a single `SKILL.md` with no external scripts
-  or filesystem dependencies.
-
-## Known limits
-
-A Gemini Enterprise skill generates output — it cannot gate or enforce
-anything. There is deliberately no sign-off, register or identity layer between
-the business and technical phases; that is deferred to a phase-2 custom agent.
-Treat the deliverables as evidence for a human decision, not as an approval.
-
 ## Getting started
 
 - [`ge-intake-business`](https://github.com/giuliosalierno/ge-qualify-skills/releases/latest/download/ge_intake_business.zip) ([source](skills/ge_intake_business/SKILL.md))
