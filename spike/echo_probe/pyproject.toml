@@ -1,0 +1,30 @@
+[project]
+name = "a2ui-echo-probe"
+version = "0.1.0"
+description = "Phase 0 diagnostic agent: verifies A2UI sendDataModel echo in Gemini Enterprise."
+requires-python = ">=3.14"
+dependencies = [
+    # `http-server` pulls in starlette and sse-starlette, required by
+    # A2AStarletteApplication.
+    "a2a-sdk[http-server]>=0.3.25,<0.4",
+    # 0.5.0 is the floor: earlier releases lack modules the ecosystem expects.
+    # Pinned to a known-good version rather than a range, because the
+    # reference sample was broken by exactly this kind of drift.
+    "a2ui-agent-sdk==0.6.0",
+    "python-dotenv>=1.1.0",
+    "uvicorn",
+]
+
+# No LLM dependency on purpose. Every A2UI message is built in Python, which
+# is what this probe exists to prove (spike task 0.7).
+
+[tool.hatch.build.targets.wheel]
+packages = ["."]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+# Cloud Run buildpacks invoke the `start` script.
+[project.scripts]
+start = "main:serve"

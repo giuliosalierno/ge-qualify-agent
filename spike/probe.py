@@ -9,7 +9,11 @@ import sys
 import urllib.error
 import urllib.request
 
-ENDPOINT = "http://localhost:10002"
+import os
+
+# Override with A2UI_ENDPOINT to target the reference agent (:10002),
+# the echo probe (:8080), or a deployed Cloud Run URL.
+ENDPOINT = os.environ.get("A2UI_ENDPOINT", "http://localhost:8080")
 EXTENSION = "https://a2ui.org/a2a-extension/a2ui/v0.9"
 
 prompt = sys.argv[1] if len(sys.argv) > 1 else "What can you do?"
