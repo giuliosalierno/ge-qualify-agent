@@ -28,6 +28,7 @@ from probe_agent import (
     WIRE_VERSION,
     build_agent_card,
     build_form_messages,
+    build_patch,
 )
 
 logger = logging.getLogger(__name__)
@@ -112,8 +113,24 @@ class EchoProbeExecutor(AgentExecutor):
                 return action
         return None
 
+    def _extract_set_command(self, message) -> str | None:
+        """Returns the value from a `set <value>` chat message, else None.
+
+        A plain text trigger keeps the test in the hands of whoever is driving
+        the GE chat window, with no extra UI to click.
+        """
+        if message is None or not message.parts:
+            return None
+        for part in message.parts:
+            if not isinstance(part.root, TextPart):
+                continue
+            text = (part.root.text or "").strip()
+            if text.lower().startswith("set "):
+                return text[4:].strip()
+        return None
+
     def _build_reply(self, action: dict[str, Any] | None, message) -> list[Part]:
-        """Renders the form, or acknowledges a submit."""
+        """Renders the form, acknowledges a submit, or patches a single field."""
         if action and action.get("name") == ACTION_SUBMIT:
             received = json.dumps(action.get("context", {}), indent=2)
             return [
@@ -125,6 +142,32 @@ class EchoProbeExecutor(AgentExecutor):
                         )
                     )
                 )
+            ]
+
+        # ------------------------------------------------------------------
+        # TASK 0.8: can a later turn patch an already-rendered surface?
+        #
+        # Gemini Enterprise opens a NEW taskId for every chat message while
+        # keeping contextId stable. If a bare updateDataModel — no
+        # createSurface, no updateComponents — still moves the rendered field,
+        # the surface outlives the task and conversational auto-fill is viable.
+        # If it does not, every turn has to repaint the whole form.
+        # ------------------------------------------------------------------
+        new_value = self._extract_set_command(message)
+        if new_value is not None:
+            return [
+                Part(
+                    root=TextPart(
+                        text=(
+                            f"Patching `/form/account` to `{new_value}`."
+                            " Sending an updateDataModel and nothing else —"
+                            " no surface, no components. Watch the card."
+                        )
+                    )
+                ),
+                create_a2ui_part(
+                    build_patch("/form/account", new_value), version=WIRE_VERSION
+                ),
             ]
 
         # Any other turn: report what we saw, then render the form.
