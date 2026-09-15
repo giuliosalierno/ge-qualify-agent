@@ -2,3 +2,7 @@ __pycache__/
 *.pyc
 .DS_Store
 doc/
+
+# Phase 0 spike: local venv and secrets
+spike/**/.venv/
+spike/**/.env
