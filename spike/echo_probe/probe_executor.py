@@ -30,6 +30,8 @@ from probe_agent import (
     build_form_messages,
     build_patch,
 )
+from probe_select import ACTION_SUBMIT as ACTION_SELECT_SUBMIT
+from probe_select import BOUND_PATHS, ORDER, build_select_probe
 
 logger = logging.getLogger(__name__)
 
@@ -129,8 +131,93 @@ class EchoProbeExecutor(AgentExecutor):
                 return text[4:].strip()
         return None
 
+    def _extract_sel_command(self, message) -> str | None:
+        """Parses a `sel [widget]` chat message for the L12 probe.
+
+        Returns `""` for all widgets, a widget key to isolate one, or `None`
+        when this is not a `sel` message. Empty string and `None` mean
+        different things here, so the caller must check for `None` explicitly.
+        """
+        if message is None or not message.parts:
+            return None
+        for part in message.parts:
+            if not isinstance(part.root, TextPart):
+                continue
+            text = (part.root.text or "").strip().lower()
+            if text == "sel":
+                return ""
+            if text.startswith("sel "):
+                arg = text[4:].strip()
+                return arg if arg in ORDER else ""
+        return None
+
+    def _describe_select_result(self, context: dict[str, Any]) -> str:
+        """Reports what each widget actually wrote, and of what JSON type.
+
+        The type is the whole point. `ChoicePicker` renders perfectly well and
+        still fails us, because it writes `["x"]` where the record wants a
+        scalar. "It rendered" is not the same claim as "it binds a scalar",
+        and only the second one resolves L12.
+        """
+        rows = ["| Widget | Path | Value | JSON type | Scalar? |", "| :--- | :--- | :--- | :--- | :--- |"]
+
+        for key in BOUND_PATHS:
+            value = context.get(key)
+            kind = type(value).__name__ if value is not None else "absent"
+            if isinstance(value, str) and value != "":
+                verdict = "YES"
+            elif value in ("", None):
+                verdict = "empty — not selected?"
+            else:
+                verdict = "NO"
+            rows.append(f"| {key} | /sel/{key} | `{value!r}` | {kind} | {verdict} |")
+
+        subtree = context.get("all")
+        return (
+            "**L12 select probe — submit received.**\n\n"
+            + "\n".join(rows)
+            + "\n\nWhole `/sel` subtree as received:\n\n"
+            + f"```json\n{json.dumps(subtree, indent=2, default=str)}\n```\n\n"
+            + "Full action context:\n\n"
+            + f"```json\n{json.dumps(context, indent=2, default=str)}\n```"
+        )
+
     def _build_reply(self, action: dict[str, Any] | None, message) -> list[Part]:
         """Renders the form, acknowledges a submit, or patches a single field."""
+        # ------------------------------------------------------------------
+        # L12: is there a scalar single-select that renders in GE?
+        # ------------------------------------------------------------------
+        if action and action.get("name") == ACTION_SELECT_SUBMIT:
+            return [
+                Part(
+                    root=TextPart(
+                        text=self._describe_select_result(action.get("context", {}))
+                    )
+                )
+            ]
+
+        variant = self._extract_sel_command(message)
+        if variant is not None:
+            scope = variant or "all five components"
+            return [
+                Part(
+                    root=TextPart(
+                        text=(
+                            f"Rendering the L12 select probe ({scope}).\n\n"
+                            "Each caption names the component below it. A caption"
+                            " with nothing under it means that component did not"
+                            " render. Pick values, then press Submit.\n\n"
+                            "To isolate one widget, send `sel text`, `sel select`,"
+                            " `sel radio`, `sel toggle` or `sel chips`."
+                        )
+                    )
+                ),
+                *(
+                    create_a2ui_part(msg, version=WIRE_VERSION)
+                    for msg in build_select_probe(variant or None)
+                ),
+            ]
+
         if action and action.get("name") == ACTION_SUBMIT:
             received = json.dumps(action.get("context", {}), indent=2)
             return [
