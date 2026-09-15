@@ -1,0 +1,26 @@
+# Python build artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+build/
+dist/
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+
+# Local configuration and environment
+.env
+.env.*
+
+# Private design & implementation documentation
+doc/
+
+# Development spikes and test suites
+spike/
+tests/
+
+# Git metadata
+.git/
+.gitignore
