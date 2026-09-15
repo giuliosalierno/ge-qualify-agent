@@ -6,3 +6,9 @@ doc/
 # Phase 0 spike: local venv and secrets
 spike/**/.venv/
 spike/**/.env
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/

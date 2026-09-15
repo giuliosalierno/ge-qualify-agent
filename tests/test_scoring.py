@@ -7,8 +7,23 @@ import os
 import sys
 import unittest
 
+import pytest
+
 # Add skills/ge_qualify/scripts to path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "skills", "ge_qualify", "scripts")))
+
+# These scripts do not exist yet. design_plan.md 9.3 previously marked them
+# complete; they were never built, and Phase 4 of the A2UI implementation plan
+# is where the scoring logic actually lands.
+#
+# Skipping rather than deleting: the expectations encoded below are the
+# clearest specification we have of what calculate_score must produce, so they
+# are worth keeping as a target. Skipping rather than erroring: an unimportable
+# module aborts collection for the entire suite.
+pytest.importorskip(
+    "calculate_score",
+    reason="skills/ge_qualify/scripts not built yet — see implementation_plan.md Phase 4",
+)
 
 from calculate_score import analyze_opportunity, evaluate_workflow, evaluate_systems, evaluate_network, evaluate_security, evaluate_stakeholders
 from calculate_roi import calculate_time_reclaimed
