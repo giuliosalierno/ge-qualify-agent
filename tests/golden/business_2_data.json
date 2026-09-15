@@ -19,6 +19,7 @@
             "stage-caption",
             "stage-rule",
             "f-uc-technical-data-sources",
+            "f-uc-technical-security-data-classification-label",
             "f-uc-technical-security-data-classification",
             "f-uc-technical-grounding-acl-preservation-required",
             "continue-button"
@@ -106,13 +107,39 @@
           }
         },
         {
+          "id": "f-uc-technical-security-data-classification-label",
+          "component": "Text",
+          "text": "Data sensitivity *",
+          "variant": "caption"
+        },
+        {
           "id": "f-uc-technical-security-data-classification",
-          "component": "TextField",
-          "label": "Data sensitivity — Use your organisation's own labels, e.g. Public, Internal, Confidential.",
+          "component": "MaterialRadioButton",
+          "options": [
+            {
+              "label": "Public",
+              "value": "public"
+            },
+            {
+              "label": "Internal",
+              "value": "internal"
+            },
+            {
+              "label": "Confidential",
+              "value": "confidential"
+            },
+            {
+              "label": "Restricted or regulated",
+              "value": "restricted"
+            },
+            {
+              "label": "Not sure yet",
+              "value": "unknown"
+            }
+          ],
           "value": {
             "path": "/uc/technical/security/data_classification"
-          },
-          "variant": "shortText"
+          }
         },
         {
           "id": "f-uc-technical-grounding-acl-preservation-required",

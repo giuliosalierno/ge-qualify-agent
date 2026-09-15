@@ -29,7 +29,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from qualify.a2ui.catalog import A2UI_VERSION, catalog_id
+from qualify.a2ui.catalog import A2UI_VERSION, SCALAR_SINGLE_SELECT, catalog_id
 from qualify.packs.loader import FieldSpec, Pack, Stage
 from qualify.schema.paths import UI_ROOT
 from qualify.schema.use_case_record import (
@@ -52,6 +52,16 @@ _STAGE_RULE_ID = "stage-rule"
 
 #: Action fired by the Continue button. Routed in `a2ui/actions.py`.
 COMMIT_STAGE = "commit_stage"
+
+#: Components with no label slot of their own, which therefore need a
+#: preceding `Text` caption.
+#:
+#: `MaterialSelect` is excluded because it does take a `label`. The other
+#: three single-selects are bare controls: the catalog gives them `options`
+#: and `value` and nothing to name them with.
+_NEEDS_CAPTION = frozenset(
+    {"Text", "MaterialText"} | (SCALAR_SINGLE_SELECT - {"MaterialSelect"})
+)
 
 
 # ---------------------------------------------------------------------------
@@ -208,6 +218,26 @@ def _field_component(pack: Pack, field: FieldSpec) -> list[dict[str, Any]]:
             }
         ]
 
+    if field.component in SCALAR_SINGLE_SELECT:
+        # Verified in the L12 probe: each of these writes a plain JSON string
+        # into the bound path. That is what makes enums collectable.
+        options = [
+            {"label": o.label, "value": o.value} for o in pack.options_for(field)
+        ]
+        node = {
+            "id": cid,
+            "component": field.component,
+            "options": options,
+            "value": {"path": field.path},
+        }
+        # Only MaterialSelect has a label slot. The other three are bare
+        # controls, so their caption is emitted separately by the caller —
+        # the same arrangement the L12 probe used in GE.
+        if field.component == "MaterialSelect":
+            node["label"] = _label_with_help(field)
+            node["placeholder"] = "Choose one"
+        return [node]
+
     if field.component == "CheckBox":
         return [
             {
@@ -266,12 +296,14 @@ def build_stage_components(pack: Pack, stage_idx: int) -> list[dict[str, Any]]:
 
     for field in stage.fields:
         built = _field_component(pack, field)
-        # A readonly Text has no label of its own, so give it one.
-        if field.component == "Text" and field.label:
+        # Components with no label slot of their own get a caption above them.
+        # Without it a radio group renders as six unexplained choices, and the
+        # user has no idea what question they are answering.
+        if field.component in _NEEDS_CAPTION and field.label:
             label_node = {
                 "id": _label_id(field.path),
                 "component": "Text",
-                "text": field.label,
+                "text": _label_with_help(field),
                 "variant": "caption",
             }
             nodes.append(label_node)

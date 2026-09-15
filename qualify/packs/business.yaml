@@ -32,6 +32,17 @@ option_sets:
     - { label: Email or calendar, value: workspace_mail }
     - { label: Not sure yet, value: unknown }
 
+  # Sensitivity labels. These live in the pack, not in UseCaseRecord, because
+  # every organisation names its tiers differently — freezing one tenant's
+  # vocabulary into the schema would be wrong for the next one. The record
+  # field stays a plain string; the pack supplies the choices.
+  data_classification:
+    - { label: Public, value: public }
+    - { label: Internal, value: internal }
+    - { label: Confidential, value: confidential }
+    - { label: Restricted or regulated, value: restricted }
+    - { label: Not sure yet, value: unknown }
+
 stages:
   # -- 1 ------------------------------------------------------------------
   - id: needs
@@ -143,9 +154,9 @@ stages:
         required: true
       - path: /uc/technical/security/data_classification
         label: Data sensitivity
-        component: TextField
-        variant: shortText
-        help: Use your organisation's own labels, e.g. Public, Internal, Confidential.
+        component: MaterialRadioButton
+        options_ref: data_classification
+        required: true
       - path: /uc/technical/grounding/acl_preservation_required
         label: Answers must respect each user's existing permissions
         component: CheckBox

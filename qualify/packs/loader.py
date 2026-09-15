@@ -17,6 +17,7 @@ discovering it when a user is halfway through an interview.
 from __future__ import annotations
 
 from datetime import date
+from enum import IntEnum
 from functools import lru_cache
 from pathlib import Path
 
@@ -30,7 +31,11 @@ from pydantic import (
     model_validator,
 )
 
-from qualify.a2ui.catalog import PACK_ALLOWED_COMPONENTS
+from qualify.a2ui.catalog import (
+    PACK_ALLOWED_COMPONENTS,
+    PACK_WRITABLE_COMPONENTS,
+    SCALAR_SINGLE_SELECT,
+)
 from qualify.schema.paths import PathError, ResolvedPath, assert_pack_path
 
 PACK_DIR = Path(__file__).parent
@@ -46,6 +51,13 @@ COMPONENT_VARIANTS: dict[str, frozenset[str]] = {
     "CheckBox": frozenset(),
     "DateTimeInput": frozenset(),
     "Text": frozenset({"h1", "h2", "h3", "h4", "h5", "caption", "body"}),
+    # The scalar single-selects. None of them take a `variant`; their shape
+    # is the component choice itself.
+    "MaterialSelect": frozenset(),
+    "MaterialRadioButton": frozenset(),
+    "MaterialButtonToggle": frozenset(),
+    "MaterialChips": frozenset(),
+    "MaterialText": frozenset(),
 }
 
 
@@ -58,6 +70,25 @@ class Option(BaseModel):
 
     label: str
     value: str
+
+
+def options_from_enum(enum_cls: type[IntEnum]) -> list[Option]:
+    """Derives the option list for an enum field from the enum itself.
+
+    Written this way so a pack cannot drift from the ladder. If someone adds a
+    seventh capability level, the form grows a seventh option with no YAML
+    edit and no chance of the two disagreeing.
+
+    The `value` is the member number as a string, because that is the type the
+    widget writes. Coercing `"6"` back to `CapabilityLevel.HIGH_CODE_AGENT`
+    happens once, on commit. Using the member *name* instead would read more
+    nicely in logs but would need a reverse lookup that silently fails on a
+    rename.
+    """
+    return [
+        Option(label=getattr(member, "label", member.name), value=str(member.value))
+        for member in enum_cls
+    ]
 
 
 class FieldSpec(BaseModel):
@@ -90,7 +121,7 @@ class FieldSpec(BaseModel):
             raise ValueError(
                 f"{v!r} is not an allowed component. "
                 f"Allowed: {sorted(PACK_ALLOWED_COMPONENTS)}. "
-                f"Widen qualify.a2ui.catalog.GE_VERIFIED_COMPONENTS only "
+                f"Widen qualify.a2ui.catalog.GE_RENDER_VERIFIED only "
                 f"after watching the component render in GE."
             )
         return v
@@ -138,7 +169,26 @@ class FieldSpec(BaseModel):
             )
 
         object.__setattr__(self, "resolved", resolved)
+        self._check_writable()
         self._check_type_match(resolved)
+
+    def _check_writable(self) -> None:
+        """Refuses an input component whose binding has never been watched.
+
+        Rendering and binding are separate facts. A component that paints
+        correctly and silently drops the user's input is worse than one that
+        fails outright, because the form looks like it worked and the data
+        loss surfaces days later in the Sheet.
+        """
+        if self.readonly:
+            return
+        if self.component not in PACK_WRITABLE_COMPONENTS:
+            raise PackError(
+                f"{self.path}: {self.component} has never been observed "
+                f"writing a value back in GE, so it cannot hold input. "
+                f"Writable: {sorted(PACK_WRITABLE_COMPONENTS)}. "
+                f"Add it to GE_BIND_VERIFIED only after watching it write."
+            )
 
     def _check_type_match(self, r: ResolvedPath) -> None:
         """Rejects a component bound to a type it cannot edit.
@@ -153,7 +203,8 @@ class FieldSpec(BaseModel):
                 raise PackError(
                     f"{self.path}: ChoicePicker writes a list of strings but "
                     f"this field is a scalar {r.scalar_type.__name__}. Use a "
-                    f"TextField, or make the record field a list."
+                    f"scalar single-select ({sorted(SCALAR_SINGLE_SELECT)}) "
+                    f"or a TextField."
                 )
             return
 
@@ -162,6 +213,18 @@ class FieldSpec(BaseModel):
                 f"{self.path}: this field is a list, which only ChoicePicker "
                 f"can edit. Got {self.component}."
             )
+
+        if self.component in SCALAR_SINGLE_SELECT:
+            # Verified in the L12 probe: all four write a plain JSON string.
+            # That makes them the right home for enums and for closed
+            # vocabularies held as `str`.
+            if not (r.scalar_type is str or r.is_enum):
+                raise PackError(
+                    f"{self.path}: {self.component} writes a string, but this "
+                    f"field is {r.scalar_type.__name__}. Single-selects suit "
+                    f"enums and closed vocabularies, not free numbers."
+                )
+            return
 
         if self.component == "CheckBox":
             if not r.is_bool:
@@ -186,10 +249,10 @@ class FieldSpec(BaseModel):
                 )
             if r.is_enum:
                 raise PackError(
-                    f"{self.path}: {r.scalar_type.__name__} is an enum. The "
-                    f"verified GE component set has no scalar single-select "
-                    f"(ChoicePicker binds to a list), so enums cannot be "
-                    f"collected on the form yet. See limitation L12."
+                    f"{self.path}: {r.scalar_type.__name__} is an enum, so a "
+                    f"free-text box would accept values outside it. Use one "
+                    f"of {sorted(SCALAR_SINGLE_SELECT)}; the options are "
+                    f"derived from the enum automatically."
                 )
             wants_number = self.variant == "number"
             if wants_number and not r.is_numeric:
@@ -204,13 +267,52 @@ class FieldSpec(BaseModel):
                 )
 
     def _check_options(self) -> None:
+        needs_options = (
+            self.component == "ChoicePicker" or self.component in SCALAR_SINGLE_SELECT
+        )
+
+        if self.options_ref and not needs_options:
+            raise PackError(
+                f"{self.path}: options_ref applies to ChoicePicker and the "
+                f"single-selects, not {self.component}."
+            )
+
+        if not needs_options:
+            return
+
         if self.component == "ChoicePicker" and not self.options_ref:
             raise PackError(f"{self.path}: ChoicePicker needs an options_ref.")
-        if self.options_ref and self.component != "ChoicePicker":
+
+        r = self.resolved
+        if r is None:
+            return
+
+        if r.is_enum:
+            # The enum is the vocabulary. Letting a pack override it invites
+            # a form that offers levels the record cannot store, so refuse
+            # rather than silently picking one source over the other.
+            if self.options_ref:
+                raise PackError(
+                    f"{self.path}: {r.scalar_type.__name__} is an enum, so "
+                    f"the options come from the enum itself. Remove "
+                    f"options_ref: {self.options_ref!r}."
+                )
+            return
+
+        if not self.options_ref:
             raise PackError(
-                f"{self.path}: options_ref only applies to ChoicePicker, "
-                f"got {self.component}."
+                f"{self.path}: {self.component} needs an options_ref. The "
+                f"field is a plain string, so the vocabulary has to come "
+                f"from the pack."
             )
+
+    @property
+    def enum_type(self) -> type[IntEnum] | None:
+        """The enum backing this field, if it has one."""
+        r = self.resolved
+        if r is not None and r.is_enum:
+            return r.scalar_type  # type: ignore[return-value]
+        return None
 
 
 class Stage(BaseModel):
@@ -293,9 +395,20 @@ class Pack(BaseModel):
         raise KeyError(f"pack {self.pack!r} has no stage {stage_id!r}.")
 
     def options_for(self, field: FieldSpec) -> list[Option]:
-        if not field.options_ref:
-            return []
-        return self.option_sets[field.options_ref]
+        """The option list for a field, whatever its source.
+
+        One call site for the compiler. A pack-declared vocabulary and an
+        enum-derived one look identical from the outside, which is what keeps
+        the compiler free of type-dispatch.
+        """
+        if field.options_ref:
+            return self.option_sets[field.options_ref]
+
+        enum_cls = field.enum_type
+        if enum_cls is not None:
+            return options_from_enum(enum_cls)
+
+        return []
 
 
 # ---------------------------------------------------------------------------

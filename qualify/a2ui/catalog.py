@@ -80,30 +80,81 @@ def component_schema(name: str) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
-# Components confirmed to render in Gemini Enterprise
+# What Gemini Enterprise is actually known to do
 # ---------------------------------------------------------------------------
+#
+# Two different facts, tracked separately, because the L12 test proved they
+# come apart:
+#
+#   rendering  — the component appeared on screen
+#   binding    — the component wrote the type we expected into the data model
+#
+# `ChoicePicker` is the cautionary case. It renders perfectly and still fails
+# us, because it writes `["x"]` where the record needs `"x"`. Collapsing these
+# two sets into one "verified" list is how that trap gets walked into twice.
 
-#: The base (non-Material) components the Phase 0 echo probe actually painted
-#: in the GE chat surface.
+#: Components observed rendering in the GE chat surface.
 #:
-#: The catalog offers 52 components, but "in the catalog" and "renders in GE"
-#: are different claims and only the second one matters. These five were
-#: observed working first-hand. Everything else is untested, so the pack
-#: loader refuses it rather than letting a demo fail in front of a customer.
-#:
-#: Widen this set only after watching the component render in GE.
-GE_VERIFIED_COMPONENTS = frozenset(
+#: The five base ones come from the Phase 0 echo probe. The five Material ones
+#: come from the L12 probe on 2026-09-15, which also showed base and Material
+#: mix freely in a single surface.
+GE_RENDER_VERIFIED = frozenset(
     {
+        # Base — Phase 0
         "Column",
         "Text",
         "TextField",
         "Button",
         "Divider",
+        # Material — L12 probe
+        "MaterialText",
+        "MaterialSelect",
+        "MaterialRadioButton",
+        "MaterialButtonToggle",
+        "MaterialChips",
     }
 )
 
-#: Components we rely on that are in the catalog but have NOT been seen
-#: rendering in GE. Allowed in packs, listed here so the risk stays visible.
+#: Components observed writing the expected type back to the agent.
+#:
+#: Stricter than rendering, and the only set that matters for inputs. Each
+#: entry here was watched putting a real value into an action context.
+GE_BIND_VERIFIED = frozenset(
+    {
+        "TextField",  # Phase 0
+        "Button",  # Phase 0
+        "MaterialSelect",  # L12: wrote "wb_custom_mcp"
+        "MaterialRadioButton",  # L12: wrote "high_code_agent"
+        "MaterialButtonToggle",  # L12: wrote "pro_code"
+        "MaterialChips",  # L12: wrote "low_code"
+    }
+)
+
+#: Components whose `value` is a scalar `DynamicString` per the catalog.
+#:
+#: This is what makes enum and closed-vocabulary fields collectable at all.
+#: All four were verified end to end in the L12 probe: each wrote a plain
+#: JSON string, not a list.
+#:
+#: `ChoicePicker` is deliberately absent. It is a single-select in
+#: `mutuallyExclusive` mode and still writes a list, which is the entire
+#: reason this set has to exist.
+SCALAR_SINGLE_SELECT = frozenset(
+    {
+        "MaterialSelect",
+        "MaterialRadioButton",
+        "MaterialButtonToggle",
+        "MaterialChips",
+    }
+)
+
+#: Rendered in GE, but never seen writing a value.
+#:
+#: `MaterialText` is display-only, so there is nothing to test. Anything else
+#: landing here should be treated as unusable for input until watched.
+GE_BIND_UNTESTED = frozenset({"MaterialText"})
+
+#: In the catalog, allowed in packs, but never exercised in GE at all.
 GE_UNVERIFIED_COMPONENTS = frozenset(
     {
         "ChoicePicker",
@@ -114,4 +165,14 @@ GE_UNVERIFIED_COMPONENTS = frozenset(
 )
 
 #: Everything a pack may name.
-PACK_ALLOWED_COMPONENTS = GE_VERIFIED_COMPONENTS | GE_UNVERIFIED_COMPONENTS
+PACK_ALLOWED_COMPONENTS = GE_RENDER_VERIFIED | GE_UNVERIFIED_COMPONENTS
+
+#: Components a pack may bind to a writable field.
+#:
+#: Display-only components are excluded, as is anything whose binding has not
+#: been watched. A component that renders but silently drops the user's input
+#: is worse than one that fails outright, because the form looks like it
+#: worked.
+PACK_WRITABLE_COMPONENTS = (
+    GE_BIND_VERIFIED | GE_UNVERIFIED_COMPONENTS
+) - GE_BIND_UNTESTED

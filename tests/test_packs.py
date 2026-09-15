@@ -163,8 +163,8 @@ def test_rejects_number_variant_on_a_string(tmp_path):
         )
 
 
-def test_rejects_enum_field(tmp_path):
-    """No verified component binds a scalar single-select. Limitation L12."""
+def test_textfield_still_refused_for_an_enum(tmp_path):
+    """A free-text box would accept values outside the ladder."""
     with pytest.raises(PackError, match="is an enum"):
         build(
             tmp_path,
@@ -173,6 +173,123 @@ def test_rejects_enum_field(tmp_path):
         component: TextField
         variant: shortText""",
         )
+
+
+# ---------------------------------------------------------------------------
+# Scalar single-selects — L12, resolved 2026-09-15
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "component",
+    ["MaterialSelect", "MaterialRadioButton", "MaterialButtonToggle", "MaterialChips"],
+)
+def test_enum_field_accepts_any_verified_single_select(tmp_path, component):
+    pack = build(
+        tmp_path,
+        f"""      - path: /uc/technical/capability_level
+        label: Capability level
+        component: {component}""",
+    )
+    assert pack.stages[0].fields[0].component == component
+
+
+def test_enum_options_come_from_the_enum(tmp_path):
+    """Six levels in the ladder means six options, with no YAML listing them."""
+    pack = build(
+        tmp_path,
+        """      - path: /uc/technical/capability_level
+        label: Capability level
+        component: MaterialRadioButton""",
+    )
+    options = pack.options_for(pack.stages[0].fields[0])
+    assert [o.value for o in options] == ["1", "2", "3", "4", "5", "6"]
+    assert options[0].label == "Default assistant"
+    assert options[5].label == "Custom high-code agent (ADK / A2A)"
+
+
+def test_pack_cannot_override_an_enum_vocabulary(tmp_path):
+    """Offering a level the record cannot store is worse than offering none."""
+    with pytest.raises(PackError, match="options come from the enum itself"):
+        build(
+            tmp_path,
+            """      - path: /uc/technical/capability_level
+        label: Capability level
+        component: MaterialRadioButton
+        options_ref: sources""",
+        )
+
+
+def test_single_select_on_a_string_needs_an_options_ref(tmp_path):
+    with pytest.raises(PackError, match="needs an options_ref"):
+        build(
+            tmp_path,
+            """      - path: /uc/business/user_profile
+        label: Who
+        component: MaterialRadioButton""",
+        )
+
+
+def test_single_select_accepts_a_string_with_a_vocabulary(tmp_path):
+    pack = build(
+        tmp_path,
+        """      - path: /uc/business/user_profile
+        label: Who
+        component: MaterialRadioButton
+        options_ref: sources""",
+    )
+    assert [o.value for o in pack.options_for(pack.stages[0].fields[0])] == ["drive"]
+
+
+def test_single_select_refused_on_a_number(tmp_path):
+    with pytest.raises(PackError, match="writes a string"):
+        build(
+            tmp_path,
+            """      - path: /uc/business/user_count
+        label: Users
+        component: MaterialChips
+        options_ref: sources""",
+        )
+
+
+def test_single_select_refused_on_a_list(tmp_path):
+    with pytest.raises(PackError, match="only ChoicePicker"):
+        build(
+            tmp_path,
+            """      - path: /uc/technical/data_sources
+        label: Sources
+        component: MaterialChips
+        options_ref: sources""",
+        )
+
+
+def test_render_only_component_refused_for_input(tmp_path):
+    """MaterialText renders but is display-only, so it cannot hold input."""
+    with pytest.raises(PackError, match="never been observed writing"):
+        build(
+            tmp_path,
+            """      - path: /uc/business/user_profile
+        label: Who
+        component: MaterialText""",
+        )
+
+
+def test_data_classification_is_a_vocabulary_not_free_text():
+    """Free text on a closed vocabulary yields forty spellings of one label."""
+    pack = load_all_packs()["business"]
+    field = next(
+        f
+        for f in pack.stage_by_id("data").fields
+        if f.path.endswith("data_classification")
+    )
+    assert field.component == "MaterialRadioButton"
+    assert [o.value for o in pack.options_for(field)] == [
+        "public",
+        "internal",
+        "confidential",
+        "restricted",
+        "unknown",
+    ]
 
 
 def test_rejects_writable_coe_field(tmp_path):
