@@ -118,11 +118,11 @@ def build_ui_state(
             "id": stage.id,
             "caption": stage_caption(pack, active_stage),
         },
-        "summary": _summary_strings(record),
+        "summary": summary_strings(record),
     }
 
 
-def _summary_strings(record: UseCaseRecord) -> dict[str, str]:
+def summary_strings(record: UseCaseRecord) -> dict[str, str]:
     """Human sentences for the derived numbers.
 
     Returns a prompt rather than an empty string when the inputs are missing.

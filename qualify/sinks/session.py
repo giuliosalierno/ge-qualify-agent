@@ -53,6 +53,8 @@ class Session:
     #: high-water mark because `revise_stage` can reopen stage 1 while stages
     #: 2 and 3 stay committed, and a single integer cannot express that.
     committed: set[int] = field(default_factory=set)
+    #: Stage indices whose initial surface has already been emitted to the client.
+    rendered_stages: set[int] = field(default_factory=set)
     created_at: datetime = field(default_factory=_now)
     updated_at: datetime = field(default_factory=_now)
 
@@ -102,6 +104,7 @@ class Session:
                 f"(0-{len(self.pack.stages) - 1})"
             )
         self.committed.discard(stage_idx)
+        self.rendered_stages.discard(stage_idx)
         self.active_stage = stage_idx
         self.touch()
 
