@@ -6,7 +6,9 @@ requires-python = ">=3.12"
 dependencies = [
     "pydantic>=2.9",
     "pyyaml>=6.0",
-    "jsonschema>=4.0",
+    # 4.18 is where `referencing` replaced RefResolver. The offline $ref
+    # registry in qualify/a2ui/validate.py depends on it.
+    "jsonschema>=4.18",
 ]
 
 [dependency-groups]
@@ -16,6 +18,13 @@ dev = [
 
 [tool.hatch.build.targets.wheel]
 packages = ["qualify"]
+# Hatch ships .py files only by default. The vendored A2UI schemas and the
+# question packs are loaded at runtime by path, so without this the wheel
+# installs and then fails on first request with a missing-file error.
+artifacts = [
+    "qualify/a2ui/catalogs/*.json",
+    "qualify/packs/*.yaml",
+]
 
 [build-system]
 requires = ["hatchling"]

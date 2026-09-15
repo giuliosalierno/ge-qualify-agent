@@ -1,0 +1,190 @@
+# Business intake pack — Activity 2, the Discovery Agent's business interview.
+#
+# Four stages, matching skills/ge_intake_business/SKILL.md. Every field here is
+# green (Discovery Agent owned) under AGENT_PLAN.MD L144-146. Owner and sponsor
+# questions land in /uc/proposed/, never in /uc/execution/, because those are
+# the CoE's to decide.
+#
+# Paths are validated against UseCaseRecord at load time. If you add a field
+# here and the path is wrong, the process refuses to start.
+
+pack: business
+version: "1.0"
+title: Business intake and value qualification
+root_path: /uc
+
+option_sets:
+  # Connectors the platform can ground on. Deliberately coarse — the point is
+  # to learn which systems are in play, not to specify the integration. The
+  # technical review pack goes deeper.
+  data_sources:
+    - { label: Google Drive, value: google_drive }
+    - { label: SharePoint, value: sharepoint }
+    - { label: Confluence, value: confluence }
+    - { label: Jira, value: jira }
+    - { label: ServiceNow, value: servicenow }
+    - { label: Salesforce, value: salesforce }
+    - { label: SAP, value: sap }
+    - { label: BigQuery, value: bigquery }
+    - { label: Cloud Storage bucket, value: gcs }
+    - { label: Internal REST API, value: internal_api }
+    - { label: Public website, value: public_web }
+    - { label: Email or calendar, value: workspace_mail }
+    - { label: Not sure yet, value: unknown }
+
+stages:
+  # -- 1 ------------------------------------------------------------------
+  - id: needs
+    label: Problem and users
+    chat_questions:
+      - What is the problem, and what are the manual steps people take today?
+      - Who does this work, and roughly how many of them are there?
+      - Which team or business unit does this sit in?
+    fields:
+      - path: /uc/meta/initiative_name
+        label: Initiative name
+        component: TextField
+        variant: shortText
+        required: true
+        help: A short name you would recognise in a list of fifty.
+      - path: /uc/business/problem_description
+        label: Problem and current manual process
+        component: TextField
+        variant: longText
+        required: true
+        help: What happens today, step by step, and where it hurts.
+      - path: /uc/business/user_profile
+        label: Who does this work
+        component: TextField
+        variant: shortText
+        required: true
+        help: The role, not the person. "Claims handler", not "Ana".
+      - path: /uc/business/user_count
+        label: How many people do it
+        component: TextField
+        variant: number
+        required: true
+      - path: /uc/meta/department_bu
+        label: Department or business unit
+        component: TextField
+        variant: shortText
+      - path: /uc/business/user_stories
+        label: User stories
+        component: TextField
+        variant: longText
+        help: "As a <role> I want <outcome> so that <benefit>."
+    exit_criteria:
+      - The problem, the user profile and the user count are confirmed.
+      - The problem statement describes today's process, not a solution.
+
+  # -- 2 ------------------------------------------------------------------
+  # The sizing inputs, kept separate from the problem so the user is not asked
+  # to estimate minutes before they have described the task. Asking for a
+  # number too early gets a made-up number.
+  - id: sizing
+    label: Effort and value
+    chat_questions:
+      - How many times a week does one person do this task?
+      - How long does it take them each time?
+      - How much of that time would go away if this worked?
+      - What changes for the business beyond the hours?
+    fields:
+      - path: /uc/sizing/task_frequency_weekly
+        label: Times per week, per person
+        component: TextField
+        variant: number
+        required: true
+      - path: /uc/sizing/baseline_minutes_per_task
+        label: Minutes it takes today
+        component: TextField
+        variant: number
+        required: true
+      - path: /uc/sizing/target_minutes_saved_per_task
+        label: Minutes saved each time
+        component: TextField
+        variant: number
+        required: true
+        help: Cannot exceed the minutes it takes today.
+      - path: /uc/business/expected_impacts
+        label: Expected impact beyond hours
+        component: TextField
+        variant: longText
+        help: Quality, risk, turnaround time, employee experience.
+      # Computed, shown live so the user can sanity-check their own numbers
+      # before they commit the stage. Compiler-owned display strings, not
+      # record fields — see qualify.schema.paths.UI_ROOT.
+      - path: /ui/summary/hours_line
+        label: Estimated saving
+        component: Text
+        variant: body
+        readonly: true
+      - path: /ui/summary/hours_basis
+        label: How that was calculated
+        component: Text
+        variant: caption
+        readonly: true
+    exit_criteria:
+      - Frequency, baseline and saving are confirmed.
+      - The user has seen the computed annual total and not objected.
+
+  # -- 3 ------------------------------------------------------------------
+  - id: data
+    label: Data and systems
+    chat_questions:
+      - Which systems hold the information this needs?
+      - How sensitive is that data?
+      - Does the answer depend on who is asking?
+    fields:
+      - path: /uc/technical/data_sources
+        label: Systems and data sources involved
+        component: ChoicePicker
+        variant: multipleSelection
+        options_ref: data_sources
+        required: true
+      - path: /uc/technical/security/data_classification
+        label: Data sensitivity
+        component: TextField
+        variant: shortText
+        help: Use your organisation's own labels, e.g. Public, Internal, Confidential.
+      - path: /uc/technical/grounding/acl_preservation_required
+        label: Answers must respect each user's existing permissions
+        component: CheckBox
+    exit_criteria:
+      - At least one data source is confirmed, or "Not sure yet" is chosen deliberately.
+
+  # -- 4 ------------------------------------------------------------------
+  # Everything here is a proposal. AGENT_PLAN.MD gives owners and sponsors to
+  # the CoE, but the submitter usually knows them, and asking costs one turn
+  # while chasing it later costs an email per use case.
+  - id: ownership
+    label: Ownership and next steps
+    chat_questions:
+      - Who would own this on the business side?
+      - Is there an executive sponsor already?
+      - How would you know, in six months, that it worked?
+    fields:
+      - path: /uc/meta/submitter
+        label: Your name
+        component: TextField
+        variant: shortText
+        required: true
+      - path: /uc/proposed/business_owner
+        label: Proposed business owner
+        component: TextField
+        variant: shortText
+        help: A suggestion for the CoE, not a decision.
+      - path: /uc/proposed/executive_sponsor
+        label: Proposed executive sponsor
+        component: TextField
+        variant: shortText
+      - path: /uc/proposed/domain_sme
+        label: Subject matter expert
+        component: TextField
+        variant: shortText
+      - path: /uc/proposed/adoption_kpi
+        label: How you would measure success
+        component: TextField
+        variant: longText
+    exit_criteria:
+      - The submitter is named.
+      - Any owner offered is recorded as a proposal, not a decision.
