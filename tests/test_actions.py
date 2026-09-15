@@ -320,7 +320,7 @@ def test_context_id_is_written_into_the_record() -> None:
 
 
 def test_get_or_start_is_idempotent() -> None:
-    store = InMemorySessionStore()
+    store = InMemorySessionStore(quiet=True)
 
     first = get_or_start(store, "ctx-1")
     first.record.business.user_profile = "Claims handler"
@@ -332,7 +332,7 @@ def test_get_or_start_is_idempotent() -> None:
 
 
 def test_different_conversations_do_not_share_state() -> None:
-    store = InMemorySessionStore()
+    store = InMemorySessionStore(quiet=True)
 
     a = get_or_start(store, "ctx-a")
     b = get_or_start(store, "ctx-b")
@@ -362,7 +362,7 @@ def test_reopen_rejects_an_out_of_range_stage() -> None:
 
 
 def test_save_updates_the_timestamp() -> None:
-    store = InMemorySessionStore()
+    store = InMemorySessionStore(quiet=True)
     s = new_session("ctx-t")
     before = s.updated_at
 
@@ -372,7 +372,7 @@ def test_save_updates_the_timestamp() -> None:
 
 
 def test_delete_removes_the_session() -> None:
-    store = InMemorySessionStore()
+    store = InMemorySessionStore(quiet=True)
     store.save(new_session("ctx-d"))
 
     store.delete("ctx-d")
@@ -380,3 +380,19 @@ def test_delete_removes_the_session() -> None:
     assert store.load("ctx-d") is None
     # Deleting twice is not an error; a retried turn should not crash.
     store.delete("ctx-d")
+
+
+def test_in_memory_store_warns_about_l13(caplog) -> None:
+    """L13 is a known open point, not a bug, but its failure mode is silent:
+    a second Cloud Run instance loses the interview and the logs look like a
+    normal new conversation.
+
+    This warning is the only signal that exists, so it is pinned here to stop
+    a future tidy-up removing it.
+    """
+    with caplog.at_level(logging.WARNING):
+        InMemorySessionStore()
+
+    assert "max-instances=1" in caplog.text
+    assert "L13" in caplog.text
+

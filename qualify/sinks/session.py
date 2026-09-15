@@ -21,12 +21,15 @@ an interview, and it is what this store keys on (D15).
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Protocol
 
 from qualify.packs.loader import Pack, load_pack
 from qualify.schema.use_case_record import Meta, UseCaseRecord
+
+log = logging.getLogger(__name__)
 
 
 def _now() -> datetime:
@@ -124,11 +127,23 @@ class SessionStore(Protocol):
 class InMemorySessionStore:
     """A dict. Adequate for tests and a single-instance deployment.
 
-    See the module warning before using this anywhere real.
+    Warns on construction rather than relying on the module docstring. A
+    hazard recorded only in prose is one nobody reads at deploy time, and
+    this one is invisible afterwards — see L13. Putting it in the startup
+    logs places it next to the deploy command that caused it.
+
+    Pass ``quiet=True`` in tests, where the warning is noise.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, quiet: bool = False) -> None:
         self._sessions: dict[str, Session] = {}
+        if not quiet:
+            log.warning(
+                "Using InMemorySessionStore: interviews are held in process "
+                "memory and will be lost if this service runs more than one "
+                "instance. Deploy with --max-instances=1 until the shared "
+                "store lands (L13)."
+            )
 
     def load(self, context_id: str) -> Session | None:
         return self._sessions.get(context_id)
