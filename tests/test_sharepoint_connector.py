@@ -256,3 +256,87 @@ def test_turn_loop_save_to_sharepoint_and_post_login_auto_sync(tmp_path: Path, m
     assert "Successfully Saved to SharePoint Online (On-Behalf-Of User)" in out2.reply_text
     assert "Automated Invoice Matching" in out2.reply_text
 
+
+def _fake_ms_jwt() -> str:
+    """Builds a syntactically valid Microsoft Entra JWT (header.payload.signature)."""
+    import base64 as _b64
+
+    def seg(obj: dict) -> str:
+        raw = json.dumps(obj).encode("utf-8")
+        return _b64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
+
+    header = seg({"typ": "JWT", "alg": "RS256"})
+    payload = seg({"iss": "https://sts.windows.net/918002ad/", "aud": "https://graph.microsoft.com"})
+    return f"{header}.{payload}.signature_placeholder"
+
+
+def test_harvest_microsoft_tokens_from_all_injection_shapes() -> None:
+    """Verifies Gemini Enterprise tokens are captured from raw headers, JSON, and base64 payloads."""
+    import base64 as _b64
+
+    import qualify.connectors.sharepoint as sp_mod
+    from qualify.connectors.sharepoint import get_cached_delegated_token, harvest_microsoft_tokens
+
+    token = _fake_ms_jwt()
+
+    # 1. Raw Bearer header, alongside a Google OIDC token that must be ignored
+    sp_mod._TOKEN_VAULT.clear()
+    google_jwt_payload = _b64.urlsafe_b64encode(
+        json.dumps({"iss": "https://accounts.google.com", "aud": "ge-qualify"}).encode()
+    ).decode().rstrip("=")
+    headers = {
+        "authorization": f"Bearer hdr.{google_jwt_payload}.sig",
+        "x-serialized-auth-tokens": f"Bearer {token}",
+    }
+    assert harvest_microsoft_tokens(headers, "ctx-a") == token
+    assert get_cached_delegated_token("ctx-a") == token
+
+    # 2. JSON-encoded header value (GE serialized auth tokens map)
+    sp_mod._TOKEN_VAULT.clear()
+    json_header = {"x-serialized-auth-tokens": json.dumps({"sharepoint-auth": {"access_token": token}})}
+    assert harvest_microsoft_tokens(json_header, "ctx-b") == token
+    assert get_cached_delegated_token("ctx-b") == token
+
+    # 3. Base64-encoded JSON header value
+    sp_mod._TOKEN_VAULT.clear()
+    b64_val = _b64.urlsafe_b64encode(json.dumps({"sharepoint-auth": token}).encode()).decode()
+    assert harvest_microsoft_tokens({"x-serialized-auth-tokens": b64_val}, "ctx-c") == token
+    assert get_cached_delegated_token("ctx-c") == token
+
+    # 4. A2A message metadata (temp:<authorization-id> convention)
+    sp_mod._TOKEN_VAULT.clear()
+    metadata = {"temp:sharepoint-auth": {"accessToken": token}}
+    assert harvest_microsoft_tokens(metadata, "ctx-d") == token
+    assert get_cached_delegated_token("ctx-d") == token
+
+    # 5. No token present returns None
+    sp_mod._TOKEN_VAULT.clear()
+    assert harvest_microsoft_tokens({"content-type": "application/json"}, "ctx-e") is None
+
+
+def test_turn_emits_auth_required_when_sharepoint_login_needed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verifies the turn loop flags auth_required so the executor emits A2A TaskState.auth_required."""
+    monkeypatch.setenv("SHAREPOINT_MOCK_DIR", str(tmp_path))
+    import qualify.connectors.sharepoint as sp_mod
+    from qualify.sinks.session import get_or_start
+
+    sp_mod._CONNECTOR_INSTANCE = SharePointConnector(mock_dir=tmp_path)
+    sp_mod._TOKEN_VAULT.clear()
+    sp_mod._REFRESH_VAULT.clear()
+    sp_mod._PENDING_RECORDS.clear()
+    sp_mod._SYNCED_RESULTS.clear()
+
+    store = InMemorySessionStore(quiet=True)
+    session = get_or_start(store, "ctx-auth-required")
+    session.record.meta.record_id = "UC-2026-778800"
+    session.record.meta.initiative_name = "Supplier Onboarding Bot"
+    store.save(session)
+
+    out = execute_turn(
+        store,
+        TurnInput(context_id="ctx-auth-required", user_text="save to sharepoint"),
+    )
+    assert out.auth_required is True
+    assert "Sign-In Required" in out.reply_text
+
+

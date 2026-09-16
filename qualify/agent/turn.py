@@ -85,6 +85,7 @@ class TurnOutput:
     session: Session
     outcome: ActionOutcome | None = None
     drafts: list[FieldDraft] = field(default_factory=list)
+    auth_required: bool = False
 
     @property
     def is_complete(self) -> bool:
@@ -507,15 +508,17 @@ def _try_load_from_sharepoint(user_text: str | None, session: Session) -> TurnOu
         )
         reply_text = (
             f"🔐 **Microsoft SharePoint User Sign-In Required**\n\n"
-            f"To save **{session.record.meta.initiative_name or session.record.meta.record_id}** directly under your Microsoft account (without Azure Device Code restrictions):\n\n"
-            f"1. **[Click here to Sign In with Microsoft ↗]({ms_direct_auth})** *(uses your registered `vertexaisearch` Redirect URI)*\n"
-            f"2. After signing in, **copy the URL from your browser's address bar** (`https://vertexaisearch.cloud.google.com/oauth-redirect?code=...`) and **paste it right here in chat** (or paste it on the **[SharePoint Auth Page]({auth_link})**).\n\n"
-            f"As soon as you paste that URL here, I will immediately exchange your token and save this opportunity to SharePoint Online!"
+            f"To save **{session.record.meta.initiative_name or session.record.meta.record_id}** directly under your Microsoft account:\n\n"
+            f"1. **[Sign in with Microsoft ↗]({ms_direct_auth})**\n"
+            f"2. After signing in, paste the resulting `oauth-redirect?code=...` URL right here in chat "
+            f"(or use the **[SharePoint Auth Page]({auth_link})**).\n\n"
+            f"I will immediately exchange your token and save this opportunity to SharePoint Online."
         )
         return TurnOutput(
             reply_text=reply_text,
             a2ui_messages=[],
             session=session,
+            auth_required=True,
         )
 
     # Match explicit SharePoint load/open requests or direct Record ID load

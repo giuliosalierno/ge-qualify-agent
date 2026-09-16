@@ -119,6 +119,76 @@ def get_cached_delegated_token(key: str = "latest") -> str | None:
     return token
 
 
+def harvest_microsoft_tokens(
+    payload: Any,
+    context_id: str = "latest",
+    *,
+    path: str = "",
+    _depth: int = 0,
+) -> str | None:
+    """Recursively scans arbitrary payloads for a Microsoft Graph user token and caches it.
+
+    Gemini Enterprise may inject an end-user OAuth token in several shapes (a raw HTTP header,
+    a JSON or base64-encoded header such as ``X-Serialized-Auth-Tokens``, or inside the A2A
+    ``message.metadata`` under a key like ``temp:sharepoint-auth``). This walks every structure
+    so the token is captured regardless of the exact key or encoding used.
+
+    Returns:
+        The first Microsoft Graph token found (already cached), or None.
+    """
+    if payload is None or _depth > 6:
+        return None
+
+    if isinstance(payload, str):
+        raw = payload.strip()
+        if not raw:
+            return None
+        if raw.lower().startswith("bearer "):
+            raw = raw[7:].strip()
+
+        # Embedded JSON payload first (e.g. {"sharepoint-auth": {"access_token": "<jwt>"}})
+        if raw.startswith(("{", "[")):
+            try:
+                return harvest_microsoft_tokens(json.loads(raw), context_id, path=f"{path}[json]", _depth=_depth + 1)
+            except Exception:
+                return None
+
+        # Strict three-segment JWT belonging to Microsoft Entra / Graph
+        if re.fullmatch(r"[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_.\-]*", raw) and is_microsoft_graph_token(raw):
+            cache_delegated_token(raw, key=context_id)
+            cache_delegated_token(raw, key="latest")
+            logger.info("Harvested Microsoft Graph user token from %r (context_id=%s)", path or "payload", context_id)
+            return raw
+
+        # Base64-encoded JSON payload
+        if len(raw) > 40 and re.fullmatch(r"[A-Za-z0-9_\-+/=]+", raw):
+            try:
+                padded = raw + "=" * (-len(raw) % 4)
+                decoded = base64.urlsafe_b64decode(padded.encode("ascii")).decode("utf-8", errors="strict")
+                if decoded.strip().startswith(("{", "[")):
+                    return harvest_microsoft_tokens(json.loads(decoded), context_id, path=f"{path}[b64]", _depth=_depth + 1)
+            except Exception:
+                return None
+        return None
+
+    if isinstance(payload, dict):
+        for key, val in payload.items():
+            found = harvest_microsoft_tokens(val, context_id, path=f"{path}/{key}" if path else str(key), _depth=_depth + 1)
+            if found:
+                return found
+        return None
+
+    if isinstance(payload, (list, tuple, set)):
+        for idx, val in enumerate(payload):
+            found = harvest_microsoft_tokens(val, context_id, path=f"{path}[{idx}]", _depth=_depth + 1)
+            if found:
+                return found
+        return None
+
+    return None
+
+
+
 # Per-user refresh token vault: maps context_id -> refresh_token
 _REFRESH_VAULT: dict[str, str] = {}
 

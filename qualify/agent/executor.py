@@ -80,7 +80,7 @@ class QualifyAgentExecutor(AgentExecutor):
             or "default"
         )
 
-        self._extract_and_cache_oauth_tokens(message, context_id)
+        self._extract_and_cache_oauth_tokens(message, context_id, context)
 
         turn_input = TurnInput(
             context_id=context_id,
@@ -94,6 +94,7 @@ class QualifyAgentExecutor(AgentExecutor):
             task = new_task(context.message)
             await event_queue.enqueue_event(task)
 
+        final_state = TaskState.completed
         try:
             output: TurnOutput = execute_turn(
                 self._session_store,
@@ -105,6 +106,10 @@ class QualifyAgentExecutor(AgentExecutor):
             parts: list[Part] = [Part(root=TextPart(text=output.reply_text))]
             for a2ui_msg in output.a2ui_messages:
                 parts.append(create_a2ui_part(a2ui_msg, version=WIRE_VERSION))
+            # Signal Gemini Enterprise to render its native OAuth sign-in prompt in chat
+            if getattr(output, "auth_required", False):
+                final_state = TaskState.auth_required
+                log.info("Turn requires end-user OAuth: emitting TaskState.auth_required for context %s", context_id)
         except Exception as exc:
             log.exception("Unhandled exception in execute_turn for context %s", context_id)
             parts = [
@@ -120,7 +125,7 @@ class QualifyAgentExecutor(AgentExecutor):
 
         updater = TaskUpdater(event_queue, task.id, task.context_id)
         await updater.update_status(
-            TaskState.completed,
+            final_state,
             new_agent_parts_message(parts, task.context_id, task.id),
             final=True,
         )
@@ -152,21 +157,41 @@ class QualifyAgentExecutor(AgentExecutor):
                 texts.append(part.root.text.strip())
         return " ".join(texts) if texts else None
 
-    def _extract_and_cache_oauth_tokens(self, message: Any, context_id: str) -> None:
-        """Extracts any OAuth tokens injected by Gemini Enterprise (e.g. temp:sharepoint-auth) and caches them per-user."""
-        if message is None:
-            return
-        from qualify.connectors.sharepoint import cache_delegated_token, is_microsoft_graph_token  # noqa: PLC0415
+    def _extract_and_cache_oauth_tokens(
+        self,
+        message: Any,
+        context_id: str,
+        context: RequestContext | None = None,
+    ) -> None:
+        """Captures any end-user OAuth token injected by Gemini Enterprise.
 
-        metadata = getattr(message, "metadata", None)
-        if isinstance(metadata, dict):
-            for key, val in metadata.items():
-                if isinstance(val, str) and is_microsoft_graph_token(val):
-                    cache_delegated_token(val, key=context_id)
-                elif isinstance(val, dict):
-                    for sub_v in val.values():
-                        if isinstance(sub_v, str) and is_microsoft_graph_token(sub_v):
-                            cache_delegated_token(sub_v, key=context_id)
+        Gemini Enterprise delivers the token from a Discovery Engine `Authorization`
+        resource either as an inbound HTTP header (e.g. `X-Serialized-Auth-Tokens`)
+        or inside the A2A `message.metadata`. Both surfaces are scanned recursively.
+        """
+        from qualify.connectors.sharepoint import harvest_microsoft_tokens  # noqa: PLC0415
+
+        # 1. Inbound HTTP headers (A2A DefaultCallContextBuilder stores them in call_context.state)
+        headers: dict[str, Any] = {}
+        call_context = getattr(context, "call_context", None) if context is not None else None
+        state = getattr(call_context, "state", None)
+        if isinstance(state, dict):
+            raw_headers = state.get("headers")
+            if isinstance(raw_headers, dict):
+                headers = raw_headers
+
+        if headers:
+            # Log header names only (never values) so the GE-injected auth key is discoverable in Cloud Run logs
+            log.info("Inbound A2A header keys: %s", sorted(headers.keys()))
+            token = harvest_microsoft_tokens(headers, context_id, path="header")
+            if token:
+                return
+
+        # 2. A2A message metadata (e.g. temp:sharepoint-auth)
+        metadata = getattr(message, "metadata", None) if message is not None else None
+        if metadata:
+            harvest_microsoft_tokens(metadata, context_id, path="metadata")
 
     async def cancel(self, request: RequestContext, event_queue: EventQueue) -> Task | None:
         raise ServerError(error=UnsupportedOperationError())
+
