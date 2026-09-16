@@ -23,15 +23,16 @@ echo "Deploying '$SERVICE_NAME' to '$PROJECT_ID' / '$REGION'"
 echo "Model: $MODEL_NAME ($GENAI_LOCATION) | Max Instances: $MAX_INSTANCES (L13 guard)"
 echo "============================================================"
 
-# Initial deployment from source
+# Initial deployment from source (builds Dockerfile)
 gcloud run deploy "$SERVICE_NAME" \
   --source "$SCRIPT_DIR" \
   --project "$PROJECT_ID" \
   --region "$REGION" \
   --memory "$MEMORY" \
+  --min-instances 1 \
   --max-instances "$MAX_INSTANCES" \
   --no-allow-unauthenticated \
-  --set-env-vars=GOOGLE_CLOUD_PROJECT="$PROJECT_ID",GOOGLE_CLOUD_LOCATION="$GENAI_LOCATION",GOOGLE_GENAI_USE_VERTEXAI=TRUE,MODEL="$MODEL_NAME",GOOGLE_PYTHON_PACKAGE_MANAGER=uv
+  --set-env-vars=GOOGLE_CLOUD_PROJECT="$PROJECT_ID",GOOGLE_CLOUD_LOCATION="$GENAI_LOCATION",GOOGLE_GENAI_USE_VERTEXAI=TRUE,MODEL="$MODEL_NAME"
 
 SERVICE_URL=$(gcloud run services describe "$SERVICE_NAME" \
   --project="$PROJECT_ID" \

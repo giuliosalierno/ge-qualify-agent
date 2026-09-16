@@ -12,7 +12,10 @@ dependencies = [
     "a2a-sdk[http-server]>=0.3.25,<0.4",
     "a2ui-agent-sdk==0.6.0",
     "python-dotenv>=1.1.0",
-    "uvicorn>=0.53.0",
+    "uvicorn>=0.30.0",
+    "google-genai>=1.0.0",
+    "google-cloud-storage>=2.14.0",
+    "google-api-python-client>=2.100.0",
 ]
 
 [dependency-groups]

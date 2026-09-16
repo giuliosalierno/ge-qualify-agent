@@ -147,7 +147,11 @@ def execute_turn(
     else:
         # Surface already active on client: extract drafts from transcript
         convo = turn_input.conversation_history or (turn_input.user_text or "")
-        if extraction_client is not None and convo.strip():
+        if (
+            extraction_client is not None
+            and convo.strip()
+            and not _should_skip_extraction(turn_input.user_text)
+        ):
             result = extract_drafts(stage, session.pack, convo, extraction_client)
             drafts = apply_drafts(session.record, result.drafts)
 
@@ -317,6 +321,28 @@ def _build_stage_state_summary(session: Session, stage: Stage) -> str:
     return "\n".join(lines)
 
 
+def _should_skip_extraction(user_text: str | None) -> bool:
+    """Returns True if the user message is a short uncertainty/question phrase with no digits."""
+    if not user_text:
+        return True
+    stripped = user_text.strip().lower()
+    if len(stripped) > 120 or any(c.isdigit() for c in stripped):
+        return False
+    uncertainty_markers = (
+        "don't have",
+        "dont have",
+        "don't know",
+        "dont know",
+        "not sure",
+        "no idea",
+        "no number",
+        "what do you mean",
+        "help",
+        "skip",
+    )
+    return any(m in stripped for m in uncertainty_markers)
+
+
 def _generate_chat_reply(
     session: Session,
     stage: Stage,
@@ -340,7 +366,16 @@ def _generate_chat_reply(
         except Exception as exc:
             log.warning("ChatClient reply failed, using deterministic fallback: %s", exc)
 
-    # Deterministic fallback when no LLM client is supplied (e.g. unit tests)
+    # Deterministic fallback when no LLM client is supplied or if Vertex AI times out
+    if _should_skip_extraction(user_text) and stage.id == "sizing":
+        return (
+            "No problem at all — stopwatch precision isn't needed here! Rough ballpark estimates work great:\n"
+            "- **Frequency**: Is this closer to a daily task (**5** times/week) or once a week (**1** time/week)?\n"
+            "- **Baseline**: Does a typical run take around **30** minutes today?\n"
+            "- **Savings**: Would saving **15** minutes per run be a fair conservative target?\n\n"
+            "Feel free to reply with your best guess (e.g., *'5 times a week, 30 mins baseline, 15 mins saved'*) or type them into the form."
+        )
+
     missing = missing_required(session.record, stage)
     if not user_text or session.active_stage == 0 and not session.committed and not session.record.meta.initiative_name:
         return _stage_intro_text(stage)
@@ -378,9 +413,10 @@ class GeminiChatClient:
                 vertexai=True,
                 project=os.environ.get("GOOGLE_CLOUD_PROJECT"),
                 location=location,
+                http_options={"timeout": 12000},
             )
         else:
-            self._client = genai.Client()
+            self._client = genai.Client(http_options={"timeout": 12000})
 
     def reply(
         self,
@@ -403,9 +439,13 @@ class GeminiChatClient:
             "or offer a conservative placeholder they can confirm or type into the form.\n"
             "4. If all [MISSING - REQUIRED] fields for this stage are now filled, congratulate them and invite them to click **Continue** on the form card."
         )
-        config = {
+        base_config: dict[str, Any] = {
             "system_instruction": system_prompt,
             "temperature": 0.3,
+        }
+        config = {
+            **base_config,
+            "thinking_config": {"thinking_level": "LOW"},
         }
         try:
             response = self._client.models.generate_content(
@@ -414,7 +454,15 @@ class GeminiChatClient:
                 config=config,
             )
         except Exception as exc:
-            if "404" in str(exc) and self.model != "gemini-3-flash-preview":
+            err_str = str(exc)
+            if "thinking" in err_str.lower() or "invalid_argument" in err_str.lower() or "400" in err_str:
+                log.info("Retrying chat reply without thinking_config for model %s", self.model)
+                response = self._client.models.generate_content(
+                    model=self.model,
+                    contents=conversation,
+                    config=base_config,
+                )
+            elif "404" in err_str and self.model != "gemini-3-flash-preview":
                 log.warning("Model %s returned 404, falling back to gemini-3-flash-preview", self.model)
                 response = self._client.models.generate_content(
                     model="gemini-3-flash-preview",

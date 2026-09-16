@@ -387,22 +387,27 @@ class GeminiExtractionClient:
                 vertexai=True,
                 project=os.environ.get("GOOGLE_CLOUD_PROJECT"),
                 location=location,
+                http_options={"timeout": 8000},
             )
         else:
-            self._client = genai.Client()
+            self._client = genai.Client(http_options={"timeout": 8000})
 
     def propose(
         self, *, instruction: str, schema: dict[str, Any], conversation: str
     ) -> list[dict[str, Any]]:
         import json  # noqa: PLC0415
 
-        config = {
+        base_config: dict[str, Any] = {
             "system_instruction": instruction,
             "response_mime_type": "application/json",
             "response_schema": schema,
             # Extraction is a copying task. Sampling variety here buys
             # nothing and costs reproducibility between identical turns.
             "temperature": 0.0,
+        }
+        config = {
+            **base_config,
+            "thinking_config": {"thinking_level": "LOW"},
         }
         try:
             response = self._client.models.generate_content(
@@ -411,7 +416,15 @@ class GeminiExtractionClient:
                 config=config,
             )
         except Exception as exc:
-            if "404" in str(exc) and self.model != "gemini-3-flash-preview":
+            err_str = str(exc)
+            if "thinking" in err_str.lower() or "invalid_argument" in err_str.lower() or "400" in err_str:
+                log.info("Retrying extraction without thinking_config for model %s", self.model)
+                response = self._client.models.generate_content(
+                    model=self.model,
+                    contents=conversation,
+                    config=base_config,
+                )
+            elif "404" in err_str and self.model != "gemini-3-flash-preview":
                 log.warning("Model %s returned 404, falling back to gemini-3-flash-preview", self.model)
                 response = self._client.models.generate_content(
                     model="gemini-3-flash-preview",
