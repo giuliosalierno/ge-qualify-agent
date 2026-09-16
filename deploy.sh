@@ -18,6 +18,23 @@ MAX_INSTANCES="${MAX_INSTANCES:-1}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# Load environment variables from .env if present
+if [ -f "${SCRIPT_DIR}/.env" ]; then
+  echo "Loading environment variables from .env ..."
+  set -a
+  source "${SCRIPT_DIR}/.env"
+  set +a
+fi
+
+PROJECT_ID="${PROJECT_ID:-vais-c-exp}"
+PROJECT_NUMBER="${PROJECT_NUMBER:-369594916120}"
+SERVICE_NAME="${SERVICE_NAME:-ge-qualify-agent}"
+REGION="${REGION:-us-central1}"
+GENAI_LOCATION="${GENAI_LOCATION:-global}"
+MODEL_NAME="${MODEL_NAME:-gemini-3.8-flash}"
+MEMORY="${MEMORY:-1Gi}"
+MAX_INSTANCES="${MAX_INSTANCES:-1}"
+
 echo "============================================================"
 echo "Deploying '$SERVICE_NAME' to '$PROJECT_ID' / '$REGION'"
 echo "Model: $MODEL_NAME ($GENAI_LOCATION) | Max Instances: $MAX_INSTANCES (L13 guard)"
@@ -33,7 +50,7 @@ gcloud run deploy "$SERVICE_NAME" \
   --max-instances "$MAX_INSTANCES" \
   --clear-base-image \
   --no-allow-unauthenticated \
-  --set-env-vars=GOOGLE_CLOUD_PROJECT="$PROJECT_ID",GOOGLE_CLOUD_LOCATION="$GENAI_LOCATION",GOOGLE_GENAI_USE_VERTEXAI=TRUE,MODEL="$MODEL_NAME"
+  --set-env-vars="GOOGLE_CLOUD_PROJECT=${PROJECT_ID},GOOGLE_CLOUD_LOCATION=${GENAI_LOCATION},GOOGLE_GENAI_USE_VERTEXAI=TRUE,MODEL=${MODEL_NAME},MS_GRAPH_TENANT_ID=${MS_GRAPH_TENANT_ID:-},MS_GRAPH_CLIENT_ID=${MS_GRAPH_CLIENT_ID:-},MS_GRAPH_CLIENT_SECRET=${MS_GRAPH_CLIENT_SECRET:-},SHAREPOINT_INSTANCE_URL=${SHAREPOINT_INSTANCE_URL:-}"
 
 SERVICE_URL=$(gcloud run services describe "$SERVICE_NAME" \
   --project="$PROJECT_ID" \
