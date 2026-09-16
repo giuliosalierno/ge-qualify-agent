@@ -24,9 +24,26 @@ from qualify.schema.use_case_record import Meta, UseCaseRecord
 from qualify.sinks.session import InMemorySessionStore
 
 
+#: Anything here silently promotes the connector out of mock mode.
+#:
+#: Real values leak in easily — `.env` sourced into the shell, or a prior
+#: `deploy.sh` run — and the failure is baffling when it happens, because the
+#: test looks pure. Clearing them keeps the suite honest regardless of who runs
+#: it and on what machine.
+_GRAPH_ENV_VARS = (
+    "MS_GRAPH_CLIENT_ID",
+    "MS_GRAPH_CLIENT_SECRET",
+    "MS_GRAPH_TENANT_ID",
+    "MS_GRAPH_REFRESH_TOKEN",
+)
+
+
 @pytest.fixture(autouse=True)
-def _reset_sharepoint_state() -> None:
+def _reset_sharepoint_state(monkeypatch: pytest.MonkeyPatch) -> None:
     import qualify.connectors.sharepoint as sp_mod
+
+    for var in _GRAPH_ENV_VARS:
+        monkeypatch.delenv(var, raising=False)
 
     sp_mod._TOKEN_VAULT.clear()
     sp_mod._CONNECTOR_INSTANCE = None

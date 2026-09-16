@@ -147,6 +147,13 @@ def execute_turn(
         store.save(session)
         return output
 
+    # Checked ahead of the SharePoint handler, whose keyword matcher would
+    # otherwise claim the phrase for containing "sharepoint" and "sign in".
+    probe_output = _try_a2ui_probe(turn_input.user_text, session)
+    if probe_output is not None:
+        store.save(session)
+        return probe_output
+
     sp_load_output = _try_load_from_sharepoint(turn_input.user_text, session)
     if sp_load_output is not None:
         store.save(session)
@@ -405,6 +412,50 @@ def _is_chat_skip_intent(user_text: str | None) -> bool:
         "skip it",
     )
     return stripped in skip_phrases or any(stripped.startswith(p + " ") for p in skip_phrases)
+
+
+def _try_a2ui_probe(user_text: str | None, session: Session) -> TurnOutput | None:
+    """Renders the ``openUrl`` diagnostic surface on an exact trigger phrase.
+
+    Deliberately an exact match rather than a keyword search, so that no real
+    qualification conversation can trip it.
+
+    The catalog-versus-renderer gap is the reason this exists. Gemini
+    Enterprise's composite catalog declares ``openUrl``, but the catalog is a
+    description of the schema, not a promise about the renderer. GE has already
+    been seen accepting a message and drawing nothing, so the sign-in button
+    gets measured before it gets built.
+    """
+    if not user_text:
+        return None
+
+    if user_text.strip().lower() not in ("a2ui probe openurl", "probe openurl"):
+        return None
+
+    import os as _os  # noqa: PLC0415
+    import urllib.parse as _up  # noqa: PLC0415
+
+    from qualify.a2ui.signin import build_openurl_probe  # noqa: PLC0415
+
+    base_url = _os.environ.get(
+        "AGENT_URL", "https://ge-qualify-agent-g22bhpwccq-uc.a.run.app"
+    ).rstrip("/")
+    auth_url = f"{base_url}/auth?context_id={_up.quote(session.context_id)}"
+
+    reply_text = (
+        "**A2UI `openUrl` probe**\n\n"
+        "Three renderings of the same link below. Please report:\n\n"
+        "1. Which of the three you can see.\n"
+        "2. What happens when you click each one.\n\n"
+        "Option 3 is the control and is known to work. If you see nothing at "
+        "all, the surface itself failed and the buttons are not the problem."
+    )
+
+    return TurnOutput(
+        reply_text=reply_text,
+        a2ui_messages=build_openurl_probe(auth_url),
+        session=session,
+    )
 
 
 def _try_load_from_sharepoint(user_text: str | None, session: Session) -> TurnOutput | None:
