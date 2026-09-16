@@ -172,6 +172,37 @@ class SharePointConnector:
                     "Accept": "application/json",
                 }, "delegated"
 
+        # Layer 1b: Refresh Token exchange for Delegated User Identity
+        refresh_token = os.environ.get("MS_GRAPH_REFRESH_TOKEN", "").strip()
+        if refresh_token and self.tenant_id and self.client_id:
+            token_url = f"https://login.microsoftonline.com/{urllib.parse.quote(self.tenant_id)}/oauth2/v2.0/token"
+            try:
+                with httpx.Client(timeout=8.0) as client:
+                    payload = {
+                        "client_id": self.client_id,
+                        "grant_type": "refresh_token",
+                        "refresh_token": refresh_token,
+                        "scope": "https://graph.microsoft.com/Sites.ReadWrite.All offline_access",
+                    }
+                    if self.client_secret:
+                        payload["client_secret"] = self.client_secret
+                    resp = client.post(
+                        token_url,
+                        data=payload,
+                        headers={"Content-Type": "application/x-www-form-urlencoded"},
+                    )
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        access_token = data["access_token"]
+                        expires_in = int(data.get("expires_in", 3599))
+                        cache_delegated_token(access_token, key="latest", ttl_seconds=max(60, expires_in - 60))
+                        return {
+                            "Authorization": f"Bearer {access_token}",
+                            "Accept": "application/json",
+                        }, "delegated"
+            except Exception as exc:
+                logger.warning("Microsoft Entra refresh_token flow failed (%s), falling back to client_credentials.", type(exc).__name__)
+
         # Layer 2: Application Client Credentials OAuth 2.0 flow
         if self.tenant_id and self.client_id and self.client_secret:
             cached_app = get_cached_delegated_token("app_client_credentials")
