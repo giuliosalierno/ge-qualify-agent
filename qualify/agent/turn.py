@@ -340,9 +340,9 @@ def _generate_chat_reply(
 
 
 class GeminiChatClient:
-    """Calls Gemini (default: gemini-3-flash-preview) for consultative coaching replies."""
+    """Calls Gemini (default: gemini-3.8-flash) for consultative coaching replies."""
 
-    def __init__(self, model: str = "gemini-3-flash-preview", client: Any = None) -> None:
+    def __init__(self, model: str = "gemini-3.8-flash", client: Any = None) -> None:
         self.model = model
         if client is not None:
             self._client = client
@@ -384,13 +384,25 @@ class GeminiChatClient:
             "or offer a conservative placeholder they can confirm or type into the form.\n"
             "4. If all [MISSING - REQUIRED] fields for this stage are now filled, congratulate them and invite them to click **Continue** on the form card."
         )
-        response = self._client.models.generate_content(
-            model=self.model,
-            contents=conversation,
-            config={
-                "system_instruction": system_prompt,
-                "temperature": 0.3,
-            },
-        )
+        config = {
+            "system_instruction": system_prompt,
+            "temperature": 0.3,
+        }
+        try:
+            response = self._client.models.generate_content(
+                model=self.model,
+                contents=conversation,
+                config=config,
+            )
+        except Exception as exc:
+            if "404" in str(exc) and self.model != "gemini-3-flash-preview":
+                log.warning("Model %s returned 404, falling back to gemini-3-flash-preview", self.model)
+                response = self._client.models.generate_content(
+                    model="gemini-3-flash-preview",
+                    contents=conversation,
+                    config=config,
+                )
+            else:
+                raise
         return (getattr(response, "text", "") or "").strip()
 

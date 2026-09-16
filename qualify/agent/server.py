@@ -32,7 +32,7 @@ def build_app():
     host = os.environ.get("HOST", "0.0.0.0")
     port = int(os.environ.get("PORT", 8080))
     base_url = os.environ.get("AGENT_URL", f"http://localhost:{port}")
-    model_name = os.environ.get("MODEL", "gemini-3-flash-preview")
+    model_name = os.environ.get("MODEL", "gemini-3.8-flash")
 
     # Use Gemini extraction and chat clients if credentials / environment permits
     extraction_client = None

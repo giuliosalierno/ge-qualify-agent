@@ -36,9 +36,9 @@ from qualify.schema.use_case_record import OwnershipError, UseCaseRecord
 
 log = logging.getLogger(__name__)
 
-#: Gemini 3 Flash. Extraction is a short, schema-constrained task run on every
+#: Gemini 3.8 Flash. Extraction is a short, schema-constrained task run on every
 #: turn, so latency and cost matter more than reasoning depth here.
-DEFAULT_MODEL = "gemini-3-flash-preview"
+DEFAULT_MODEL = "gemini-3.8-flash"
 
 #: Trimmed from both ends of an evidence quote before matching. A model that
 #: quotes `"twelve handlers."` when the user wrote `"twelve handlers"` is
@@ -396,18 +396,30 @@ class GeminiExtractionClient:
     ) -> list[dict[str, Any]]:
         import json  # noqa: PLC0415
 
-        response = self._client.models.generate_content(
-            model=self.model,
-            contents=conversation,
-            config={
-                "system_instruction": instruction,
-                "response_mime_type": "application/json",
-                "response_schema": schema,
-                # Extraction is a copying task. Sampling variety here buys
-                # nothing and costs reproducibility between identical turns.
-                "temperature": 0.0,
-            },
-        )
+        config = {
+            "system_instruction": instruction,
+            "response_mime_type": "application/json",
+            "response_schema": schema,
+            # Extraction is a copying task. Sampling variety here buys
+            # nothing and costs reproducibility between identical turns.
+            "temperature": 0.0,
+        }
+        try:
+            response = self._client.models.generate_content(
+                model=self.model,
+                contents=conversation,
+                config=config,
+            )
+        except Exception as exc:
+            if "404" in str(exc) and self.model != "gemini-3-flash-preview":
+                log.warning("Model %s returned 404, falling back to gemini-3-flash-preview", self.model)
+                response = self._client.models.generate_content(
+                    model="gemini-3-flash-preview",
+                    contents=conversation,
+                    config=config,
+                )
+            else:
+                raise
 
         text = (getattr(response, "text", "") or "").strip()
         if not text:
