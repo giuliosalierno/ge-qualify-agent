@@ -84,6 +84,10 @@ class ActionOutcome:
     #: Set when the action changed which stage is active.
     stage: str | None = None
     commit: CommitResult | None = None
+    #: Stage index and surfaceId of the stage just committed, so its form card
+    #: can be collapsed into a 1-line summary banner.
+    committed_stage_idx: int | None = None
+    committed_surface_id: str | None = None
     #: A short factual note. Not user-facing copy.
     message: str = ""
     #: Set when the whole pack is committed and `finalize` may run.
@@ -195,6 +199,8 @@ def _commit_stage(session: Session, event: ActionEvent) -> ActionOutcome:
             message=result.blocking_summary(),
         )
 
+    committed_idx = stage_idx
+    committed_sid = event.surface_id or session.stage_surface_ids.get(stage_idx)
     moved = session.advance()
     return ActionOutcome(
         action=COMMIT_STAGE,
@@ -202,6 +208,8 @@ def _commit_stage(session: Session, event: ActionEvent) -> ActionOutcome:
         advanced=True,
         stage=session.stage,
         commit=result,
+        committed_stage_idx=committed_idx,
+        committed_surface_id=committed_sid,
         ready_to_finalize=session.is_complete,
         message=(
             f"committed {result.stage_id}, now on {session.stage}"

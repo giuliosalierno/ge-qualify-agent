@@ -16,7 +16,7 @@ from qualify.agent.card import build_agent_card
 from qualify.agent.executor import QualifyAgentExecutor
 from qualify.agent.turn import GeminiChatClient
 from qualify.a2ui.patcher import GeminiExtractionClient
-from qualify.sinks.session import InMemorySessionStore
+from qualify.sinks.record_store import create_default_store
 
 load_dotenv()
 
@@ -47,7 +47,7 @@ def build_app():
     agent_card = build_agent_card(base_url)
     executor = QualifyAgentExecutor(
         agent_card=agent_card,
-        session_store=InMemorySessionStore(),
+        session_store=create_default_store(),
         extraction_client=extraction_client,
         chat_client=chat_client,
     )

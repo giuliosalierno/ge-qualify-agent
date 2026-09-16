@@ -542,3 +542,59 @@ def build_completion_surface(
         build_patch("/", build_data_model(record, pack, last_idx), surface_id),
     ]
 
+
+def build_collapsed_stage_components(
+    pack: Pack, record: UseCaseRecord, stage_idx: int
+) -> list[dict[str, Any]]:
+    """Builds a compact 1-line summary banner for a completed stage card."""
+    stage = pack.stages[stage_idx]
+    title_id = f"collapsed-title-{stage.id}"
+    btn_id = f"collapsed-revise-btn-{stage.id}"
+    lbl_id = f"collapsed-revise-lbl-{stage.id}"
+
+    nodes: list[dict[str, Any]] = [
+        {
+            "id": title_id,
+            "component": "Text",
+            "text": f"✓ Stage {stage_idx + 1}: {stage.label} — Confirmed",
+            "variant": "caption",
+        },
+        {
+            "id": lbl_id,
+            "component": "Text",
+            "text": "Revise",
+        },
+        {
+            "id": btn_id,
+            "component": "Button",
+            "child": lbl_id,
+            "variant": "default",
+            "action": {
+                "event": {
+                    "name": "revise_stage",
+                    "context": {
+                        "prompt": f"Revise — {stage.label}",
+                        "stage": stage.id,
+                    },
+                }
+            },
+        },
+    ]
+
+    root = {"id": ROOT_ID, "component": "Column", "children": [title_id, btn_id]}
+    return [root, *nodes]
+
+
+def build_collapsed_stage_patch(
+    pack: Pack,
+    record: UseCaseRecord,
+    stage_idx: int,
+    surface_id: str,
+) -> dict[str, Any]:
+    """Emits an updateComponents message replacing the completed stage's form with a compact banner."""
+    return build_update_components(
+        build_collapsed_stage_components(pack, record, stage_idx),
+        surface_id=surface_id,
+    )
+
+

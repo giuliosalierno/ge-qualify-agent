@@ -27,6 +27,7 @@ from qualify.a2ui.actions import (
     parse_action,
 )
 from qualify.a2ui.compiler import (
+    build_collapsed_stage_patch,
     build_completion_surface,
     build_patch,
     build_surface,
@@ -201,9 +202,25 @@ def _handle_action_outcome(
 
     if outcome.action == COMMIT_STAGE:
         if outcome.advanced:
+            if (
+                outcome.committed_stage_idx is not None
+                and outcome.committed_surface_id
+            ):
+                a2ui_messages.append(
+                    build_collapsed_stage_patch(
+                        session.pack,
+                        session.record,
+                        outcome.committed_stage_idx,
+                        surface_id=outcome.committed_surface_id,
+                    )
+                )
+
             if outcome.ready_to_finalize:
-                # All stages committed: emit the complete Markdown Business Value Brief
-                # and render a new summary/completion card at the bottom of chat.
+                # All stages committed: emit the complete Markdown Business Value Brief,
+                # render a new summary/completion card, and sync to optional Google Sheet.
+                from qualify.sinks.sheets import sync_to_optional_sheet  # noqa: PLC0415
+
+                sync_to_optional_sheet(session.record)
                 reply_text = render_business_brief(session.record)
                 sid = session.next_surface_id("complete")
                 a2ui_messages.extend(

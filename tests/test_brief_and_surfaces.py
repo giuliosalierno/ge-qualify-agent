@@ -50,39 +50,43 @@ def test_each_stage_renders_as_distinct_surface_id() -> None:
     sid_0 = t1.a2ui_messages[0]["createSurface"]["surfaceId"]
     assert sid_0.startswith("qualify-s0-")
 
-    # Turn 2: Commit Stage 0 -> advances to Stage 1
+    # Turn 2: Commit Stage 0 -> collapses Stage 0 surface and advances to Stage 1
     t2 = execute_turn(
         store,
         TurnInput(context_id=ctx, action_data={"name": COMMIT_STAGE, "context": NEEDS_PAYLOAD}),
     )
-    sid_1 = t2.a2ui_messages[0]["createSurface"]["surfaceId"]
+    assert t2.a2ui_messages[0]["updateComponents"]["surfaceId"] == sid_0
+    sid_1 = t2.a2ui_messages[1]["createSurface"]["surfaceId"]
     assert sid_1.startswith("qualify-s1-")
     assert sid_1 != sid_0
 
-    # Turn 3: Commit Stage 1 -> advances to Stage 2
+    # Turn 3: Commit Stage 1 -> collapses Stage 1 surface and advances to Stage 2
     t3 = execute_turn(
         store,
         TurnInput(context_id=ctx, action_data={"name": COMMIT_STAGE, "context": SIZING_PAYLOAD}),
     )
-    sid_2 = t3.a2ui_messages[0]["createSurface"]["surfaceId"]
+    assert t3.a2ui_messages[0]["updateComponents"]["surfaceId"] == sid_1
+    sid_2 = t3.a2ui_messages[1]["createSurface"]["surfaceId"]
     assert sid_2.startswith("qualify-s2-")
     assert sid_2 not in {sid_0, sid_1}
 
-    # Turn 4: Commit Stage 2 -> advances to Stage 3
+    # Turn 4: Commit Stage 2 -> collapses Stage 2 surface and advances to Stage 3
     t4 = execute_turn(
         store,
         TurnInput(context_id=ctx, action_data={"name": COMMIT_STAGE, "context": DATA_PAYLOAD}),
     )
-    sid_3 = t4.a2ui_messages[0]["createSurface"]["surfaceId"]
+    assert t4.a2ui_messages[0]["updateComponents"]["surfaceId"] == sid_2
+    sid_3 = t4.a2ui_messages[1]["createSurface"]["surfaceId"]
     assert sid_3.startswith("qualify-s3-")
     assert sid_3 not in {sid_0, sid_1, sid_2}
 
-    # Turn 5: Commit Stage 3 -> emits completion brief and completion surface
+    # Turn 5: Commit Stage 3 -> collapses Stage 3 surface, emits completion brief and completion surface
     t5 = execute_turn(
         store,
         TurnInput(context_id=ctx, action_data={"name": COMMIT_STAGE, "context": OWNERSHIP_PAYLOAD}),
     )
-    sid_complete = t5.a2ui_messages[0]["createSurface"]["surfaceId"]
+    assert t5.a2ui_messages[0]["updateComponents"]["surfaceId"] == sid_3
+    sid_complete = t5.a2ui_messages[1]["createSurface"]["surfaceId"]
     assert sid_complete.startswith("qualify-complete-")
     assert sid_complete not in {sid_0, sid_1, sid_2, sid_3}
 
@@ -129,4 +133,17 @@ def test_chat_client_receives_form_state_and_brief_classifies_tier() -> None:
     assert "[MISSING - REQUIRED]" in captured_summary[0]
     assert t1.session.record.meta.record_id.startswith("UC-")
     assert t1.session.record.meta.submission_date is not None
+
+
+def test_collapsed_stage_patch_passes_schema_validation() -> None:
+    """Ensures build_collapsed_stage_patch produces a valid A2UI v0.9 updateComponents message."""
+    from qualify.a2ui.compiler import build_collapsed_stage_patch
+    from qualify.a2ui.validate import check_component_graph, message_validator
+
+    pack = load_pack("business")
+    record = UseCaseRecord(meta=Meta(record_id="test-rec-123"))
+    patch = build_collapsed_stage_patch(pack, record, stage_idx=0, surface_id="qualify-s0-needs-1")
+    message_validator().validate(patch)
+    check_component_graph(patch["updateComponents"]["components"])
+
 

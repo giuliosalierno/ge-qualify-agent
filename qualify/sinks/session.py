@@ -60,6 +60,7 @@ class Session:
     #: flow rather than overwriting the card in an earlier message.
     surface_seq: int = 0
     current_surface_id: str = "qualify"
+    stage_surface_ids: dict[int, str] = field(default_factory=dict)
     created_at: datetime = field(default_factory=_now)
     updated_at: datetime = field(default_factory=_now)
 
@@ -68,6 +69,8 @@ class Session:
         self.surface_seq += 1
         tag = suffix or f"s{self.active_stage}-{self.stage}"
         self.current_surface_id = f"qualify-{tag}-{self.surface_seq}"
+        if suffix is None:
+            self.stage_surface_ids[self.active_stage] = self.current_surface_id
         return self.current_surface_id
 
     @property
