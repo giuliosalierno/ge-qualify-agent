@@ -147,3 +147,28 @@ def test_collapsed_stage_patch_passes_schema_validation() -> None:
     check_component_graph(patch["updateComponents"]["components"])
 
 
+def test_stage_2_sizing_chat_turn_with_ui_paths() -> None:
+    """Verifies that Stage 2 ('sizing', which contains /ui/summary/* readonly fields) handles 'i don't have those numbers' without AttributeError."""
+    store = InMemorySessionStore(quiet=True)
+    ctx = "ctx-stage2-ui-path"
+
+    # Start and commit Stage 0
+    execute_turn(store, TurnInput(context_id=ctx, user_text="Start"))
+    execute_turn(store, TurnInput(context_id=ctx, action_data={"name": COMMIT_STAGE, "context": NEEDS_PAYLOAD}))
+
+    class StubChatClient:
+        def reply(self, *, instruction: str, conversation: str, stage_label: str, record_summary: str) -> str:
+            assert "How many times a week" in record_summary
+            assert "/ui/summary" not in record_summary
+            return "No worries! We can use ballpark figures—say 5 times a week, 30 mins baseline, 15 mins saved."
+
+    # Send "i don't have those numbers" on Stage 2 (active_stage == 1)
+    out = execute_turn(
+        store,
+        TurnInput(context_id=ctx, user_text="i don't have those numbers"),
+        chat_client=StubChatClient(),
+    )
+    assert "ballpark figures" in out.reply_text
+
+
+

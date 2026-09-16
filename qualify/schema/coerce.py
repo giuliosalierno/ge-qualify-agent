@@ -240,12 +240,16 @@ def coerce_and_set(record: UseCaseRecord, path: str, raw: Any) -> Any:
 
 
 def get_by_path(record: UseCaseRecord, path: str) -> Any:
-    """Reads the value at `path`."""
+    """Reads the value at `path`. Returns None for display-only `/ui` paths."""
     segments = [s for s in path.replace(".", "/").split("/") if s]
+    if segments and segments[0] == "ui":
+        return None
     if segments and segments[0] == "uc":
         segments = segments[1:]
 
     target: Any = record
     for segment in segments:
+        if not hasattr(target, segment):
+            return None
         target = getattr(target, segment)
     return target

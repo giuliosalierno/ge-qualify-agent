@@ -87,24 +87,34 @@ class QualifyAgentExecutor(AgentExecutor):
             conversation_history=user_text or "",
         )
 
-        output: TurnOutput = execute_turn(
-            self._session_store,
-            turn_input,
-            extraction_client=self._extraction_client,
-            chat_client=self._chat_client,
-            pack_name=self._pack_name,
-        )
-
-        # Build response parts
-        parts: list[Part] = [Part(root=TextPart(text=output.reply_text))]
-        for a2ui_msg in output.a2ui_messages:
-            parts.append(create_a2ui_part(a2ui_msg, version=WIRE_VERSION))
-
-        # Enqueue completed task
         task = context.current_task
         if not task:
             task = new_task(context.message)
             await event_queue.enqueue_event(task)
+
+        try:
+            output: TurnOutput = execute_turn(
+                self._session_store,
+                turn_input,
+                extraction_client=self._extraction_client,
+                chat_client=self._chat_client,
+                pack_name=self._pack_name,
+            )
+            parts: list[Part] = [Part(root=TextPart(text=output.reply_text))]
+            for a2ui_msg in output.a2ui_messages:
+                parts.append(create_a2ui_part(a2ui_msg, version=WIRE_VERSION))
+        except Exception as exc:
+            log.exception("Unhandled exception in execute_turn for context %s", context_id)
+            parts = [
+                Part(
+                    root=TextPart(
+                        text=(
+                            "I encountered a temporary issue processing that step, "
+                            f"but your progress is saved ({type(exc).__name__}). Please try again."
+                        )
+                    )
+                )
+            ]
 
         updater = TaskUpdater(event_queue, task.id, task.context_id)
         await updater.update_status(

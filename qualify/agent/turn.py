@@ -304,6 +304,8 @@ def _build_stage_state_summary(session: Session, stage: Stage) -> str:
 
     lines.append("\nForm Field Status in Active Stage:")
     for f in stage.fields:
+        if f.readonly or not f.path.startswith("/uc/"):
+            continue
         val = get_by_path(session.record, f.path)
         if val is not None and val != "" and val != []:
             lines.append(f"  [FILLED] {f.label}: {val!r}")
