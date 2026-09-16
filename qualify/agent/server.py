@@ -36,37 +36,26 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 
 
-class _TransportLoggingRequestHandler(DefaultRequestHandler):
-    """Records which A2A transport Gemini Enterprise actually uses.
-
-    This decides whether the agent can ever announce a background event, such
-    as a completed OAuth sign-in, without the user speaking first:
-
-    * ``message/send`` — one request, one response body. The turn is over before
-      anything else can happen. Pushing a later message is impossible.
-    * ``message/stream`` — SSE. The agent may hold the task open and emit
-      further events, so a "you're connected" bubble could appear on its own.
-
-    The agent card declares ``streaming: true``, but that advertises what we
-    accept, not what the client chooses. Only the logs can settle it.
-    """
-
-    async def on_message_send(self, params, context=None):  # type: ignore[override]
-        log.info("A2A transport: message/send (unary, no mid-turn push possible)")
-        return await super().on_message_send(params, context)
-
-    async def on_message_send_stream(self, params, context=None):  # type: ignore[override]
-        log.info("A2A transport: message/stream (SSE, mid-turn push may be possible)")
-        async for event in super().on_message_send_stream(params, context):
-            yield event
-
-    async def on_resubscribe_to_task(self, params, context=None):  # type: ignore[override]
-        # Spec 7.6.2 says a client SHOULD resubscribe after out-of-band auth.
-        # If this ever fires, GE does poll after all and the sign-in
-        # notification can be delivered properly.
-        log.info("A2A transport: tasks/resubscribe — client IS re-subscribing")
-        async for event in super().on_resubscribe_to_task(params, context):
-            yield event
+#: Gemini Enterprise calls this agent over ``message/stream`` (SSE), not
+#: ``message/send``. Observed in production on 2026-09-16:
+#:
+#:     A2A transport: message/stream (SSE, mid-turn push may be possible)
+#:
+#: That matters because it is the precondition for announcing a background
+#: event — a completed OAuth sign-in, say — without waiting for the user to
+#: speak. A unary request could never do it.
+#:
+#: The subclass that produced that log line has been removed. It overrode
+#: `on_message_send_stream` and re-yielded from `super()`, which stops
+#: `GeneratorExit` reaching the base generator directly. The base relies on
+#: catching it to drain the queue, and on a `finally` to schedule producer
+#: cleanup; wrapped, the inner generator is finalised by the garbage collector
+#: instead, whenever that happens to be. The turn after the wrapped one failed
+#: inside Gemini Enterprise without ever reaching this service.
+#:
+#: If this ever needs re-measuring, log from `on_message_send` only — it
+#: returns a value, so wrapping it is safe — or read the JSON-RPC method in
+#: ASGI middleware. Do not wrap the streaming generator.
 
 
 def build_app():
@@ -94,7 +83,7 @@ def build_app():
         chat_client=chat_client,
     )
 
-    handler = _TransportLoggingRequestHandler(
+    handler = DefaultRequestHandler(
         agent_executor=executor,
         task_store=InMemoryTaskStore(),
     )
