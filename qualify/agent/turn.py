@@ -238,11 +238,23 @@ def _handle_action_outcome(
                 from qualify.connectors.sharepoint import sync_to_optional_sharepoint  # noqa: PLC0415
                 from qualify.sinks.sheets import sync_to_optional_sheet  # noqa: PLC0415
 
+                import os as _os  # noqa: PLC0415
                 sync_to_optional_sheet(session.record)
-                sync_to_optional_sharepoint(session.record, skipped_stages=session.skipped)
+                sp_res = sync_to_optional_sharepoint(session.record, skipped_stages=session.skipped)
                 reply_text = render_business_brief(
                     session.record, skipped_stages=session.skipped
                 )
+                base_url = _os.environ.get("AGENT_URL", "https://ge-qualify-agent-g22bhpwccq-uc.a.run.app").rstrip("/")
+                if sp_res and sp_res.auth_mode == "delegated":
+                    reply_text += (
+                        f"\n\n---\n✅ **Synced to SharePoint Online (On-Behalf-Of User)**: "
+                        f"[Open SharePoint Folder]({sp_res.folder_url})"
+                    )
+                else:
+                    reply_text += (
+                        f"\n\n---\n⚠️ **SharePoint User Login Required**: Saved to local backup because no active Microsoft user session was found. "
+                        f"**[Click here to Sign in with Microsoft SharePoint]({base_url}/auth)** to sync directly under your user account."
+                    )
                 sid = session.next_surface_id("complete")
                 a2ui_messages.extend(
                     build_completion_surface(
