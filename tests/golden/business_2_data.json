@@ -19,6 +19,7 @@
             "stage-caption",
             "stage-rule",
             "f-uc-technical-data-sources",
+            "f-uc-technical-other-data-sources",
             "f-uc-technical-security-data-classification-label",
             "f-uc-technical-security-data-classification",
             "f-uc-technical-grounding-acl-preservation-required",
@@ -99,6 +100,10 @@
               "value": "workspace_mail"
             },
             {
+              "label": "Other (specify below)",
+              "value": "other"
+            },
+            {
               "label": "Not sure yet",
               "value": "unknown"
             }
@@ -106,6 +111,15 @@
           "value": {
             "path": "/uc/technical/data_sources"
           }
+        },
+        {
+          "id": "f-uc-technical-other-data-sources",
+          "component": "TextField",
+          "label": "Other systems or data sources (optional) — List any custom databases, ERPs, or tools not shown above.",
+          "value": {
+            "path": "/uc/technical/other_data_sources"
+          },
+          "variant": "shortText"
         },
         {
           "id": "f-uc-technical-security-data-classification-label",
@@ -231,6 +245,7 @@
           },
           "technical": {
             "data_sources": [],
+            "other_data_sources": null,
             "systems": [],
             "capability_level": null,
             "capability_rationale": null,

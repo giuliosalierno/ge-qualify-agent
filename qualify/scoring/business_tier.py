@@ -43,14 +43,18 @@ def classify_capability(record: UseCaseRecord) -> None:
     if tech.capability_level is not None and tech.capability_rationale:
         return
 
-    sources = [s.strip().lower() for s in tech.data_sources if s.strip()]
+    sources = [s.strip().lower() for s in tech.data_sources if s.strip() and s != "other"]
+    if tech.other_data_sources and tech.other_data_sources.strip():
+        sources.append(tech.other_data_sources.strip().lower())
     classification = (tech.security.data_classification or "internal").lower()
     problem = (record.business.problem_description or "").lower()
     stories = (record.business.user_stories or "").lower()
     text_corpus = f"{problem} {stories}"
 
-    has_high_code_sys = any(
-        any(hc in src for hc in _HIGH_CODE_SYSTEMS) for src in sources
+    has_high_code_sys = (
+        bool(tech.other_data_sources)
+        or "other" in tech.data_sources
+        or any(any(hc in src for hc in _HIGH_CODE_SYSTEMS) for src in sources)
     )
     has_workflow_verbs = any(
         w in text_corpus

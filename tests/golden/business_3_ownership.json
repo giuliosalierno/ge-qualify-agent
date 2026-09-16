@@ -171,6 +171,7 @@
           },
           "technical": {
             "data_sources": [],
+            "other_data_sources": null,
             "systems": [],
             "capability_level": null,
             "capability_rationale": null,

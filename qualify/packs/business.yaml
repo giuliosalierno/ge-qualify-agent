@@ -30,6 +30,7 @@ option_sets:
     - { label: Internal REST API, value: internal_api }
     - { label: Public website, value: public_web }
     - { label: Email or calendar, value: workspace_mail }
+    - { label: Other (specify below), value: other }
     - { label: Not sure yet, value: unknown }
 
   # Sensitivity labels. These live in the pack, not in UseCaseRecord, because
@@ -152,6 +153,11 @@ stages:
         variant: multipleSelection
         options_ref: data_sources
         required: true
+      - path: /uc/technical/other_data_sources
+        label: Other systems or data sources (optional)
+        component: TextField
+        variant: shortText
+        help: List any custom databases, ERPs, or tools not shown above.
       - path: /uc/technical/security/data_classification
         label: Data sensitivity
         component: MaterialRadioButton

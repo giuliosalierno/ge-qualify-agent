@@ -126,6 +126,7 @@ class Technical(_Base):
     """
 
     data_sources: list[str] = Field(default_factory=list)
+    other_data_sources: str | None = None
     systems: list[SystemEntry] = Field(default_factory=list)
     capability_level: CapabilityLevel | None = None
     capability_rationale: str | None = None

@@ -56,7 +56,10 @@ def render_business_brief(
     total_team_hrs = derived.total_annual_team_hours_saved or 0.0
 
     # Systems & Security
-    systems_str = ", ".join(tech.data_sources) if tech.data_sources else "None specified"
+    all_sources = [s for s in tech.data_sources if s != "other"]
+    if tech.other_data_sources:
+        all_sources.append(tech.other_data_sources)
+    systems_str = ", ".join(all_sources) if all_sources else "None specified"
     classification = (tech.security.data_classification or "Unspecified").capitalize()
 
     # Capability & Delivery Tier
