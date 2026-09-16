@@ -1,14 +1,24 @@
+# Python build & cache artifacts
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
+*.so
+build/
+dist/
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+
+# OS & Editor
 .DS_Store
+
+# Local environment & secrets
+.env
+.env.*
+
+# Private design & implementation documentation
 doc/
 
-# Phase 0 spike: local venv and secrets
-spike/**/.venv/
-spike/**/.env
-
-# Python
-__pycache__/
-*.pyc
-.venv/
-.pytest_cache/
+# Generated skill zip archives
+*.zip

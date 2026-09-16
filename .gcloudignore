@@ -1,4 +1,4 @@
-# Python build artifacts
+# Python build & cache artifacts
 __pycache__/
 *.py[cod]
 *$py.class
@@ -10,16 +10,17 @@ dist/
 venv/
 .pytest_cache/
 
-# Local configuration and environment
+# Local configuration & environment
 .env
 .env.*
 
 # Private design & implementation documentation
 doc/
 
-# Development spikes and test suites
-spike/
+# Legacy skills archive & test suites (not needed in deployed container)
+skills/
 tests/
+*.zip
 
 # Git metadata
 .git/
