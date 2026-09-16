@@ -9,19 +9,23 @@ Exposes:
 
 from __future__ import annotations
 
+import base64
 import json
 import logging
 import os
 import secrets
 from typing import Any
+import urllib.parse
 
+import httpx
 from starlette.requests import Request
-from starlette.responses import JSONResponse, RedirectResponse, Response
+from starlette.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 
 from qualify.connectors.sharepoint import (
     cache_delegated_token,
     get_sharepoint_connector,
     is_microsoft_graph_token,
+    save_delegated_refresh_token,
 )
 
 logger = logging.getLogger(__name__)
@@ -282,23 +286,147 @@ async def handle_mcp_request(request: Request) -> Response:
 
 
 async def handle_oauth_auth(request: Request) -> Response:
-    """OAuth 2.0 Authorization Endpoint (`/auth`) for Gemini Enterprise Connector registration."""
-    redirect_uri = request.query_params.get("redirect_uri", "")
-    state = request.query_params.get("state", "")
-    if not redirect_uri:
-        return JSONResponse({"error": "Missing redirect_uri"}, status_code=400)
+    """OAuth 2.0 Authorization Endpoint (`/auth`) for browser login and Gemini Enterprise connector registration."""
+    ge_redirect_uri = request.query_params.get("redirect_uri", "")
+    ge_state = request.query_params.get("state", "")
 
-    # If Microsoft Entra tenant/client is configured and real redirect requested, redirect to Entra ID;
-    # otherwise issue an ephemeral authorization code for Gemini Enterprise connector handshake.
+    tenant_id = os.environ.get("MS_GRAPH_TENANT_ID", "").strip()
+    client_id = os.environ.get("MS_GRAPH_CLIENT_ID", "").strip()
+    base_url = os.environ.get("AGENT_URL", f"http://{request.url.netloc}").rstrip("/")
+    callback_uri = f"{base_url}/auth/callback"
+
+    if tenant_id and client_id:
+        # Encode Gemini Enterprise redirect_uri & state into state payload
+        state_payload = json.dumps({"redirect_uri": ge_redirect_uri, "state": ge_state})
+        encoded_state = base64.urlsafe_b64encode(state_payload.encode("utf-8")).decode("ascii")
+        auth_url = (
+            f"https://login.microsoftonline.com/{urllib.parse.quote(tenant_id)}/oauth2/v2.0/authorize?"
+            + urllib.parse.urlencode(
+                {
+                    "client_id": client_id,
+                    "response_type": "code",
+                    "redirect_uri": callback_uri,
+                    "response_mode": "query",
+                    "scope": "https://graph.microsoft.com/Sites.ReadWrite.All offline_access",
+                    "state": encoded_state,
+                }
+            )
+        )
+        return RedirectResponse(url=auth_url, status_code=302)
+
+    if not ge_redirect_uri:
+        return JSONResponse({"error": "Missing redirect_uri and MS_GRAPH_CLIENT_ID not configured"}, status_code=400)
+
     code = secrets.token_urlsafe(24)
-    sep = "&" if "?" in redirect_uri else "?"
-    target_url = f"{redirect_uri}{sep}code={code}&state={state}"
+    sep = "&" if "?" in ge_redirect_uri else "?"
+    target_url = f"{ge_redirect_uri}{sep}code={code}&state={ge_state}"
     return RedirectResponse(url=target_url, status_code=302)
+
+
+async def handle_oauth_callback(request: Request) -> Response:
+    """OAuth 2.0 Callback Endpoint (`/auth/callback`) that receives Microsoft Entra auth code and saves refresh token."""
+    code = request.query_params.get("code", "")
+    state_str = request.query_params.get("state", "")
+    error = request.query_params.get("error", "")
+    error_desc = request.query_params.get("error_description", "")
+
+    if error:
+        return HTMLResponse(
+            f"<html><body style='font-family:sans-serif;padding:2rem;'><h2>Microsoft Sign-In Error</h2><p><code>{error}</code>: {error_desc}</p></body></html>",
+            status_code=400,
+        )
+
+    tenant_id = os.environ.get("MS_GRAPH_TENANT_ID", "").strip()
+    client_id = os.environ.get("MS_GRAPH_CLIENT_ID", "").strip()
+    client_secret = os.environ.get("MS_GRAPH_CLIENT_SECRET", "").strip()
+    base_url = os.environ.get("AGENT_URL", f"http://{request.url.netloc}").rstrip("/")
+    callback_uri = f"{base_url}/auth/callback"
+
+    access_token = ""
+    refresh_token = ""
+    expires_in = 3599
+
+    if code and tenant_id and client_id:
+        token_url = f"https://login.microsoftonline.com/{urllib.parse.quote(tenant_id)}/oauth2/v2.0/token"
+        try:
+            with httpx.Client(timeout=10.0) as client:
+                payload = {
+                    "client_id": client_id,
+                    "grant_type": "authorization_code",
+                    "code": code,
+                    "redirect_uri": callback_uri,
+                    "scope": "https://graph.microsoft.com/Sites.ReadWrite.All offline_access",
+                }
+                if client_secret:
+                    payload["client_secret"] = client_secret
+                resp = client.post(
+                    token_url,
+                    data=payload,
+                    headers={"Content-Type": "application/x-www-form-urlencoded"},
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                access_token = data.get("access_token", "")
+                refresh_token = data.get("refresh_token", "")
+                expires_in = int(data.get("expires_in", 3599))
+                save_delegated_refresh_token(refresh_token, access_token, expires_in)
+                logger.info("Successfully exchanged Microsoft Entra authorization code for Delegated Access & Refresh Token.")
+        except Exception as exc:
+            logger.error("Failed to exchange Microsoft Entra authorization code: %s", exc)
+            return HTMLResponse(
+                f"<html><body style='font-family:sans-serif;padding:2rem;'><h2>Token Exchange Failed</h2><p>{exc}</p></body></html>",
+                status_code=500,
+            )
+
+    # Decode state to check if initiated by Gemini Enterprise
+    ge_redirect_uri = ""
+    ge_state = ""
+    if state_str:
+        try:
+            padded = state_str + "=" * (-len(state_str) % 4)
+            decoded = json.loads(base64.urlsafe_b64decode(padded.encode("ascii")).decode("utf-8"))
+            ge_redirect_uri = decoded.get("redirect_uri", "")
+            ge_state = decoded.get("state", "")
+        except Exception:
+            pass
+
+    if ge_redirect_uri:
+        ephemeral_code = secrets.token_urlsafe(24)
+        sep = "&" if "?" in ge_redirect_uri else "?"
+        target_url = f"{ge_redirect_uri}{sep}code={ephemeral_code}&state={ge_state}"
+        return RedirectResponse(url=target_url, status_code=302)
+
+    site_url = os.environ.get("SHAREPOINT_INSTANCE_URL", "https://zd8vn.sharepoint.com/")
+    html = f"""<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>SharePoint Connected</title>
+  <style>
+    body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f8fafc; color: #0f172a; padding: 3rem 1.5rem; max-width: 680px; margin: 0 auto; }}
+    .card {{ background: white; border-radius: 12px; padding: 2rem; box-shadow: 0 4px 12px rgba(0,0,0,0.08); border: 1px solid #e2e8f0; }}
+    h1 {{ color: #16a34a; margin-top: 0; font-size: 1.5rem; }}
+    code {{ background: #f1f5f9; padding: 0.2rem 0.4rem; border-radius: 4px; font-size: 0.85rem; word-break: break-all; display: block; margin-top: 0.5rem; padding: 0.75rem; }}
+    .btn {{ display: inline-block; margin-top: 1.25rem; background: #2563eb; color: white; text-decoration: none; padding: 0.6rem 1.2rem; border-radius: 6px; font-weight: 500; }}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>✅ Microsoft SharePoint Online Connected!</h1>
+    <p>Your Delegated User Identity &amp; Refresh Token are now active on <strong>GE Use Case Qualification Agent</strong>.</p>
+    <p>Both <strong>Stage 4 Qualification Submissions</strong> and <strong>MCP Tool Calls</strong> will now read and write directly to:</p>
+    <p><a href="{site_url}" target="_blank">{site_url}</a></p>
+    <hr style="border:0;border-top:1px solid #e2e8f0;margin:1.5rem 0;">
+    <p style="font-size:0.9rem;color:#475569;"><strong>Optional (Permanent .env Refresh Token):</strong> Copy this <code>MS_GRAPH_REFRESH_TOKEN</code> to persist across future container rebuilds:</p>
+    <code>MS_GRAPH_REFRESH_TOKEN={refresh_token}</code>
+  </div>
+</body>
+</html>"""
+    return HTMLResponse(html)
 
 
 async def handle_oauth_token(request: Request) -> Response:
     """OAuth 2.0 Token Exchange Endpoint (`/token`) for Gemini Enterprise Connector registration."""
-    # If MS_GRAPH_CLIENT_ID and MS_GRAPH_CLIENT_SECRET are set, acquire an Entra token to return
     connector = get_sharepoint_connector()
     headers, auth_mode = connector.get_graph_headers()
     auth_val = headers.get("Authorization", "Bearer mock_graph_token")
@@ -309,7 +437,7 @@ async def handle_oauth_token(request: Request) -> Response:
             "access_token": token,
             "token_type": "Bearer",
             "expires_in": 3600,
-            "refresh_token": f"refresh_{secrets.token_urlsafe(16)}",
+            "refresh_token": os.environ.get("MS_GRAPH_REFRESH_TOKEN") or f"refresh_{secrets.token_urlsafe(16)}",
             "auth_mode": auth_mode,
         }
     )

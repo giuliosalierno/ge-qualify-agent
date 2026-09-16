@@ -22,3 +22,4 @@ doc/
 
 # Generated skill zip archives
 *.zip
+.data/

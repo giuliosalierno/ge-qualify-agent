@@ -118,6 +118,41 @@ def get_cached_delegated_token(key: str = "latest") -> str | None:
     return token
 
 
+def save_delegated_refresh_token(refresh_token: str, access_token: str = "", expires_in: int = 3599) -> None:
+    """Stores a delegated user refresh token and access token in memory, env, and local disk."""
+    if refresh_token:
+        os.environ["MS_GRAPH_REFRESH_TOKEN"] = refresh_token
+    if access_token:
+        cache_delegated_token(access_token, key="latest", ttl_seconds=max(60, expires_in - 60))
+    try:
+        token_file = Path(".data/sharepoint_token.json")
+        token_file.parent.mkdir(parents=True, exist_ok=True)
+        token_file.write_text(
+            json.dumps({"refresh_token": refresh_token, "access_token": access_token}, indent=2),
+            encoding="utf-8",
+        )
+    except Exception as exc:
+        logger.debug("Could not write .data/sharepoint_token.json: %s", exc)
+
+
+def load_delegated_refresh_token() -> str:
+    """Loads a persisted delegated user refresh token from env or disk."""
+    env_tok = os.environ.get("MS_GRAPH_REFRESH_TOKEN", "").strip()
+    if env_tok:
+        return env_tok
+    try:
+        token_file = Path(".data/sharepoint_token.json")
+        if token_file.exists():
+            data = json.loads(token_file.read_text(encoding="utf-8"))
+            tok = data.get("refresh_token", "").strip()
+            if tok:
+                os.environ["MS_GRAPH_REFRESH_TOKEN"] = tok
+                return tok
+    except Exception:
+        pass
+    return ""
+
+
 class SharePointConnector:
     """Client for reading and writing qualification opportunities in SharePoint Online."""
 
@@ -173,7 +208,7 @@ class SharePointConnector:
                 }, "delegated"
 
         # Layer 1b: Refresh Token exchange for Delegated User Identity
-        refresh_token = os.environ.get("MS_GRAPH_REFRESH_TOKEN", "").strip()
+        refresh_token = load_delegated_refresh_token()
         if refresh_token and self.tenant_id and self.client_id:
             token_url = f"https://login.microsoftonline.com/{urllib.parse.quote(self.tenant_id)}/oauth2/v2.0/token"
             try:
@@ -194,8 +229,9 @@ class SharePointConnector:
                     if resp.status_code == 200:
                         data = resp.json()
                         access_token = data["access_token"]
+                        new_rt = data.get("refresh_token", refresh_token)
                         expires_in = int(data.get("expires_in", 3599))
-                        cache_delegated_token(access_token, key="latest", ttl_seconds=max(60, expires_in - 60))
+                        save_delegated_refresh_token(new_rt, access_token, expires_in)
                         return {
                             "Authorization": f"Bearer {access_token}",
                             "Accept": "application/json",

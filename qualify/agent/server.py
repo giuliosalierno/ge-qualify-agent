@@ -17,7 +17,7 @@ from qualify.agent.card import build_agent_card
 from qualify.agent.executor import QualifyAgentExecutor
 from qualify.agent.turn import GeminiChatClient
 from qualify.a2ui.patcher import GeminiExtractionClient
-from qualify.mcp import handle_mcp_request, handle_oauth_auth, handle_oauth_token
+from qualify.mcp import handle_mcp_request, handle_oauth_auth, handle_oauth_callback, handle_oauth_token
 from qualify.sinks.record_store import create_default_store
 
 load_dotenv()
@@ -66,6 +66,7 @@ def build_app():
         [
             Route("/mcp", handle_mcp_request, methods=["POST", "GET", "OPTIONS"]),
             Route("/auth", handle_oauth_auth, methods=["GET", "POST"]),
+            Route("/auth/callback", handle_oauth_callback, methods=["GET", "POST"]),
             Route("/token", handle_oauth_token, methods=["POST", "GET"]),
         ]
     )
