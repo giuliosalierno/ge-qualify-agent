@@ -383,21 +383,23 @@ def build_continue_button(pack: Pack, stage_idx: int) -> list[dict[str, Any]]:
 # ---------------------------------------------------------------------------
 
 
-def build_create_surface() -> dict[str, Any]:
+def build_create_surface(surface_id: str = SURFACE_ID) -> dict[str, Any]:
     return {
         "version": A2UI_VERSION,
         "createSurface": {
-            "surfaceId": SURFACE_ID,
+            "surfaceId": surface_id,
             "catalogId": catalog_id(),
         },
     }
 
 
-def build_update_components(components: list[dict[str, Any]]) -> dict[str, Any]:
+def build_update_components(
+    components: list[dict[str, Any]], surface_id: str = SURFACE_ID
+) -> dict[str, Any]:
     return {
         "version": A2UI_VERSION,
         "updateComponents": {
-            "surfaceId": SURFACE_ID,
+            "surfaceId": surface_id,
             "components": components,
         },
     }
@@ -421,7 +423,10 @@ def build_patch(path: str, value: Any, surface_id: str = SURFACE_ID) -> dict[str
 
 
 def build_surface(
-    pack: Pack, record: UseCaseRecord, active_stage: int
+    pack: Pack,
+    record: UseCaseRecord,
+    active_stage: int,
+    surface_id: str = SURFACE_ID,
 ) -> list[dict[str, Any]]:
     """The full message sequence for a stage.
 
@@ -435,7 +440,105 @@ def build_surface(
         )
 
     return [
-        build_create_surface(),
-        build_update_components(build_stage_components(pack, active_stage)),
-        build_patch("/", build_data_model(record, pack, active_stage)),
+        build_create_surface(surface_id),
+        build_update_components(build_stage_components(pack, active_stage), surface_id),
+        build_patch("/", build_data_model(record, pack, active_stage), surface_id),
     ]
+
+
+def build_completion_components(
+    pack: Pack, record: UseCaseRecord
+) -> list[dict[str, Any]]:
+    """Builds a read-only summary card with reopen buttons for each stage."""
+    sums = summary_strings(record)
+    title = record.meta.initiative_name or "Qualified Use Case"
+
+    children = [
+        "summary-title",
+        "summary-caption",
+        "summary-rule-1",
+        "summary-hours",
+        "summary-basis",
+        "summary-rule-2",
+        "summary-reopen-caption",
+    ]
+
+    nodes: list[dict[str, Any]] = [
+        {
+            "id": "summary-title",
+            "component": "Text",
+            "text": f"Qualification Complete — {title}",
+            "variant": "h3",
+        },
+        {
+            "id": "summary-caption",
+            "component": "Text",
+            "text": f"Record ID: {record.meta.record_id} | Gate 1: Ready for CoE Review",
+            "variant": "caption",
+        },
+        {"id": "summary-rule-1", "component": "Divider"},
+        {
+            "id": "summary-hours",
+            "component": "Text",
+            "text": sums["hours_line"],
+            "variant": "body",
+        },
+        {
+            "id": "summary-basis",
+            "component": "Text",
+            "text": sums["hours_basis"],
+            "variant": "caption",
+        },
+        {"id": "summary-rule-2", "component": "Divider"},
+        {
+            "id": "summary-reopen-caption",
+            "component": "Text",
+            "text": "Need to adjust an answer? Click below to reopen any stage:",
+            "variant": "caption",
+        },
+    ]
+
+    for idx, stage in enumerate(pack.stages):
+        btn_id = f"revise-btn-{stage.id}"
+        lbl_id = f"revise-lbl-{stage.id}"
+        children.append(btn_id)
+        nodes.append(
+            {
+                "id": lbl_id,
+                "component": "Text",
+                "text": f"Reopen Stage {idx + 1}: {stage.label}",
+            }
+        )
+        nodes.append(
+            {
+                "id": btn_id,
+                "component": "Button",
+                "child": lbl_id,
+                "variant": "default",
+                "action": {
+                    "event": {
+                        "name": "revise_stage",
+                        "context": {
+                            "prompt": f"Revise — {stage.label}",
+                            "stage": stage.id,
+                        },
+                    }
+                },
+            }
+        )
+
+    root = {"id": ROOT_ID, "component": "Column", "children": children}
+    return [root, *nodes]
+
+
+def build_completion_surface(
+    pack: Pack, record: UseCaseRecord, surface_id: str = SURFACE_ID
+) -> list[dict[str, Any]]:
+    """Emits the final summary surface when all stages have been confirmed."""
+    last_idx = len(pack.stages) - 1
+    return [
+        build_create_surface(surface_id),
+        build_update_components(build_completion_components(pack, record), surface_id),
+        build_patch("/", build_data_model(record, pack, last_idx), surface_id),
+    ]
+

@@ -26,7 +26,12 @@ from qualify.a2ui.actions import (
     dispatch,
     parse_action,
 )
-from qualify.a2ui.compiler import build_patch, build_surface, summary_strings
+from qualify.a2ui.compiler import (
+    build_completion_surface,
+    build_patch,
+    build_surface,
+    summary_strings,
+)
 from qualify.a2ui.patcher import (
     ExtractionClient,
     FieldDraft,
@@ -34,6 +39,7 @@ from qualify.a2ui.patcher import (
     extract_drafts,
 )
 from qualify.a2ui.provenance import missing_required, unconfirmed_in_stage
+from qualify.export.brief import render_business_brief
 from qualify.packs.loader import Stage
 from qualify.sinks.session import Session, SessionStore, get_or_start
 
@@ -128,10 +134,12 @@ def execute_turn(
     drafts: list[FieldDraft] = []
     stage = session.pack.stages[session.active_stage]
 
-    # If the surface for the active stage hasn't been emitted yet, build it.
+    # If the surface for the active stage hasn't been emitted yet, build it
+    # with a fresh surfaceId so it renders as a new card in the chat flow.
     if session.active_stage not in session.rendered_stages:
+        sid = session.next_surface_id()
         a2ui_messages.extend(
-            build_surface(session.pack, session.record, session.active_stage)
+            build_surface(session.pack, session.record, session.active_stage, surface_id=sid)
         )
         session.rendered_stages.add(session.active_stage)
     else:
@@ -142,13 +150,30 @@ def execute_turn(
             drafts = apply_drafts(session.record, result.drafts)
 
             for d in drafts:
-                a2ui_messages.append(build_patch(d.path, d.value))
+                a2ui_messages.append(
+                    build_patch(d.path, d.value, surface_id=session.current_surface_id)
+                )
 
             # If sizing fields updated, update the live summary cards
-            if any(d.path.startswith("/uc/sizing/") or d.path == "/uc/business/user_count" for d in drafts):
+            if any(
+                d.path.startswith("/uc/sizing/") or d.path == "/uc/business/user_count"
+                for d in drafts
+            ):
                 summaries = summary_strings(session.record)
-                a2ui_messages.append(build_patch("/ui/summary/hours_line", summaries["hours_line"]))
-                a2ui_messages.append(build_patch("/ui/summary/hours_basis", summaries["hours_basis"]))
+                a2ui_messages.append(
+                    build_patch(
+                        "/ui/summary/hours_line",
+                        summaries["hours_line"],
+                        surface_id=session.current_surface_id,
+                    )
+                )
+                a2ui_messages.append(
+                    build_patch(
+                        "/ui/summary/hours_basis",
+                        summaries["hours_basis"],
+                        surface_id=session.current_surface_id,
+                    )
+                )
 
     # Generate conversational reply
     reply_text = _generate_chat_reply(
@@ -176,16 +201,21 @@ def _handle_action_outcome(
     if outcome.action == COMMIT_STAGE:
         if outcome.advanced:
             if outcome.ready_to_finalize:
-                reply_text = (
-                    "**Business qualification complete!** All 4 stages have been confirmed.\n\n"
-                    "Your use case details have been captured and are ready for Centre of "
-                    "Excellence (CoE) review and feasibility scoring."
+                # All stages committed: emit the complete Markdown Business Value Brief
+                # and render a new summary/completion card at the bottom of chat.
+                reply_text = render_business_brief(session.record)
+                sid = session.next_surface_id("complete")
+                a2ui_messages.extend(
+                    build_completion_surface(session.pack, session.record, surface_id=sid)
                 )
             else:
-                # Stage advanced: render the new stage surface
+                # Stage advanced: render the new stage surface as a new chat message card
+                sid = session.next_surface_id()
                 session.rendered_stages.add(session.active_stage)
                 a2ui_messages.extend(
-                    build_surface(session.pack, session.record, session.active_stage)
+                    build_surface(
+                        session.pack, session.record, session.active_stage, surface_id=sid
+                    )
                 )
                 stage = session.pack.stages[session.active_stage]
                 reply_text = _stage_intro_text(stage)
@@ -199,12 +229,15 @@ def _handle_action_outcome(
 
     elif outcome.action == REVISE_STAGE:
         if outcome.handled:
+            sid = session.next_surface_id()
             session.rendered_stages.add(session.active_stage)
             a2ui_messages.extend(
-                build_surface(session.pack, session.record, session.active_stage)
+                build_surface(
+                    session.pack, session.record, session.active_stage, surface_id=sid
+                )
             )
             stage = session.pack.stages[session.active_stage]
-            reply_text = f"Reopened **{stage.label}**. You can review or change your answers."
+            reply_text = f"Reopened **{stage.label}**. You can review or change your answers below."
         else:
             reply_text = f"Could not reopen stage: {outcome.message}"
 
@@ -213,7 +246,11 @@ def _handle_action_outcome(
 
     elif outcome.action == FINALIZE:
         if outcome.ready_to_finalize:
-            reply_text = "Use case qualification is complete and recorded."
+            reply_text = render_business_brief(session.record)
+            sid = session.next_surface_id("complete")
+            a2ui_messages.extend(
+                build_completion_surface(session.pack, session.record, surface_id=sid)
+            )
         else:
             reply_text = f"Cannot finalize yet: {outcome.message}"
 

@@ -55,8 +55,20 @@ class Session:
     committed: set[int] = field(default_factory=set)
     #: Stage indices whose initial surface has already been emitted to the client.
     rendered_stages: set[int] = field(default_factory=set)
+    #: Monotonic counter used to give each newly rendered stage a distinct
+    #: surfaceId so Gemini Enterprise renders it as a new card in the chat
+    #: flow rather than overwriting the card in an earlier message.
+    surface_seq: int = 0
+    current_surface_id: str = "qualify"
     created_at: datetime = field(default_factory=_now)
     updated_at: datetime = field(default_factory=_now)
+
+    def next_surface_id(self, suffix: str | None = None) -> str:
+        """Generates and tracks a fresh surfaceId for a new message card."""
+        self.surface_seq += 1
+        tag = suffix or f"s{self.active_stage}-{self.stage}"
+        self.current_surface_id = f"qualify-{tag}-{self.surface_seq}"
+        return self.current_surface_id
 
     @property
     def pack(self) -> Pack:

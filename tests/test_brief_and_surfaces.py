@@ -1,0 +1,111 @@
+"""Tests for per-stage surfaceId progression and Business Value Brief generation."""
+
+from __future__ import annotations
+
+from qualify.agent.turn import TurnInput, execute_turn
+from qualify.a2ui.actions import COMMIT_STAGE, REVISE_STAGE
+from qualify.a2ui.compiler import build_completion_surface
+from qualify.a2ui.validate import validate_surface
+from qualify.packs.loader import load_pack
+from qualify.schema.use_case_record import Meta, UseCaseRecord
+from qualify.sinks.session import InMemorySessionStore
+
+NEEDS_PAYLOAD = {
+    "meta": {"initiative_name": "AP Invoice Exception Assistant"},
+    "business": {
+        "problem_description": "AP specialists manually pull PDF contracts from Drive to resolve PO discrepancies.",
+        "user_profile": "Accounts Payable Specialist",
+        "user_count": "25",
+    },
+}
+
+SIZING_PAYLOAD = {
+    "sizing": {
+        "task_frequency_weekly": "12",
+        "baseline_minutes_per_task": "30",
+        "target_minutes_saved_per_task": "20",
+    }
+}
+
+DATA_PAYLOAD = {
+    "technical": {
+        "data_sources": ["sharepoint", "salesforce"],
+        "security": {"data_classification": "confidential"},
+    }
+}
+
+OWNERSHIP_PAYLOAD = {
+    "meta": {"submitter": "Sarah Jenkins"},
+    "proposed": {"executive_sponsor": "VP of Finance"},
+}
+
+
+def test_each_stage_renders_as_distinct_surface_id() -> None:
+    """Verifies that each stage transition produces a new surfaceId so GE renders a new chat card."""
+    store = InMemorySessionStore(quiet=True)
+    ctx = "ctx-distinct-surfaces"
+
+    # Turn 1: Stage 0 surface
+    t1 = execute_turn(store, TurnInput(context_id=ctx, user_text="Start"))
+    sid_0 = t1.a2ui_messages[0]["createSurface"]["surfaceId"]
+    assert sid_0.startswith("qualify-s0-")
+
+    # Turn 2: Commit Stage 0 -> advances to Stage 1
+    t2 = execute_turn(
+        store,
+        TurnInput(context_id=ctx, action_data={"name": COMMIT_STAGE, "context": NEEDS_PAYLOAD}),
+    )
+    sid_1 = t2.a2ui_messages[0]["createSurface"]["surfaceId"]
+    assert sid_1.startswith("qualify-s1-")
+    assert sid_1 != sid_0
+
+    # Turn 3: Commit Stage 1 -> advances to Stage 2
+    t3 = execute_turn(
+        store,
+        TurnInput(context_id=ctx, action_data={"name": COMMIT_STAGE, "context": SIZING_PAYLOAD}),
+    )
+    sid_2 = t3.a2ui_messages[0]["createSurface"]["surfaceId"]
+    assert sid_2.startswith("qualify-s2-")
+    assert sid_2 not in {sid_0, sid_1}
+
+    # Turn 4: Commit Stage 2 -> advances to Stage 3
+    t4 = execute_turn(
+        store,
+        TurnInput(context_id=ctx, action_data={"name": COMMIT_STAGE, "context": DATA_PAYLOAD}),
+    )
+    sid_3 = t4.a2ui_messages[0]["createSurface"]["surfaceId"]
+    assert sid_3.startswith("qualify-s3-")
+    assert sid_3 not in {sid_0, sid_1, sid_2}
+
+    # Turn 5: Commit Stage 3 -> emits completion brief and completion surface
+    t5 = execute_turn(
+        store,
+        TurnInput(context_id=ctx, action_data={"name": COMMIT_STAGE, "context": OWNERSHIP_PAYLOAD}),
+    )
+    sid_complete = t5.a2ui_messages[0]["createSurface"]["surfaceId"]
+    assert sid_complete.startswith("qualify-complete-")
+    assert sid_complete not in {sid_0, sid_1, sid_2, sid_3}
+
+    # Verify the markdown Business Value Brief was generated
+    assert "# Business Value Brief: AP Invoice Exception Assistant" in t5.reply_text
+    assert "## 1. Executive Summary & Governance" in t5.reply_text
+    assert "## 2. Value Realization & Sizing Scorecard" in t5.reply_text
+    assert "5,000" in t5.reply_text  # 25 users * 12/wk * 20m / 60 * 50 wks = 5,000 hrs/yr
+
+    # Reopen Stage 1 -> renders yet another new surfaceId
+    t6 = execute_turn(
+        store,
+        TurnInput(context_id=ctx, action_data={"name": REVISE_STAGE, "context": {"stage": "sizing"}}),
+    )
+    sid_reopen = t6.a2ui_messages[0]["createSurface"]["surfaceId"]
+    assert sid_reopen.startswith("qualify-s1-")
+    assert sid_reopen != sid_1
+
+
+def test_completion_surface_passes_schema_and_structural_validation() -> None:
+    """Ensures build_completion_surface produces 100% valid A2UI v0.9 messages."""
+    pack = load_pack("business")
+    record = UseCaseRecord(meta=Meta(record_id="test-rec-123", initiative_name="Test Initiative"))
+    messages = build_completion_surface(pack, record, surface_id="qualify-complete-99")
+    # Strict schema + component graph validation
+    validate_surface(messages)
