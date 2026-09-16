@@ -21,6 +21,7 @@ from starlette.responses import JSONResponse, RedirectResponse, Response
 from qualify.connectors.sharepoint import (
     cache_delegated_token,
     get_sharepoint_connector,
+    is_microsoft_graph_token,
 )
 
 logger = logging.getLogger(__name__)
@@ -147,11 +148,15 @@ MCP_TOOLS: list[dict[str, Any]] = [
 async def handle_mcp_request(request: Request) -> Response:
     """Handles MCP JSON-RPC 2.0 requests (`initialize`, `tools/list`, `tools/call`)."""
     # Capture and cache any delegated OAuth 2.0 Bearer token sent by Gemini Enterprise
-    auth_header = request.headers.get("authorization")
+    candidate_header = (
+        request.headers.get("x-ms-graph-token")
+        or request.headers.get("x-forwarded-access-token")
+        or request.headers.get("authorization")
+    )
     delegated_token: str | None = None
-    if auth_header and auth_header.lower().startswith("bearer "):
-        raw_token = auth_header[7:].strip()
-        if raw_token and raw_token != "mock" and not raw_token.startswith("mock_"):
+    if candidate_header:
+        raw_token = candidate_header[7:].strip() if candidate_header.lower().startswith("bearer ") else candidate_header.strip()
+        if is_microsoft_graph_token(raw_token):
             delegated_token = raw_token
             cache_delegated_token(raw_token)
 

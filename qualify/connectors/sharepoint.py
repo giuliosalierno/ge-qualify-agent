@@ -15,6 +15,7 @@ Supports:
 
 from __future__ import annotations
 
+import base64
 import io
 import json
 import logging
@@ -69,12 +70,38 @@ def sanitize_path_segment(segment: str) -> str:
     return cleaned.strip(" .") or "unnamed"
 
 
+def is_microsoft_graph_token(token: str) -> bool:
+    """Returns True if the token is a Microsoft Entra / Graph token (and not a Google Cloud OIDC IAM token).
+
+    When Cloud Run IAM is enabled, the HTTP Authorization header carries a Google OIDC token
+    (iss=https://accounts.google.com). This check ensures we never mistake a Google IAM token
+    for a Microsoft Graph Bearer token.
+    """
+    clean = token.strip()
+    if clean.lower().startswith("bearer "):
+        clean = clean[7:].strip()
+    if not clean or clean == "mock" or clean.startswith("mock_"):
+        return False
+    parts = clean.split(".")
+    if len(parts) == 3:
+        try:
+            padded = parts[1] + "=" * (-len(parts[1]) % 4)
+            payload = json.loads(base64.urlsafe_b64decode(padded).decode("utf-8"))
+            iss = str(payload.get("iss", "")).lower()
+            aud = str(payload.get("aud", "")).lower()
+            if "google.com" in iss or "googleapis.com" in aud:
+                return False
+        except Exception:
+            pass
+    return True
+
+
 def cache_delegated_token(token: str, key: str = "latest", ttl_seconds: int = 3600) -> None:
     """Caches an end-user delegated OAuth 2.0 Bearer token received via MCP."""
     clean = token.strip()
     if clean.lower().startswith("bearer "):
         clean = clean[7:].strip()
-    if clean and clean != "mock" and not clean.startswith("mock_"):
+    if is_microsoft_graph_token(clean):
         _TOKEN_VAULT[key] = (clean, time.time() + ttl_seconds)
         logger.info("Cached delegated Microsoft Graph user token (key=%s, ttl=%ds)", key, ttl_seconds)
 
@@ -138,7 +165,7 @@ class SharePointConnector:
             clean = token_candidate.strip()
             if clean.lower().startswith("bearer "):
                 clean = clean[7:].strip()
-            if clean and clean != "mock" and not clean.startswith("mock_"):
+            if is_microsoft_graph_token(clean):
                 cache_delegated_token(clean)
                 return {
                     "Authorization": f"Bearer {clean}",
