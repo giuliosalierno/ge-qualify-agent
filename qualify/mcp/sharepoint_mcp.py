@@ -425,18 +425,40 @@ async def handle_oauth_callback(request: Request) -> Response:
     return HTMLResponse(html)
 
 
+def _fetch_cloud_run_oidc_token(audience: str) -> str | None:
+    """Fetches a Google OIDC Identity Token from the Cloud Run metadata server so Gemini Enterprise can pass Cloud Run GFE IAM checks."""
+    try:
+        url = f"http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/identity?audience={urllib.parse.quote(audience)}"
+        with httpx.Client(timeout=2.0) as client:
+            resp = client.get(url, headers={"Metadata-Flavor": "Google"})
+            if resp.status_code == 200 and resp.text.strip():
+                return resp.text.strip()
+    except Exception:
+        pass
+    return None
+
+
 async def handle_oauth_token(request: Request) -> Response:
-    """OAuth 2.0 Token Exchange Endpoint (`/token`) for Gemini Enterprise Connector registration."""
+    """OAuth 2.0 Token Exchange Endpoint (`/token`) for Gemini Enterprise Connector registration.
+
+    Returns a Cloud Run-compatible Google OIDC transport token as `access_token` so Gemini Enterprise's
+    subsequent `Authorization: Bearer <token>` calls to `POST /mcp` pass Google Cloud Run Frontend (GFE)
+    with 200 OK, while our server executes all SharePoint Graph API queries using the user's personal
+    Microsoft Delegated Access Token & Refresh Token captured during `/auth/callback`.
+    """
     connector = get_sharepoint_connector()
     headers, auth_mode = connector.get_graph_headers()
     auth_val = headers.get("Authorization", "Bearer mock_graph_token")
-    token = auth_val[7:] if auth_val.startswith("Bearer ") else auth_val
+    ms_token = auth_val[7:] if auth_val.startswith("Bearer ") else auth_val
+
+    base_url = os.environ.get("AGENT_URL", f"http://{request.url.netloc}").rstrip("/")
+    transport_token = _fetch_cloud_run_oidc_token(base_url) or ms_token
 
     return JSONResponse(
         {
-            "access_token": token,
+            "access_token": transport_token,
             "token_type": "Bearer",
-            "expires_in": 3600,
+            "expires_in": 3500,
             "refresh_token": os.environ.get("MS_GRAPH_REFRESH_TOKEN") or f"refresh_{secrets.token_urlsafe(16)}",
             "auth_mode": auth_mode,
         }
