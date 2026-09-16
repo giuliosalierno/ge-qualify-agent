@@ -10,12 +10,14 @@ from a2a.server.request_handlers import DefaultRequestHandler
 from a2a.server.tasks import InMemoryTaskStore
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
+from starlette.routing import Route
 import uvicorn
 
 from qualify.agent.card import build_agent_card
 from qualify.agent.executor import QualifyAgentExecutor
 from qualify.agent.turn import GeminiChatClient
 from qualify.a2ui.patcher import GeminiExtractionClient
+from qualify.mcp import handle_mcp_request, handle_oauth_auth, handle_oauth_token
 from qualify.sinks.record_store import create_default_store
 
 load_dotenv()
@@ -28,7 +30,7 @@ log = logging.getLogger(__name__)
 
 
 def build_app():
-    """Builds the Starlette application with A2A protocol routes and CORS."""
+    """Builds the Starlette application with A2A protocol routes, SharePoint MCP routes, and CORS."""
     host = os.environ.get("HOST", "0.0.0.0")
     port = int(os.environ.get("PORT", 8080))
     base_url = os.environ.get("AGENT_URL", f"http://localhost:{port}")
@@ -59,6 +61,15 @@ def build_app():
     server = A2AStarletteApplication(agent_card=agent_card, http_handler=handler)
     app = server.build()
 
+    # Mount SharePoint MCP & OAuth 2.0 endpoints on the same server
+    app.routes.extend(
+        [
+            Route("/mcp", handle_mcp_request, methods=["POST", "GET", "OPTIONS"]),
+            Route("/auth", handle_oauth_auth, methods=["GET", "POST"]),
+            Route("/token", handle_oauth_token, methods=["POST", "GET"]),
+        ]
+    )
+
     app.add_middleware(
         CORSMiddleware,
         allow_origin_regex=r"https?://.*",
@@ -67,7 +78,7 @@ def build_app():
         allow_headers=["*"],
     )
 
-    log.info("Qualification Agent app built. base_url=%s", base_url)
+    log.info("Qualification Agent app built (A2A + SharePoint MCP). base_url=%s", base_url)
     return app, host, port
 
 

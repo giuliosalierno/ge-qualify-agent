@@ -146,6 +146,11 @@ def execute_turn(
         store.save(session)
         return output
 
+    sp_load_output = _try_load_from_sharepoint(turn_input.user_text, session)
+    if sp_load_output is not None:
+        store.save(session)
+        return sp_load_output
+
     a2ui_messages: list[dict[str, Any]] = []
     drafts: list[FieldDraft] = []
     stage = session.pack.stages[session.active_stage]
@@ -229,10 +234,12 @@ def _handle_action_outcome(
         if outcome.advanced:
             if outcome.ready_to_finalize:
                 # All stages committed/skipped: emit the complete Markdown Business Value Brief,
-                # render a new summary/completion card, and sync to optional Google Sheet.
+                # render a new summary/completion card, and sync to optional Google Sheet + SharePoint.
+                from qualify.connectors.sharepoint import sync_to_optional_sharepoint  # noqa: PLC0415
                 from qualify.sinks.sheets import sync_to_optional_sheet  # noqa: PLC0415
 
                 sync_to_optional_sheet(session.record)
+                sync_to_optional_sharepoint(session.record, skipped_stages=session.skipped)
                 reply_text = render_business_brief(
                     session.record, skipped_stages=session.skipped
                 )
@@ -378,6 +385,65 @@ def _is_chat_skip_intent(user_text: str | None) -> bool:
         "skip it",
     )
     return stripped in skip_phrases or any(stripped.startswith(p + " ") for p in skip_phrases)
+
+
+def _try_load_from_sharepoint(user_text: str | None, session: Session) -> TurnOutput | None:
+    """Detects chat commands to load an opportunity from SharePoint (e.g. 'load UC-2026-481209 from sharepoint')."""
+    if not user_text:
+        return None
+    import re  # noqa: PLC0415
+
+    text_lower = user_text.strip().lower()
+    # Match explicit SharePoint load/open requests or direct Record ID load
+    has_sp_keyword = "sharepoint" in text_lower or "load uc-" in text_lower or "open uc-" in text_lower
+    if not has_sp_keyword:
+        return None
+
+    # Extract UC-YYYY-XXXXXX record ID if present
+    match_id = re.search(r"(uc-\d{4}-[a-z0-9_-]+)", text_lower)
+    if match_id:
+        query = match_id.group(1).upper()
+    else:
+        # Extract phrase after 'load' or 'open' before 'from sharepoint'
+        match_phrase = re.search(r"(?:load|open|get|fetch)\s+(?:opportunity\s+)?(.+?)(?:\s+from\s+sharepoint|$)", user_text.strip(), re.IGNORECASE)
+        if not match_phrase:
+            return None
+        query = match_phrase.group(1).strip(" '\"")
+
+    if not query:
+        return None
+
+    from qualify.connectors.sharepoint import get_sharepoint_connector  # noqa: PLC0415
+
+    connector = get_sharepoint_connector()
+    loaded = connector.load_opportunity(query)
+    if loaded is None:
+        return TurnOutput(
+            reply_text=f"Could not find an opportunity matching **{query}** in SharePoint.",
+            a2ui_messages=[],
+            session=session,
+        )
+
+    # Preserve session context_id while hydrating the loaded UseCaseRecord
+    loaded.meta.context_id = session.context_id
+    session.record = loaded
+    session.committed = set(range(len(session.pack.stages)))
+    sid = session.next_surface_id("complete")
+    a2ui_messages = build_completion_surface(
+        session.pack,
+        session.record,
+        surface_id=sid,
+        skipped_stages=session.skipped,
+    )
+    reply = (
+        f"Loaded opportunity **{loaded.meta.initiative_name}** (`{loaded.meta.record_id}`) from SharePoint.\n\n"
+        + render_business_brief(loaded, skipped_stages=session.skipped)
+    )
+    return TurnOutput(
+        reply_text=reply,
+        a2ui_messages=a2ui_messages,
+        session=session,
+    )
 
 
 def _should_skip_extraction(user_text: str | None) -> bool:
