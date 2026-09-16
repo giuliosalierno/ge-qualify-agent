@@ -81,7 +81,11 @@ def test_executor_handles_initial_text_turn(agent_card) -> None:
         assert len(queue.events) > 0
         last_event = queue.events[-1]
         assert hasattr(last_event, "status")
-        assert last_event.status.state == TaskState.completed
+        # Not `completed`. This turn renders a form, so the agent is waiting on
+        # the user, and A2UI buttons dispatch against this task — a terminal
+        # state makes the SDK reject every one of them with -32602 before the
+        # executor runs. See tests/test_task_lifecycle.py.
+        assert last_event.status.state == TaskState.input_required
         assert last_event.status.message is not None
 
         parts = last_event.status.message.parts
