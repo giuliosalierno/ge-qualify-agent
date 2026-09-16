@@ -63,6 +63,14 @@ class Session:
     surface_seq: int = 0
     current_surface_id: str = "qualify"
     stage_surface_ids: dict[int, str] = field(default_factory=dict)
+    #: True once the SharePoint sign-in card has been shown. Without this the
+    #: card would reappear on every turn until the user signs in, because
+    #: "not authenticated" stays true the whole time they are ignoring it.
+    signin_prompted: bool = False
+    #: True when the user chose to carry on without connecting SharePoint.
+    #: Distinct from `signin_prompted`: the card was shown *and* declined, so
+    #: nothing should nag again this session.
+    signin_dismissed: bool = False
     created_at: datetime = field(default_factory=_now)
     updated_at: datetime = field(default_factory=_now)
 

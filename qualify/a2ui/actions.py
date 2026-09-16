@@ -43,9 +43,19 @@ REVISE_STAGE = "revise_stage"
 REQUEST_GUIDANCE = "request_guidance"
 FINALIZE = "finalize"
 ATTACH_DOCUMENT = "attach_document"
+#: Raised by "Continue without saving" on the SharePoint sign-in card.
+DISMISS_SIGNIN = "dismiss_signin"
 
 KNOWN_ACTIONS = frozenset(
-    {COMMIT_STAGE, SKIP_STAGE, REVISE_STAGE, REQUEST_GUIDANCE, FINALIZE, ATTACH_DOCUMENT}
+    {
+        COMMIT_STAGE,
+        SKIP_STAGE,
+        REVISE_STAGE,
+        REQUEST_GUIDANCE,
+        FINALIZE,
+        ATTACH_DOCUMENT,
+        DISMISS_SIGNIN,
+    }
 )
 
 
@@ -142,6 +152,8 @@ def dispatch(session: Session, event: ActionEvent) -> ActionOutcome:
         return _finalize(session, event)
     if event.name == ATTACH_DOCUMENT:
         return _attach_document(session, event)
+    if event.name == DISMISS_SIGNIN:
+        return _dismiss_signin(session, event)
 
     # Never raise. See the module docstring.
     log.warning(
@@ -160,6 +172,25 @@ def dispatch(session: Session, event: ActionEvent) -> ActionOutcome:
 # ---------------------------------------------------------------------------
 # Handlers
 # ---------------------------------------------------------------------------
+
+
+def _dismiss_signin(session: Session, event: ActionEvent) -> ActionOutcome:
+    """Records that the user declined to connect SharePoint.
+
+    Touches neither the record nor the stage. Declining a storage integration
+    is not a qualification decision, and conflating the two would let a stray
+    click cost the user their progress.
+
+    ``advanced`` stays False so the caller re-renders the current stage rather
+    than stepping past it.
+    """
+    session.signin_dismissed = True
+    return ActionOutcome(
+        action=DISMISS_SIGNIN,
+        handled=True,
+        stage=session.stage,
+        message="sharepoint sign-in declined; continuing without saving",
+    )
 
 
 def _commit_stage(session: Session, event: ActionEvent) -> ActionOutcome:

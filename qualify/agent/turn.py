@@ -19,6 +19,7 @@ from typing import Any, Protocol
 
 from qualify.a2ui.actions import (
     COMMIT_STAGE,
+    DISMISS_SIGNIN,
     FINALIZE,
     REQUEST_GUIDANCE,
     REVISE_STAGE,
@@ -159,6 +160,11 @@ def execute_turn(
         store.save(session)
         return sp_load_output
 
+    signin_output = _maybe_offer_signin(session)
+    if signin_output is not None:
+        store.save(session)
+        return signin_output
+
     a2ui_messages: list[dict[str, Any]] = []
     drafts: list[FieldDraft] = []
     stage = session.pack.stages[session.active_stage]
@@ -237,6 +243,33 @@ def _handle_action_outcome(
 ) -> TurnOutput:
     """Produces the TurnOutput for an action dispatch."""
     a2ui_messages: list[dict[str, Any]] = []
+
+    if outcome.action == DISMISS_SIGNIN:
+        # Open stage 1 in the same turn. Declining SharePoint should feel like
+        # getting started, not like an extra click that returns nothing.
+        sid = session.next_surface_id()
+        session.rendered_stages.add(session.active_stage)
+        a2ui_messages.extend(
+            build_surface(
+                session.pack,
+                session.record,
+                session.active_stage,
+                surface_id=sid,
+                committed_stages=session.committed,
+                skipped_stages=session.skipped,
+            )
+        )
+        return TurnOutput(
+            reply_text=(
+                "No problem — we'll carry on without SharePoint. Your answers "
+                "are still saved locally, and you can connect at any point by "
+                "typing `save to sharepoint`.\n\n"
+                "Let's begin."
+            ),
+            a2ui_messages=a2ui_messages,
+            session=session,
+            outcome=outcome,
+        )
 
     if outcome.action in (COMMIT_STAGE, SKIP_STAGE):
         if outcome.advanced:
@@ -412,6 +445,60 @@ def _is_chat_skip_intent(user_text: str | None) -> bool:
         "skip it",
     )
     return stripped in skip_phrases or any(stripped.startswith(p + " ") for p in skip_phrases)
+
+
+def _maybe_offer_signin(session: Session) -> TurnOutput | None:
+    """Offers the SharePoint connect card once, at the top of a qualification.
+
+    Returns None in every case where the card would be noise:
+
+    * already shown this session
+    * the user declined it
+    * a delegated token is already vaulted
+    * the interview has started, so interrupting would lose the user's place
+
+    Set ``SIGNIN_CARD=0`` to disable the card entirely and fall back to the
+    sign-in prompt at save time.
+    """
+    import os as _os  # noqa: PLC0415
+    import urllib.parse as _up  # noqa: PLC0415
+
+    if _os.environ.get("SIGNIN_CARD") == "0":
+        return None
+
+    if session.signin_prompted or session.signin_dismissed:
+        return None
+
+    # Only at the very start. Once a stage has been rendered the user is mid
+    # thought, and a card that replaces the form would read as losing work.
+    if session.active_stage != 0 or session.rendered_stages:
+        return None
+
+    from qualify.a2ui.signin import build_signin_card  # noqa: PLC0415
+    from qualify.connectors.sharepoint import get_cached_delegated_token  # noqa: PLC0415
+
+    if get_cached_delegated_token(session.context_id):
+        return None
+
+    base_url = _os.environ.get(
+        "AGENT_URL", "https://ge-qualify-agent-g22bhpwccq-uc.a.run.app"
+    ).rstrip("/")
+    auth_url = f"{base_url}/auth?context_id={_up.quote(session.context_id)}"
+
+    session.signin_prompted = True
+
+    reply_text = (
+        "Before we start — would you like to connect **Microsoft SharePoint**?\n\n"
+        "Signing in now means this qualification saves straight to your own "
+        "SharePoint account when we finish. You can also continue without it "
+        "and connect later."
+    )
+
+    return TurnOutput(
+        reply_text=reply_text,
+        a2ui_messages=build_signin_card(auth_url),
+        session=session,
+    )
 
 
 def _try_a2ui_probe(user_text: str | None, session: Session) -> TurnOutput | None:

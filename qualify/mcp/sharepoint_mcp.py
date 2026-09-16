@@ -22,6 +22,7 @@ from starlette.requests import Request
 from starlette.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 
 from qualify.connectors.sharepoint import (
+    auto_sync_pending_records,
     cache_delegated_token,
     get_sharepoint_connector,
     is_microsoft_graph_token,
@@ -332,14 +333,37 @@ async def handle_oauth_auth(request: Request) -> Response:
         verify_url = dc["verification_uri"] if dc else "https://login.microsoft.com/device"
         safe_ctx = urllib.parse.quote(context_id)
 
-        registered_redirect = "https://vertexaisearch.cloud.google.com/oauth-redirect"
+        # Why not `https://vertexaisearch.cloud.google.com/oauth-redirect` here?
+        #
+        # That endpoint belongs to Gemini Enterprise. It only accepts a `state`
+        # that GE itself issued and encrypted. Sending a user there with a state
+        # of our own making gets them:
+        #
+        #   Failed to decrypt the OAuth state parameter:
+        #   java.security.GeneralSecurityException: decryption failed
+        #
+        # The authorization code is still in the address bar behind that error,
+        # which is the only reason the copy-paste workaround ever appeared to
+        # work. It was never a working flow, just a readable failure.
+        #
+        # Our own callback has no such problem: we issue the state, so we can
+        # decode it. It does have to be registered in Azure first, hence the
+        # flag — shipping a button that returns AADSTS50011 is no better.
+        base_url = os.environ.get("AGENT_URL", f"https://{request.url.netloc}").rstrip("/")
+        callback_uri = f"{base_url}/auth/callback"
+        web_oauth_ready = os.environ.get("WEB_OAUTH_CALLBACK") == "1"
+
+        state_payload = base64.urlsafe_b64encode(
+            json.dumps({"context_id": context_id}).encode("utf-8")
+        ).decode("ascii").rstrip("=")
+
         web_auth_params = {
             "client_id": client_id,
             "response_type": "code",
-            "redirect_uri": registered_redirect,
+            "redirect_uri": callback_uri,
             "response_mode": "query",
-            "scope": "https://graph.microsoft.com/Sites.ReadWrite.All offline_access",
-            "state": context_id,
+            "scope": DEFAULT_GRAPH_SCOPE,
+            "state": state_payload,
             "prompt": "select_account",
         }
         ms_web_auth_url = (
@@ -369,24 +393,30 @@ async def handle_oauth_auth(request: Request) -> Response:
   <div class="card" id="main-card">
     <h2 style="margin-top:0;text-align:center;">🔐 Connect Microsoft SharePoint Online</h2>
     
-    <!-- Method 1: Guaranteed Web OAuth Flow using registered vertexaisearch Redirect URI -->
-    <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:1.25rem;margin-bottom:1.5rem;">
-      <h3 style="margin-top:0;color:#1e40af;font-size:1.05rem;">⚡ Method 1: Instant Web Sign-In (Recommended — Works Immediately)</h3>
+    <!-- Method 1: one click, redirecting to our own /auth/callback -->
+    {(
+        '''<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:1.25rem;margin-bottom:1.5rem;">
+      <h3 style="margin-top:0;color:#1e40af;font-size:1.05rem;">⚡ Recommended: one-click sign-in</h3>
       <p style="margin:0.4rem 0 0.9rem;font-size:0.9rem;color:#334155;">
-        Uses your Azure App's registered Redirect URI (<code>https://vertexaisearch.cloud.google.com/oauth-redirect</code>) so Azure never blocks confidential client login:
+        Sign in with Microsoft and you will be returned here automatically. Nothing to copy.
       </p>
-      <p style="margin:0 0 0.9rem;">
-        <a class="btn" href="{ms_web_auth_url}" target="_blank">1. Click to Sign In with Microsoft ↗</a>
+      <p style="margin:0;">
+        <a class="btn" href="''' + ms_web_auth_url + '''">Sign in with Microsoft ↗</a>
       </p>
-      <p style="margin:0.5rem 0 0.3rem;font-size:0.88rem;color:#334155;">
-        <strong>2. After signing in</strong>, copy the URL from that browser tab's address bar (<code>https://vertexaisearch.cloud.google.com/oauth-redirect?code=...</code>) and paste it here:
+    </div>'''
+        if web_oauth_ready
+        else '''<div style="background:#fef3c7;border:1px solid #fde68a;border-radius:10px;padding:1.25rem;margin-bottom:1.5rem;">
+      <h3 style="margin-top:0;color:#92400e;font-size:1.05rem;">One-click sign-in is not enabled yet</h3>
+      <p style="margin:0.4rem 0 0;font-size:0.9rem;color:#334155;">
+        It needs this redirect URI registered on the Azure app, then
+        <code>WEB_OAUTH_CALLBACK=1</code> on the service:
       </p>
-      <input type="text" id="paste-url" class="input-box" placeholder="Paste https://vertexaisearch.cloud.google.com/oauth-redirect?code=0.AXEA... here" />
-      <button class="btn btn-success" style="width:100%;margin-top:0.4rem;" onclick="exchangePastedCode()">
-        ✅ Connect &amp; Auto-Save Opportunity to SharePoint
-      </button>
-      <div id="exchange-msg" style="margin-top:0.6rem;font-size:0.88rem;font-weight:600;"></div>
-    </div>
+      <p style="margin:0.6rem 0 0;"><code style="font-size:0.82rem;word-break:break-all;">''' + callback_uri + '''</code></p>
+      <p style="margin:0.6rem 0 0;font-size:0.9rem;color:#334155;">
+        Until then, use the device code below — it works today and needs no copying of URLs.
+      </p>
+    </div>'''
+    )}
 
     <!-- Method 2: Device Code Flow -->
     <div style="border-top:1px solid #e2e8f0;padding-top:1.2rem;">
@@ -578,6 +608,20 @@ async def handle_oauth_callback(request: Request) -> Response:
     base_url = os.environ.get("AGENT_URL", f"http://{request.url.netloc}").rstrip("/")
     callback_uri = f"{base_url}/auth/callback"
 
+    # Decoded before the exchange because the token has to be vaulted against
+    # the conversation that started the sign-in. Falling back to "latest" would
+    # work for a single user and silently cross wires for two.
+    state_data: dict[str, Any] = {}
+    if state_str:
+        try:
+            padded = state_str + "=" * (-len(state_str) % 4)
+            state_data = json.loads(
+                base64.urlsafe_b64decode(padded.encode("ascii")).decode("utf-8")
+            )
+        except Exception:
+            logger.debug("OAuth state was not our own base64 JSON envelope; ignoring")
+    context_id = str(state_data.get("context_id") or "latest")
+
     access_token = ""
     refresh_token = ""
     expires_in = 3599
@@ -605,8 +649,22 @@ async def handle_oauth_callback(request: Request) -> Response:
                 access_token = data.get("access_token", "")
                 refresh_token = data.get("refresh_token", "")
                 expires_in = int(data.get("expires_in", 3599))
-                save_delegated_refresh_token(refresh_token, access_token, expires_in)
-                logger.info("Successfully exchanged Microsoft Entra authorization code for Delegated Access & Refresh Token.")
+                save_delegated_refresh_token(
+                    refresh_token, access_token, expires_in, context_id=context_id
+                )
+                logger.info(
+                    "Exchanged Microsoft Entra authorization code for context %s", context_id
+                )
+                # Write anything queued while the user was unauthenticated.
+                # GE never polls the task after an out-of-band sign-in, so if
+                # we skip this the record sits waiting until the user thinks to
+                # ask a second time.
+                try:
+                    synced = auto_sync_pending_records(access_token, context_id=context_id)
+                    if synced:
+                        logger.info("Auto-synced pending record for context %s", context_id)
+                except Exception as exc:
+                    logger.warning("Post-login auto-sync failed for %s: %s", context_id, exc)
         except Exception as exc:
             logger.error("Failed to exchange Microsoft Entra authorization code: %s", exc)
             return HTMLResponse(

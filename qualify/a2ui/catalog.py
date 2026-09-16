@@ -112,6 +112,11 @@ GE_RENDER_VERIFIED = frozenset(
         "MaterialRadioButton",
         "MaterialButtonToggle",
         "MaterialChips",
+        # Material — openUrl probe, 2026-09-16. Rendered with `variant`,
+        # `color`, and `leadingIcon` set. Only the drawing is attested here;
+        # its `action` was a client-side `openUrl`, never an `event`, so this
+        # says nothing about whether it dispatches to the server.
+        "MaterialButton",
     }
 )
 

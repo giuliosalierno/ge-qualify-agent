@@ -32,6 +32,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from qualify.a2ui.actions import DISMISS_SIGNIN
 from qualify.a2ui.catalog import A2UI_VERSION, catalog_id
 
 #: Kept off the main qualification surface so a probe cannot disturb a live form.
@@ -160,6 +161,90 @@ def build_openurl_probe(
             "component": "Text",
             "text": f"[Sign in with Microsoft]({auth_url})",
             "variant": "body",
+        },
+    ]
+
+    return [
+        _create_surface(surface_id),
+        _update_components(components, surface_id),
+    ]
+
+
+def build_signin_card(
+    auth_url: str, surface_id: str = SIGNIN_SURFACE_ID
+) -> list[dict[str, Any]]:
+    """The SharePoint connect card shown at the start of a qualification.
+
+    Uses ``MaterialButton`` with an ``openUrl`` action. Both halves of that were
+    measured in Gemini Enterprise on 2026-09-16: the component rendered, and the
+    click produced a ``GET /auth`` in the Cloud Run logs carrying the live
+    conversation's ``context_id``.
+
+    The markdown link below the buttons is deliberate redundancy rather than
+    leftovers. ``openUrl`` is a client function, so if a future GE release drops
+    it the button will fail silently and the user would be stranded with no way
+    to sign in. One line of text is cheap insurance against that.
+
+    Signing in first is worth the interruption: the token is then already
+    vaulted when stage 4 commits, so the record writes straight through instead
+    of being queued and needing a second prompt.
+    """
+    components: list[dict[str, Any]] = [
+        {
+            "id": _PROBE_ROOT,
+            "component": "Column",
+            "children": [
+                "signin-title",
+                "signin-body",
+                "signin-connect",
+                "signin-skip",
+                "signin-rule",
+                "signin-fallback",
+            ],
+        },
+        {
+            "id": "signin-title",
+            "component": "Text",
+            "text": "Connect Microsoft SharePoint",
+            "variant": "h3",
+        },
+        {
+            "id": "signin-body",
+            "component": "Text",
+            "text": (
+                "Sign in now and this qualification saves straight to your "
+                "SharePoint site under your own account. You can also continue "
+                "without connecting and decide later."
+            ),
+            "variant": "body",
+        },
+        {
+            "id": "signin-connect",
+            "component": "MaterialButton",
+            "label": "Sign in with Microsoft",
+            "variant": "raised",
+            "color": "primary",
+            "leadingIcon": "login",
+            "action": _open_url_action(auth_url),
+        },
+        {
+            "id": "signin-skip",
+            "component": "MaterialButton",
+            "label": "Continue without saving",
+            "variant": "stroked",
+            "action": {
+                "event": {
+                    "name": DISMISS_SIGNIN,
+                    "context": {"prompt": "Continue without connecting SharePoint"},
+                }
+            },
+        },
+        {"id": "signin-rule", "component": "Divider"},
+        {
+            "id": "signin-fallback",
+            "component": "Text",
+            "text": f"Button not working? [Open the sign-in page directly]({auth_url})",
+            "variant": "caption",
         },
     ]
 
