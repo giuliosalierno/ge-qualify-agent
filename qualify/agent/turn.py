@@ -411,6 +411,30 @@ def _try_load_from_sharepoint(user_text: str | None, session: Session) -> TurnOu
     if not has_sp_keyword:
         return None
 
+    from qualify.connectors.sharepoint import get_sharepoint_connector  # noqa: PLC0415
+
+    # Check if user wants to list / search all SharePoint opportunities
+    if any(k in text_lower for k in ("list sharepoint", "search sharepoint", "show sharepoint", "sharepoint opportunities")):
+        connector = get_sharepoint_connector()
+        items = connector.search_opportunities("")
+        if not items:
+            return TurnOutput(
+                reply_text=" Connected to SharePoint Online (`https://zd8vn.sharepoint.com/`), but no qualification opportunities were found yet. Complete Stage 4 and click **Submit** to create your first opportunity!",
+                a2ui_messages=[],
+                session=session,
+            )
+        lines = ["### 📂 Qualification Opportunities in SharePoint Online\n"]
+        for item in items:
+            rec_id = item.get("recordId") or item.get("Title") or "Unknown ID"
+            name = item.get("initiativeName") or item.get("name") or rec_id
+            url = item.get("webUrl") or "https://zd8vn.sharepoint.com/"
+            lines.append(f"- **{name}** (`{rec_id}`) — [Open in SharePoint]({url}) *(Type `load {rec_id} from sharepoint` to open)*")
+        return TurnOutput(
+            reply_text="\n".join(lines),
+            a2ui_messages=[],
+            session=session,
+        )
+
     # Extract UC-YYYY-XXXXXX record ID if present
     match_id = re.search(r"(uc-\d{4}-[a-z0-9_-]+)", text_lower)
     if match_id:
@@ -424,8 +448,6 @@ def _try_load_from_sharepoint(user_text: str | None, session: Session) -> TurnOu
 
     if not query:
         return None
-
-    from qualify.connectors.sharepoint import get_sharepoint_connector  # noqa: PLC0415
 
     connector = get_sharepoint_connector()
     loaded = connector.load_opportunity(query)
