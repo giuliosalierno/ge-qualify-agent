@@ -116,9 +116,69 @@ def execute_turn(
 
     Handles both action events (e.g. Continue button click) and plain chat.
     All record updates pass through ownership and coercion checks.
+
+    Also announces a completed SharePoint sign-in. That cannot happen when the
+    sign-in actually completes — it finishes in a browser tab, and Gemini
+    Enterprise neither polls nor accepts a push, so the conversation is idle and
+    unreachable. The next thing the user says is the first moment we can speak,
+    whatever they happen to say.
     """
     session = get_or_start(store, turn_input.context_id, pack_name=pack_name)
 
+    banner = _consume_signin_banner(session)
+
+    output = _run_turn(
+        store,
+        turn_input,
+        session,
+        extraction_client=extraction_client,
+        chat_client=chat_client,
+    )
+
+    if banner:
+        output.reply_text = (
+            f"{banner}\n\n{output.reply_text}" if output.reply_text else banner
+        )
+        store.save(session)
+
+    return output
+
+
+def _consume_signin_banner(session: Session) -> str | None:
+    """Returns the one-time "you are connected" notice, or None.
+
+    Fires on the first turn where a delegated token exists and the user has not
+    been told yet. Deliberately not tied to the sign-in card: the device code
+    flow lands a token the same way and deserves the same acknowledgement.
+    """
+    if session.signin_confirmed:
+        return None
+
+    from qualify.connectors.sharepoint import get_cached_delegated_token  # noqa: PLC0415
+
+    if not get_cached_delegated_token(session.context_id):
+        return None
+
+    session.signin_confirmed = True
+    # The card has done its job; do not offer it again.
+    session.signin_prompted = True
+
+    return (
+        "✅ **Microsoft SharePoint connected.** You're signed in as yourself, so "
+        "this qualification will save to your own SharePoint site.\n\n"
+        "Nothing has been saved yet — I'll write it when we finish."
+    )
+
+
+def _run_turn(
+    store: SessionStore,
+    turn_input: TurnInput,
+    session: Session,
+    *,
+    extraction_client: ExtractionClient | None = None,
+    chat_client: ChatClient | None = None,
+) -> TurnOutput:
+    """Produces the turn's reply. See `execute_turn` for the public contract."""
     # -----------------------------------------------------------------------
     # Case 1: An inbound A2UI action event
     # -----------------------------------------------------------------------
@@ -522,11 +582,39 @@ def _acknowledge_signin(session: Session) -> TurnOutput:
     Reached when the user says "signed in" with no save verb. They are reporting
     progress on the connect card, not asking for a write, so the right response
     is to start the interview.
+
+    Checks the vault rather than taking their word for it. A sign-in can fail
+    quietly — a closed tab, a denied consent, a container restart that wiped the
+    vault — and silently carrying on would hand them a nasty surprise at save
+    time. Either way the interview starts; only the wording changes.
     """
+    from qualify.connectors.sharepoint import get_cached_delegated_token  # noqa: PLC0415
+
     a2ui_messages: list[dict[str, Any]] = []
 
     # The card has served its purpose; make sure it cannot be offered again.
     session.signin_prompted = True
+
+    connected = bool(get_cached_delegated_token(session.context_id))
+    if connected:
+        # `_consume_signin_banner` may have already said this in the same turn.
+        # Saying it twice reads like a bug.
+        if session.signin_confirmed:
+            header = ""
+        else:
+            session.signin_confirmed = True
+            header = (
+                "✅ **SharePoint connected.** Nothing is saved yet — I'll write "
+                "the opportunity to your SharePoint site once we're done.\n\n"
+            )
+    else:
+        header = (
+            "⚠️ I can't see a completed sign-in yet. That usually means the "
+            "browser tab was closed before Microsoft finished, or consent was "
+            "declined.\n\nWe can carry on regardless — your answers are kept "
+            "locally, and you can connect later by typing `save to sharepoint`."
+            "\n\n"
+        )
 
     if not session.rendered_stages:
         sid = session.next_surface_id()
@@ -541,16 +629,9 @@ def _acknowledge_signin(session: Session) -> TurnOutput:
                 skipped_stages=session.skipped,
             )
         )
-        reply_text = (
-            "✅ **SharePoint connected.** Nothing is saved yet — we'll write the "
-            "opportunity to your SharePoint site once the qualification is "
-            "complete.\n\nLet's begin."
-        )
+        reply_text = f"{header}Let's begin."
     else:
-        reply_text = (
-            "✅ **SharePoint connected.** Carry on where we left off — I'll save "
-            "to SharePoint when we finish, or sooner if you ask me to."
-        )
+        reply_text = f"{header}Carry on where we left off."
 
     return TurnOutput(
         reply_text=reply_text,

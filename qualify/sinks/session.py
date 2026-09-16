@@ -71,6 +71,13 @@ class Session:
     #: Distinct from `signin_prompted`: the card was shown *and* declined, so
     #: nothing should nag again this session.
     signin_dismissed: bool = False
+    #: True once the agent has told the user their sign-in succeeded.
+    #:
+    #: The sign-in finishes in a browser tab, on a channel Gemini Enterprise
+    #: cannot see, so the chat has no idea anything happened. The first turn
+    #: after a token lands announces it. This flag stops every turn after that
+    #: repeating the news.
+    signin_confirmed: bool = False
     created_at: datetime = field(default_factory=_now)
     updated_at: datetime = field(default_factory=_now)
 

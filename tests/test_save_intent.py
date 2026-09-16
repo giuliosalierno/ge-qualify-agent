@@ -65,6 +65,7 @@ def test_signed_in_starts_the_interview_instead_of_saving() -> None:
 
     store = InMemorySessionStore(quiet=True)
     get_or_start(store, "ctx-ack")
+    sp_mod.cache_delegated_token("eyJ_live_user_jwt", key="ctx-ack")
 
     out = execute_turn(store, TurnInput(context_id="ctx-ack", user_text="signed in"))
 
@@ -85,11 +86,90 @@ def test_logged_in_is_also_an_acknowledgement() -> None:
 
     store = InMemorySessionStore(quiet=True)
     get_or_start(store, "ctx-ack2")
+    sp_mod.cache_delegated_token("eyJ_live_user_jwt", key="ctx-ack2")
 
     out = execute_turn(store, TurnInput(context_id="ctx-ack2", user_text="logged in"))
 
     assert "SharePoint connected" in out.reply_text
     assert not sp_mod._SYNCED_RESULTS
+
+
+def test_claiming_to_be_signed_in_without_a_token_says_so() -> None:
+    """Don't take the user's word for it.
+
+    A sign-in fails quietly often enough — closed tab, declined consent, a
+    container restart that wiped the vault — that agreeing with them would only
+    move the disappointment to save time.
+    """
+    from qualify.sinks.session import get_or_start
+
+    store = InMemorySessionStore(quiet=True)
+    get_or_start(store, "ctx-ack-notoken")
+
+    out = execute_turn(
+        store, TurnInput(context_id="ctx-ack-notoken", user_text="signed in")
+    )
+
+    assert "can't see a completed sign-in" in out.reply_text
+    assert "✅" not in out.reply_text
+    # Still not a dead end: the interview starts anyway.
+    assert out.session.rendered_stages == {0}
+
+
+def test_connected_banner_fires_on_any_message_not_just_signed_in() -> None:
+    """The whole point of the banner.
+
+    The sign-in completes in a browser tab that Gemini Enterprise cannot see, so
+    the chat stays silent. Whatever the user types next is the first chance to
+    tell them it worked — and they will rarely type the words "signed in".
+    """
+    import qualify.connectors.sharepoint as sp_mod
+    from qualify.sinks.session import get_or_start
+
+    store = InMemorySessionStore(quiet=True)
+    get_or_start(store, "ctx-banner")
+    sp_mod.cache_delegated_token("eyJ_live_user_jwt", key="ctx-banner")
+
+    out = execute_turn(
+        store, TurnInput(context_id="ctx-banner", user_text="let's get started")
+    )
+
+    assert "Microsoft SharePoint connected" in out.reply_text
+    assert out.session.signin_confirmed is True
+
+
+def test_connected_banner_is_announced_only_once() -> None:
+    """Repeating it every turn would be noise."""
+    import qualify.connectors.sharepoint as sp_mod
+    from qualify.sinks.session import get_or_start
+
+    store = InMemorySessionStore(quiet=True)
+    get_or_start(store, "ctx-banner2")
+    sp_mod.cache_delegated_token("eyJ_live_user_jwt", key="ctx-banner2")
+
+    first = execute_turn(
+        store, TurnInput(context_id="ctx-banner2", user_text="hello")
+    )
+    second = execute_turn(
+        store, TurnInput(context_id="ctx-banner2", user_text="hello again")
+    )
+
+    assert "Microsoft SharePoint connected" in first.reply_text
+    assert "Microsoft SharePoint connected" not in second.reply_text
+
+
+def test_banner_and_acknowledgement_do_not_both_fire() -> None:
+    """Saying "connected" twice in one reply reads like a bug."""
+    import qualify.connectors.sharepoint as sp_mod
+    from qualify.sinks.session import get_or_start
+
+    store = InMemorySessionStore(quiet=True)
+    get_or_start(store, "ctx-both")
+    sp_mod.cache_delegated_token("eyJ_live_user_jwt", key="ctx-both")
+
+    out = execute_turn(store, TurnInput(context_id="ctx-both", user_text="signed in"))
+
+    assert out.reply_text.count("SharePoint connected") == 1
 
 
 def test_acknowledgement_suppresses_the_connect_card() -> None:
