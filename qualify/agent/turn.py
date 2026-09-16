@@ -42,6 +42,12 @@ from qualify.a2ui.patcher import (
     extract_drafts,
 )
 from qualify.a2ui.provenance import missing_required, unconfirmed_in_stage
+from qualify.a2ui.systems_extractor import (
+    SYSTEMS_STAGE_ID,
+    SYSTEMS_TABLE_PATH,
+    extract_systems,
+    render_systems_table,
+)
 from qualify.export import render_deliverable
 from qualify.packs.loader import Stage
 from qualify.schema.coerce import get_by_path
@@ -286,6 +292,22 @@ def _run_turn(
                     build_patch(
                         "/ui/summary/hours_basis",
                         summaries["hours_basis"],
+                        surface_id=session.current_surface_id,
+                    )
+                )
+
+            # The Systems & Data matrix is a list of objects, which no form
+            # component can edit and the field extractor above cannot see. It
+            # is built from the transcript instead and shown back as a locked
+            # table. See a2ui/systems_extractor.py for why.
+            if stage.id == SYSTEMS_STAGE_ID:
+                session.record.technical.systems = extract_systems(
+                    convo, extraction_client, session.record.technical.systems
+                )
+                a2ui_messages.append(
+                    build_patch(
+                        SYSTEMS_TABLE_PATH,
+                        render_systems_table(session.record),
                         surface_id=session.current_surface_id,
                     )
                 )

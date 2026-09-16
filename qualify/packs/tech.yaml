@@ -164,6 +164,15 @@ stages:
         variant: shortText
         required: true
         help: A named person, not a team queue. Subcriterion 1.5.
+      # The Systems & Data matrix is a list of objects. No verified component
+      # can edit repeating rows and the field extractor cannot see them, so it
+      # is built from the conversation and shown back here, locked, for the
+      # reviewer to correct in chat. See qualify/a2ui/systems_extractor.py.
+      - path: /ui/systems/table
+        label: Systems inventory
+        component: Text
+        variant: body
+        readonly: true
     exit_criteria:
       - Every production backend is named, with its hosting location.
       - The programmatic interface for each system is known.

@@ -26,6 +26,8 @@
             "f-uc-technical-capability-level",
             "f-uc-technical-data-freshness",
             "f-uc-proposed-tech-owner",
+            "f-ui-systems-table-label",
+            "f-ui-systems-table",
             "continue-button"
           ]
         },
@@ -124,6 +126,20 @@
             "path": "/uc/proposed/tech_owner"
           },
           "variant": "shortText"
+        },
+        {
+          "id": "f-ui-systems-table-label",
+          "component": "Text",
+          "text": "Systems inventory",
+          "variant": "caption"
+        },
+        {
+          "id": "f-ui-systems-table",
+          "component": "Text",
+          "text": {
+            "path": "/ui/systems/table"
+          },
+          "variant": "body"
         },
         {
           "id": "continue-label",
