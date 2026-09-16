@@ -42,7 +42,7 @@ from qualify.a2ui.patcher import (
     extract_drafts,
 )
 from qualify.a2ui.provenance import missing_required, unconfirmed_in_stage
-from qualify.export.brief import render_business_brief
+from qualify.export import render_deliverable
 from qualify.packs.loader import Stage
 from qualify.schema.coerce import get_by_path
 from qualify.sinks.session import Session, SessionStore, get_or_start
@@ -355,9 +355,10 @@ def _handle_action_outcome(
                     session.record,
                     skipped_stages=session.skipped,
                     context_id=session.context_id,
+                    pack_name=session.pack_name,
                 )
-                reply_text = render_business_brief(
-                    session.record, skipped_stages=session.skipped
+                reply_text = render_deliverable(
+                    session.pack_name, session.record, skipped_stages=session.skipped
                 )
                 base_url = _os.environ.get("AGENT_URL", "https://ge-qualify-agent-g22bhpwccq-uc.a.run.app").rstrip("/")
                 auth_link = f"{base_url}/auth?context_id={_up.quote(session.context_id)}"
@@ -443,7 +444,7 @@ def _handle_action_outcome(
 
     elif outcome.action == FINALIZE:
         if outcome.ready_to_finalize:
-            reply_text = render_business_brief(session.record)
+            reply_text = render_deliverable(session.pack_name, session.record)
             sid = session.next_surface_id("complete")
             a2ui_messages.extend(
                 build_completion_surface(session.pack, session.record, surface_id=sid)
@@ -792,6 +793,7 @@ def _try_load_from_sharepoint(user_text: str | None, session: Session) -> TurnOu
                 session.record,
                 skipped_stages=session.skipped,
                 context_id=session.context_id,
+                pack_name=session.pack_name,
             )
             folder_url = (sp_res.folder_url if sp_res else None) or ex_res.get("folderUrl") or "https://zd8vn.sharepoint.com/"
             title = session.record.meta.initiative_name or session.record.meta.record_id or "Opportunity"
@@ -799,7 +801,9 @@ def _try_load_from_sharepoint(user_text: str | None, session: Session) -> TurnOu
                 f"✅ **Microsoft SharePoint Connected & Opportunity Saved!**\n\n"
                 f"- **Initiative**: {title} (`{session.record.meta.record_id}`)\n"
                 f"- **SharePoint Folder**: [Open Opportunity Folder in SharePoint]({folder_url})\n\n"
-                + render_business_brief(session.record, skipped_stages=session.skipped)
+                + render_deliverable(
+                    session.pack_name, session.record, skipped_stages=session.skipped
+                )
             )
             return TurnOutput(reply_text=reply_text, a2ui_messages=[], session=session)
         return TurnOutput(
@@ -861,6 +865,7 @@ def _try_load_from_sharepoint(user_text: str | None, session: Session) -> TurnOu
             session.record,
             skipped_stages=session.skipped,
             context_id=session.context_id,
+            pack_name=session.pack_name,
         )
         if sp_res and sp_res.auth_mode == "delegated":
             title = session.record.meta.initiative_name or session.record.meta.record_id or "Opportunity"
@@ -869,7 +874,9 @@ def _try_load_from_sharepoint(user_text: str | None, session: Session) -> TurnOu
                 f"- **Initiative**: {title} (`{session.record.meta.record_id}`)\n"
                 f"- **SharePoint Folder**: [Open Opportunity Folder in SharePoint]({sp_res.folder_url})\n"
                 f"- **Business Value Brief**: [View Business_Value_Brief.md]({sp_res.brief_url})\n\n"
-                + render_business_brief(session.record, skipped_stages=session.skipped)
+                + render_deliverable(
+                    session.pack_name, session.record, skipped_stages=session.skipped
+                )
             )
             return TurnOutput(
                 reply_text=reply_text,
@@ -973,7 +980,9 @@ def _try_load_from_sharepoint(user_text: str | None, session: Session) -> TurnOu
     )
     reply = (
         f"Loaded opportunity **{loaded.meta.initiative_name}** (`{loaded.meta.record_id}`) from SharePoint.\n\n"
-        + render_business_brief(loaded, skipped_stages=session.skipped)
+        + render_deliverable(
+            session.pack_name, loaded, skipped_stages=session.skipped
+        )
     )
     return TurnOutput(
         reply_text=reply,

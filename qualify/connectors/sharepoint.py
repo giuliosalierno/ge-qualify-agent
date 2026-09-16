@@ -32,7 +32,7 @@ from typing import Any
 
 import httpx
 
-from qualify.export.brief import render_business_brief
+from qualify.export import deliverable_filename, render_deliverable
 from qualify.schema.use_case_record import UseCaseRecord
 from qualify.scoring import classify_capability
 
@@ -740,14 +740,21 @@ class SharePointConnector:
         skipped_stages: set[int] | None = None,
         delegated_token: str | None = None,
         context_id: str | None = None,
+        pack_name: str = "business",
     ) -> SharePointSyncResult:
-        """Synchronizes a UseCaseRecord and Business Value Brief to SharePoint."""
+        """Synchronizes a UseCaseRecord and its pack's deliverable to SharePoint.
+
+        `pack_name` picks the deliverable. Both packs write into the *same*
+        record folder under different filenames, so a technical review adds the
+        dossier alongside the business brief rather than overwriting it.
+        """
+        filename = deliverable_filename(pack_name)
         headers, auth_mode = self.get_graph_headers(delegated_token, context_id=context_id)
         record_id = sanitize_path_segment(record.meta.record_id or "UC-UNKNOWN")
         init_name = sanitize_path_segment(record.meta.initiative_name or "Untitled Initiative")
         folder_name = f"{record_id} - {init_name}"
 
-        brief_md = render_business_brief(record, skipped_stages=skipped_stages)
+        brief_md = render_deliverable(pack_name, record, skipped_stages=skipped_stages)
         record_json = record.model_dump_json(indent=2)
         classify_capability(record)
         cap_level = record.technical.capability_level
@@ -771,7 +778,10 @@ class SharePointConnector:
         }
 
         if auth_mode == "mock" or self._custom_mock_dir is not None:
-            return self._sync_mock(record_id, folder_name, brief_md, record_json, list_fields, auth_mode=auth_mode)
+            return self._sync_mock(
+                record_id, folder_name, brief_md, record_json, list_fields,
+                auth_mode=auth_mode, filename=filename,
+            )
 
         try:
             site_id = self.resolve_site_id(headers)
@@ -780,10 +790,10 @@ class SharePointConnector:
             rel_folder_path = f"{parent_folder}/{folder_name}"
 
             with httpx.Client(timeout=12.0) as client:
-                # 1. Upload Business_Value_Brief.md
+                # 1. Upload the pack's deliverable
                 brief_endpoint = (
                     f"{GRAPH_BASE_URL}/drives/{urllib.parse.quote(drive_id)}"
-                    f"/root:/{urllib.parse.quote(rel_folder_path)}/Business_Value_Brief.md:/content"
+                    f"/root:/{urllib.parse.quote(rel_folder_path)}/{filename}:/content"
                 )
                 brief_resp = client.put(
                     brief_endpoint,
@@ -825,7 +835,10 @@ class SharePointConnector:
             )
         except Exception as exc:
             logger.warning("Live SharePoint Graph sync encountered error (%s), saving to local mock fallback.", exc)
-            return self._sync_mock(record_id, folder_name, brief_md, record_json, list_fields)
+            return self._sync_mock(
+                record_id, folder_name, brief_md, record_json, list_fields,
+                filename=filename,
+            )
 
     def _upsert_graph_list_item(
         self,
@@ -862,12 +875,13 @@ class SharePointConnector:
         record_json: str,
         list_fields: dict[str, Any],
         auth_mode: str = "mock",
+        filename: str = "Business_Value_Brief.md",
     ) -> SharePointSyncResult:
         """Writes SharePoint folder & list state to local filesystem mock directory."""
         base_folder = self.mock_dir / "drives" / sanitize_path_segment(self.drive_name) / sanitize_path_segment(self.folder_path) / folder_name
         base_folder.mkdir(parents=True, exist_ok=True)
 
-        brief_path = base_folder / "Business_Value_Brief.md"
+        brief_path = base_folder / filename
         json_path = base_folder / "record.json"
         brief_path.write_text(brief_md, encoding="utf-8")
         json_path.write_text(record_json, encoding="utf-8")
@@ -884,7 +898,7 @@ class SharePointConnector:
                 items = []
 
         folder_url = f"https://sharepoint.mock/sites/AI-CoE/{urllib.parse.quote(self.folder_path)}/{urllib.parse.quote(folder_name)}"
-        brief_url = f"{folder_url}/Business_Value_Brief.md"
+        brief_url = f"{folder_url}/{filename}"
         list_fields["FolderUrl"] = folder_url
 
         updated = False
@@ -1108,8 +1122,14 @@ def sync_to_optional_sharepoint(
     skipped_stages: set[int] | None = None,
     delegated_token: str | None = None,
     context_id: str | None = None,
+    pack_name: str = "business",
 ) -> SharePointSyncResult | None:
-    """Non-blocking helper called on Stage 4 completion to sync the opportunity to SharePoint."""
+    """Non-blocking helper called on final-stage completion to sync to SharePoint.
+
+    `pack_name` decides which deliverable is written. Both land in the same
+    record folder, so finishing a technical review adds the dossier next to the
+    business brief instead of replacing it.
+    """
     try:
         connector = get_sharepoint_connector()
         res = connector.sync_opportunity(
@@ -1117,6 +1137,7 @@ def sync_to_optional_sharepoint(
             skipped_stages=skipped_stages,
             delegated_token=delegated_token,
             context_id=context_id,
+            pack_name=pack_name,
         )
         if res:
             cid = context_id or "latest"
