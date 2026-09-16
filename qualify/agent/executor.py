@@ -7,6 +7,7 @@ to the deterministic turn loop, and streams back A2A TextParts and A2UI DataPart
 from __future__ import annotations
 
 import logging
+import os
 from typing import Any
 
 from a2a.server.agent_execution import AgentExecutor, RequestContext
@@ -106,10 +107,20 @@ class QualifyAgentExecutor(AgentExecutor):
             parts: list[Part] = [Part(root=TextPart(text=output.reply_text))]
             for a2ui_msg in output.a2ui_messages:
                 parts.append(create_a2ui_part(a2ui_msg, version=WIRE_VERSION))
-            # Signal Gemini Enterprise to render its native OAuth sign-in prompt in chat
+            # Gemini Enterprise currently renders NOTHING for a task in `auth-required` state:
+            # the reply text is swallowed and the user sees an empty turn. So we stay on
+            # `completed` and surface the sign-in link in the reply body instead. Set
+            # EMIT_AUTH_REQUIRED=1 to re-test the native prompt once GE supports it.
             if getattr(output, "auth_required", False):
-                final_state = TaskState.auth_required
-                log.info("Turn requires end-user OAuth: emitting TaskState.auth_required for context %s", context_id)
+                if os.environ.get("EMIT_AUTH_REQUIRED") == "1":
+                    final_state = TaskState.auth_required
+                    log.info("Emitting TaskState.auth_required for context %s", context_id)
+                else:
+                    log.info(
+                        "Turn needs end-user OAuth; replying with completed + inline sign-in link "
+                        "for context %s",
+                        context_id,
+                    )
         except Exception as exc:
             log.exception("Unhandled exception in execute_turn for context %s", context_id)
             parts = [

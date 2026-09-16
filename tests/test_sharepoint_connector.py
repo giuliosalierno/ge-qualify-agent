@@ -314,6 +314,40 @@ def test_harvest_microsoft_tokens_from_all_injection_shapes() -> None:
     assert harvest_microsoft_tokens({"content-type": "application/json"}, "ctx-e") is None
 
 
+def test_harvest_rejects_dotted_non_jwt_header_values() -> None:
+    """Regression: the Cloud Run hostname must never be vaulted as a Graph token.
+
+    The `host` header value `ge-qualify-agent-g22bhpwccq-uc.a.run.app` has three
+    dot-separated segments, so it matched the JWT-shaped regex and was cached as
+    the user's delegated token. Every subsequent Graph call then returned 401 and
+    the connector silently fell back to the local mock.
+    """
+    import qualify.connectors.sharepoint as sp_mod
+    from qualify.connectors.sharepoint import (
+        get_cached_delegated_token,
+        harvest_microsoft_tokens,
+        is_strict_microsoft_jwt,
+    )
+
+    hostname = "ge-qualify-agent-g22bhpwccq-uc.a.run.app"
+    assert is_strict_microsoft_jwt(hostname) is False
+
+    sp_mod._TOKEN_VAULT.clear()
+    real_headers = {
+        "host": hostname,
+        "user-agent": "Google-Discovery-Engine/1.0",
+        "content-type": "application/json",
+        "x-cloud-trace-context": "abc123/456;o=1",
+        "traceparent": "00-abc.def.ghi-0000-01",
+    }
+    assert harvest_microsoft_tokens(real_headers, "ctx-host") is None
+    assert get_cached_delegated_token("ctx-host") is None
+
+    # A genuine Microsoft JWT in the same header set is still harvested.
+    token = _fake_ms_jwt()
+    assert harvest_microsoft_tokens({**real_headers, "x-serialized-auth-tokens": token}, "ctx-host2") == token
+
+
 def test_turn_emits_auth_required_when_sharepoint_login_needed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Verifies the turn loop flags auth_required so the executor emits A2A TaskState.auth_required."""
     monkeypatch.setenv("SHAREPOINT_MOCK_DIR", str(tmp_path))

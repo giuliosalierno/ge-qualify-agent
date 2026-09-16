@@ -97,6 +97,54 @@ def is_microsoft_graph_token(token: str) -> bool:
     return True
 
 
+def is_strict_microsoft_jwt(token: str) -> bool:
+    """Returns True only for a fully decodable JWT actually issued by Microsoft Entra ID.
+
+    Unlike :func:`is_microsoft_graph_token`, which is deliberately permissive so opaque tokens
+    handed over by trusted callers still work, this performs real structural validation:
+
+    1. exactly three segments,
+    2. header and payload both base64url-decode to JSON objects,
+    3. the header carries an ``alg``,
+    4. the issuer or audience is Microsoft (and is definitively not Google).
+
+    This is required when scanning untrusted surfaces such as HTTP headers, where ordinary values
+    like the ``host`` header (``my-service.a.run.app``) are dot-separated and would otherwise be
+    misread as a token.
+    """
+    clean = token.strip()
+    if clean.lower().startswith("bearer "):
+        clean = clean[7:].strip()
+
+    parts = clean.split(".")
+    if len(parts) != 3 or not parts[0] or not parts[1]:
+        return False
+
+    try:
+        header_raw = base64.urlsafe_b64decode(parts[0] + "=" * (-len(parts[0]) % 4))
+        payload_raw = base64.urlsafe_b64decode(parts[1] + "=" * (-len(parts[1]) % 4))
+        header = json.loads(header_raw.decode("utf-8"))
+        payload = json.loads(payload_raw.decode("utf-8"))
+    except Exception:
+        return False
+
+    if not isinstance(header, dict) or not isinstance(payload, dict) or "alg" not in header:
+        return False
+
+    iss = str(payload.get("iss", "")).lower()
+    aud = str(payload.get("aud", "")).lower()
+    if "google.com" in iss or "googleapis.com" in aud:
+        return False
+
+    return (
+        "login.microsoftonline.com" in iss
+        or "sts.windows.net" in iss
+        or "microsoftonline" in iss
+        or "graph.microsoft.com" in aud
+    )
+
+
+
 def cache_delegated_token(token: str, key: str = "latest", ttl_seconds: int = 3600) -> None:
     """Caches an end-user delegated OAuth 2.0 Bearer token received via MCP."""
     clean = token.strip()
@@ -153,8 +201,9 @@ def harvest_microsoft_tokens(
             except Exception:
                 return None
 
-        # Strict three-segment JWT belonging to Microsoft Entra / Graph
-        if re.fullmatch(r"[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_.\-]*", raw) and is_microsoft_graph_token(raw):
+        # Strict three-segment JWT actually issued by Microsoft Entra ID.
+        # Strict validation matters here: values like the `host` header are dot-separated too.
+        if is_strict_microsoft_jwt(raw):
             cache_delegated_token(raw, key=context_id)
             cache_delegated_token(raw, key="latest")
             logger.info("Harvested Microsoft Graph user token from %r (context_id=%s)", path or "payload", context_id)
