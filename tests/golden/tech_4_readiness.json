@@ -18,19 +18,17 @@
             "stage-title",
             "stage-caption",
             "stage-rule",
-            "f-uc-meta-initiative-name",
-            "f-uc-business-problem-description",
-            "f-uc-business-user-profile",
-            "f-uc-business-user-count",
-            "f-uc-meta-department-bu",
-            "f-uc-business-user-stories",
-            "continue-button"
+            "f-uc-proposed-network-security-lead",
+            "f-uc-proposed-domain-sme",
+            "f-uc-technical-landing-zone-status",
+            "continue-button",
+            "skip-button"
           ]
         },
         {
           "id": "stage-title",
           "component": "Text",
-          "text": "Business intake and value qualification",
+          "text": "Technical architecture and security review",
           "variant": "h3"
         },
         {
@@ -46,63 +44,54 @@
           "component": "Divider"
         },
         {
-          "id": "f-uc-meta-initiative-name",
+          "id": "f-uc-proposed-network-security-lead",
           "component": "TextField",
-          "label": "Initiative name * — A short name you would recognise in a list of fifty.",
+          "label": "Network or security lead * — Subcriterion 5.1.",
           "value": {
-            "path": "/uc/meta/initiative_name"
+            "path": "/uc/proposed/network_security_lead"
           },
           "variant": "shortText"
         },
         {
-          "id": "f-uc-business-problem-description",
+          "id": "f-uc-proposed-domain-sme",
           "component": "TextField",
-          "label": "Problem and current manual process * — What happens today, step by step, and where it hurts.",
+          "label": "Domain validation SME — Subcriterion 5.2.",
           "value": {
-            "path": "/uc/business/problem_description"
-          },
-          "variant": "longText"
-        },
-        {
-          "id": "f-uc-business-user-profile",
-          "component": "TextField",
-          "label": "Who does this work * — The role, not the person. \"Claims handler\", not \"Ana\".",
-          "value": {
-            "path": "/uc/business/user_profile"
+            "path": "/uc/proposed/domain_sme"
           },
           "variant": "shortText"
         },
         {
-          "id": "f-uc-business-user-count",
-          "component": "TextField",
-          "label": "How many people do it *",
+          "id": "f-uc-technical-landing-zone-status",
+          "component": "MaterialSelect",
+          "options": [
+            {
+              "label": "Project, VPC and base IAM provisioned",
+              "value": "provisioned"
+            },
+            {
+              "label": "Project requested, provisioning in progress",
+              "value": "in_progress"
+            },
+            {
+              "label": "No GCP footprint or billing account",
+              "value": "none"
+            },
+            {
+              "label": "Not yet confirmed",
+              "value": "unknown"
+            }
+          ],
           "value": {
-            "path": "/uc/business/user_count"
+            "path": "/uc/technical/landing_zone_status"
           },
-          "variant": "number"
-        },
-        {
-          "id": "f-uc-meta-department-bu",
-          "component": "TextField",
-          "label": "Department or business unit",
-          "value": {
-            "path": "/uc/meta/department_bu"
-          },
-          "variant": "shortText"
-        },
-        {
-          "id": "f-uc-business-user-stories",
-          "component": "TextField",
-          "label": "User stories — As a <role> I want <outcome> so that <benefit>.",
-          "value": {
-            "path": "/uc/business/user_stories"
-          },
-          "variant": "longText"
+          "label": "GCP landing zone * — Subcriterion 5.3.",
+          "placeholder": "Choose one"
         },
         {
           "id": "continue-label",
           "component": "Text",
-          "text": "Continue"
+          "text": "Submit"
         },
         {
           "id": "continue-button",
@@ -113,9 +102,33 @@
             "event": {
               "name": "commit_stage",
               "context": {
-                "prompt": "Continue — Problem and users",
-                "pack": "business",
-                "stage": "needs",
+                "prompt": "Submit — Operational readiness",
+                "pack": "tech",
+                "stage": "readiness",
+                "data": {
+                  "path": "/uc"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "skip-label",
+          "component": "Text",
+          "text": "Skip for now"
+        },
+        {
+          "id": "skip-button",
+          "component": "Button",
+          "child": "skip-label",
+          "variant": "default",
+          "action": {
+            "event": {
+              "name": "skip_stage",
+              "context": {
+                "prompt": "Skip — Operational readiness",
+                "pack": "tech",
+                "stage": "readiness",
                 "data": {
                   "path": "/uc"
                 }
@@ -218,10 +231,10 @@
         },
         "ui": {
           "stage": {
-            "index": 0,
-            "count": 4,
-            "id": "needs",
-            "caption": "Stage 1 of 4 — Problem and users"
+            "index": 4,
+            "count": 5,
+            "id": "readiness",
+            "caption": "Stage 5 of 5 — Operational readiness"
           },
           "summary": {
             "hours_line": "Fill in the three numbers above to see the estimate.",

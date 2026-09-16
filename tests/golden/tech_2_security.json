@@ -18,11 +18,14 @@
             "stage-title",
             "stage-caption",
             "stage-rule",
-            "f-uc-technical-data-sources",
-            "f-uc-technical-other-data-sources",
+            "f-uc-technical-security-user-authentication",
+            "f-uc-technical-security-service-authentication",
+            "f-uc-technical-security-iam-least-privilege",
             "f-uc-technical-security-data-classification-label",
             "f-uc-technical-security-data-classification",
-            "f-uc-technical-grounding-acl-preservation-required",
+            "f-uc-technical-security-residency-requirements",
+            "f-uc-technical-security-cloud-policy-status-label",
+            "f-uc-technical-security-cloud-policy-status",
             "continue-button",
             "skip-button"
           ]
@@ -30,7 +33,7 @@
         {
           "id": "stage-title",
           "component": "Text",
-          "text": "Business intake and value qualification",
+          "text": "Technical architecture and security review",
           "variant": "h3"
         },
         {
@@ -46,85 +49,106 @@
           "component": "Divider"
         },
         {
-          "id": "f-uc-technical-data-sources",
-          "component": "ChoicePicker",
-          "label": "Systems and data sources involved *",
-          "variant": "multipleSelection",
+          "id": "f-uc-technical-security-user-authentication",
+          "component": "MaterialSelect",
           "options": [
             {
-              "label": "Google Drive",
-              "value": "google_drive"
+              "label": "Google Workspace SSO",
+              "value": "workspace_sso"
             },
             {
-              "label": "SharePoint",
-              "value": "sharepoint"
+              "label": "Microsoft Entra ID",
+              "value": "entra_id"
             },
             {
-              "label": "Confluence",
-              "value": "confluence"
+              "label": "Okta",
+              "value": "okta"
             },
             {
-              "label": "Jira",
-              "value": "jira"
+              "label": "SAML 2.0 (other)",
+              "value": "saml"
             },
             {
-              "label": "ServiceNow",
-              "value": "servicenow"
+              "label": "Multiple IdPs requiring federation",
+              "value": "multiple_idp"
             },
             {
-              "label": "Salesforce",
-              "value": "salesforce"
+              "label": "Unmanaged or basic auth",
+              "value": "basic_auth"
             },
             {
-              "label": "SAP",
-              "value": "sap"
-            },
-            {
-              "label": "BigQuery",
-              "value": "bigquery"
-            },
-            {
-              "label": "Cloud Storage bucket",
-              "value": "gcs"
-            },
-            {
-              "label": "Internal REST API",
-              "value": "internal_api"
-            },
-            {
-              "label": "Public website",
-              "value": "public_web"
-            },
-            {
-              "label": "Email or calendar",
-              "value": "workspace_mail"
-            },
-            {
-              "label": "Other (specify below)",
-              "value": "other"
-            },
-            {
-              "label": "Not sure yet",
+              "label": "Not yet confirmed",
               "value": "unknown"
             }
           ],
           "value": {
-            "path": "/uc/technical/data_sources"
-          }
+            "path": "/uc/technical/security/user_authentication"
+          },
+          "label": "End-user identity provider * — Subcriterion 3.1.",
+          "placeholder": "Choose one"
         },
         {
-          "id": "f-uc-technical-other-data-sources",
-          "component": "TextField",
-          "label": "Other systems or data sources (optional) — List any custom databases, ERPs, or tools not shown above.",
+          "id": "f-uc-technical-security-service-authentication",
+          "component": "MaterialSelect",
+          "options": [
+            {
+              "label": "Workload Identity Federation",
+              "value": "wif"
+            },
+            {
+              "label": "Service account keys with vault rotation",
+              "value": "sa_keys_rotated"
+            },
+            {
+              "label": "OAuth client credentials",
+              "value": "oauth_client"
+            },
+            {
+              "label": "Long-lived static tokens",
+              "value": "static_tokens"
+            },
+            {
+              "label": "Not yet confirmed",
+              "value": "unknown"
+            }
+          ],
           "value": {
-            "path": "/uc/technical/other_data_sources"
+            "path": "/uc/technical/security/service_authentication"
           },
-          "variant": "shortText"
+          "label": "Service authentication * — Subcriterion 3.2.",
+          "placeholder": "Choose one"
+        },
+        {
+          "id": "f-uc-technical-security-iam-least-privilege",
+          "component": "MaterialSelect",
+          "options": [
+            {
+              "label": "Read-only, scoped service identities",
+              "value": "read_only_scoped"
+            },
+            {
+              "label": "Broad dataset reader role",
+              "value": "broad_reader"
+            },
+            {
+              "label": "Admin or owner role requested",
+              "value": "admin"
+            },
+            {
+              "label": "Not yet confirmed",
+              "value": "unknown"
+            }
+          ],
+          "value": {
+            "path": "/uc/technical/security/iam_least_privilege"
+          },
+          "label": "IAM scope requested — Subcriterion 3.3.",
+          "placeholder": "Choose one"
         },
         {
           "id": "f-uc-technical-security-data-classification-label",
           "component": "Text",
-          "text": "Data sensitivity *",
+          "text": "Data classification * — Subcriterion 3.4.",
           "variant": "caption"
         },
         {
@@ -144,12 +168,16 @@
               "value": "confidential"
             },
             {
-              "label": "Restricted or regulated",
-              "value": "restricted"
+              "label": "Regulated — PII, HIPAA or PCI",
+              "value": "regulated"
             },
             {
-              "label": "Not sure yet",
-              "value": "unknown"
+              "label": "Mixed or unclear, review scheduled",
+              "value": "mixed"
+            },
+            {
+              "label": "Unclassified",
+              "value": "unclassified"
             }
           ],
           "value": {
@@ -157,11 +185,65 @@
           }
         },
         {
-          "id": "f-uc-technical-grounding-acl-preservation-required",
-          "component": "CheckBox",
-          "label": "Answers must respect each user's existing permissions",
+          "id": "f-uc-technical-security-residency-requirements",
+          "component": "MaterialSelect",
+          "options": [
+            {
+              "label": "No residency constraint",
+              "value": "none"
+            },
+            {
+              "label": "US only",
+              "value": "us_only"
+            },
+            {
+              "label": "EU only",
+              "value": "eu_only"
+            },
+            {
+              "label": "Other single-region requirement",
+              "value": "other_region"
+            },
+            {
+              "label": "Not yet confirmed",
+              "value": "unknown"
+            }
+          ],
           "value": {
-            "path": "/uc/technical/grounding/acl_preservation_required"
+            "path": "/uc/technical/security/residency_requirements"
+          },
+          "label": "Data residency",
+          "placeholder": "Choose one"
+        },
+        {
+          "id": "f-uc-technical-security-cloud-policy-status-label",
+          "component": "Text",
+          "text": "Cloud processing policy * — A corporate ban is a critical blocker. Subcriterion 3.5.",
+          "variant": "caption"
+        },
+        {
+          "id": "f-uc-technical-security-cloud-policy-status",
+          "component": "MaterialRadioButton",
+          "options": [
+            {
+              "label": "Enterprise policy authorises GCP processing",
+              "value": "authorised"
+            },
+            {
+              "label": "Legal or risk review in flight",
+              "value": "review_in_flight"
+            },
+            {
+              "label": "Corporate policy bans cloud data processing",
+              "value": "banned"
+            },
+            {
+              "label": "Not yet confirmed",
+              "value": "unknown"
+            }
+          ],
+          "value": {
+            "path": "/uc/technical/security/cloud_policy_status"
           }
         },
         {
@@ -178,9 +260,9 @@
             "event": {
               "name": "commit_stage",
               "context": {
-                "prompt": "Continue — Data and systems",
-                "pack": "business",
-                "stage": "data",
+                "prompt": "Continue — Security, IAM and governance",
+                "pack": "tech",
+                "stage": "security",
                 "data": {
                   "path": "/uc"
                 }
@@ -202,9 +284,9 @@
             "event": {
               "name": "skip_stage",
               "context": {
-                "prompt": "Skip — Data and systems",
-                "pack": "business",
-                "stage": "data",
+                "prompt": "Skip — Security, IAM and governance",
+                "pack": "tech",
+                "stage": "security",
                 "data": {
                   "path": "/uc"
                 }
@@ -308,9 +390,9 @@
         "ui": {
           "stage": {
             "index": 2,
-            "count": 4,
-            "id": "data",
-            "caption": "Stage 3 of 4 — Data and systems"
+            "count": 5,
+            "id": "security",
+            "caption": "Stage 3 of 5 — Security, IAM and governance"
           },
           "summary": {
             "hours_line": "Fill in the three numbers above to see the estimate.",

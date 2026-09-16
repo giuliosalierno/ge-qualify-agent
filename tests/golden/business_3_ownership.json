@@ -175,20 +175,28 @@
             "systems": [],
             "capability_level": null,
             "capability_rationale": null,
+            "data_freshness": null,
+            "landing_zone_status": null,
             "network": {
               "hosting_environments": null,
               "transit_path": null,
-              "firewall_proxy_status": null
+              "firewall_proxy_status": null,
+              "transit_blocker_status": null
             },
             "security": {
               "user_authentication": null,
               "service_authentication": null,
               "iam_least_privilege": null,
-              "data_classification": null
+              "data_classification": null,
+              "cloud_policy_status": null,
+              "residency_requirements": null
             },
             "grounding": {
               "acl_preservation_required": null,
-              "model_profile": null
+              "model_profile": null,
+              "citation_policy": null,
+              "query_volume": null,
+              "latency_sla": null
             }
           },
           "proposed": {

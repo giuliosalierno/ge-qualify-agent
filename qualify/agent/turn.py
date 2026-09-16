@@ -139,7 +139,10 @@ def execute_turn(
         output.reply_text = (
             f"{banner}\n\n{output.reply_text}" if output.reply_text else banner
         )
-        store.save(session)
+        # `output.session`, not `session`. A handover replaces the session for
+        # this context mid-turn, and re-saving the object we started with would
+        # silently roll that back.
+        store.save(output.session)
 
     return output
 
@@ -214,6 +217,12 @@ def _run_turn(
     if probe_output is not None:
         store.save(session)
         return probe_output
+
+    # Also ahead of SharePoint: "start the technical review for UC-2026-ABC123"
+    # reads as a load request to that handler's keyword matcher.
+    handover_output = _try_start_tech_review(store, turn_input.user_text, session)
+    if handover_output is not None:
+        return handover_output
 
     sp_load_output = _try_load_from_sharepoint(turn_input.user_text, session)
     if sp_load_output is not None:
@@ -681,6 +690,82 @@ def _try_a2ui_probe(user_text: str | None, session: Session) -> TurnOutput | Non
         reply_text=reply_text,
         a2ui_messages=build_openurl_probe(auth_url),
         session=session,
+    )
+
+
+def _try_start_tech_review(
+    store: SessionStore, user_text: str | None, session: Session
+) -> TurnOutput | None:
+    """Switches this conversation to the technical review of a saved record.
+
+    Replaces the session wholesale rather than mutating the current one. The
+    reviewer is almost always a different person in a different conversation,
+    and whatever empty business session `get_or_start` just created for them is
+    not worth preserving.
+    """
+    from qualify.agent.handover import (  # noqa: PLC0415
+        HandoverError,
+        baseline_summary,
+        parse_tech_review_intent,
+        start_tech_review,
+    )
+
+    wants, record_id = parse_tech_review_intent(user_text)
+    if not wants:
+        return None
+
+    # Already in a technical review: let the normal interview handle the turn
+    # rather than restarting it and throwing away the reviewer's answers.
+    if session.pack_name == "tech" and not record_id:
+        return None
+
+    if record_id is None:
+        return TurnOutput(
+            reply_text=(
+                "Happy to start a technical review. Which initiative?\n\n"
+                "Give me the record id — it looks like `UC-2026-A1B2C3` and "
+                "appears at the top of the Business Value Brief and in the "
+                "SharePoint folder name."
+            ),
+            a2ui_messages=[],
+            session=session,
+        )
+
+    try:
+        tech_session = start_tech_review(store, session.context_id, record_id)
+    except HandoverError as exc:
+        return TurnOutput(reply_text=str(exc), a2ui_messages=[], session=session)
+
+    sid = tech_session.next_surface_id()
+    tech_session.rendered_stages.add(tech_session.active_stage)
+    a2ui_messages = list(
+        build_surface(
+            tech_session.pack,
+            tech_session.record,
+            tech_session.active_stage,
+            surface_id=sid,
+            committed_stages=tech_session.committed,
+            skipped_stages=tech_session.skipped,
+        )
+    )
+    store.save(tech_session)
+
+    stage = tech_session.pack.stages[tech_session.active_stage]
+    reply_text = (
+        "### Technical Architecture Review\n\n"
+        "Picking up the business intake:\n\n"
+        f"{baseline_summary(tech_session)}\n\n"
+        "Those answers are locked — they belong to the business owner. "
+        "We'll add the technical layer on top, in five stages: systems, "
+        "network, security and IAM, grounding and models, then operational "
+        "readiness.\n\n"
+        f"{_stage_intro_text(stage)}"
+    )
+
+    return TurnOutput(
+        reply_text=reply_text,
+        a2ui_messages=a2ui_messages,
+        session=tech_session,
     )
 
 

@@ -46,6 +46,39 @@ echo "============================================================"
 # fall back to device code.
 WEB_OAUTH_CALLBACK="${WEB_OAUTH_CALLBACK:-1}"
 
+# Durable record and session storage.
+#
+# Without this the service runs InMemorySessionStore: every deploy signs all
+# users out and discards in-progress interviews, and the Phase 1 -> Phase 2
+# handover cannot work at all, because a technical reviewer in a new
+# conversation has no way to reach a record written by an earlier one.
+#
+# Set QUALIFY_GCS_BUCKET=0 to deliberately run without persistence.
+QUALIFY_GCS_BUCKET="${QUALIFY_GCS_BUCKET:-${PROJECT_ID}-qualify-records}"
+
+if [ "$QUALIFY_GCS_BUCKET" = "0" ]; then
+  echo "QUALIFY_GCS_BUCKET=0: deploying WITHOUT persistence (sessions die on deploy)."
+  QUALIFY_GCS_BUCKET=""
+else
+  # Idempotent: succeeds whether or not the bucket already exists.
+  if ! gcloud storage buckets describe "gs://${QUALIFY_GCS_BUCKET}" \
+      --project="$PROJECT_ID" >/dev/null 2>&1; then
+    echo "Creating gs://${QUALIFY_GCS_BUCKET} ..."
+    gcloud storage buckets create "gs://${QUALIFY_GCS_BUCKET}" \
+      --project="$PROJECT_ID" \
+      --location="$REGION" \
+      --uniform-bucket-level-access
+  fi
+
+  # The Cloud Run runtime identity. Compute default unless overridden.
+  RUNTIME_SA="${RUNTIME_SA:-${PROJECT_NUMBER}-compute@developer.gserviceaccount.com}"
+  echo "Granting roles/storage.objectAdmin on the bucket to $RUNTIME_SA ..."
+  gcloud storage buckets add-iam-policy-binding "gs://${QUALIFY_GCS_BUCKET}" \
+    --project="$PROJECT_ID" \
+    --member="serviceAccount:${RUNTIME_SA}" \
+    --role=roles/storage.objectAdmin >/dev/null
+fi
+
 # Initial deployment from source (builds Dockerfile)
 gcloud run deploy "$SERVICE_NAME" \
   --source "$SCRIPT_DIR" \
@@ -56,7 +89,7 @@ gcloud run deploy "$SERVICE_NAME" \
   --max-instances "$MAX_INSTANCES" \
   --clear-base-image \
   --allow-unauthenticated \
-  --set-env-vars="GOOGLE_CLOUD_PROJECT=${PROJECT_ID},GOOGLE_CLOUD_LOCATION=${GENAI_LOCATION},GOOGLE_GENAI_USE_VERTEXAI=TRUE,MODEL=${MODEL_NAME},MS_GRAPH_TENANT_ID=${MS_GRAPH_TENANT_ID:-},MS_GRAPH_CLIENT_ID=${MS_GRAPH_CLIENT_ID:-},MS_GRAPH_CLIENT_SECRET=${MS_GRAPH_CLIENT_SECRET:-},MS_GRAPH_REFRESH_TOKEN=${MS_GRAPH_REFRESH_TOKEN:-},SHAREPOINT_INSTANCE_URL=${SHAREPOINT_INSTANCE_URL:-},WEB_OAUTH_CALLBACK=${WEB_OAUTH_CALLBACK}"
+  --set-env-vars="GOOGLE_CLOUD_PROJECT=${PROJECT_ID},GOOGLE_CLOUD_LOCATION=${GENAI_LOCATION},GOOGLE_GENAI_USE_VERTEXAI=TRUE,MODEL=${MODEL_NAME},MS_GRAPH_TENANT_ID=${MS_GRAPH_TENANT_ID:-},MS_GRAPH_CLIENT_ID=${MS_GRAPH_CLIENT_ID:-},MS_GRAPH_CLIENT_SECRET=${MS_GRAPH_CLIENT_SECRET:-},MS_GRAPH_REFRESH_TOKEN=${MS_GRAPH_REFRESH_TOKEN:-},SHAREPOINT_INSTANCE_URL=${SHAREPOINT_INSTANCE_URL:-},WEB_OAUTH_CALLBACK=${WEB_OAUTH_CALLBACK},QUALIFY_GCS_BUCKET=${QUALIFY_GCS_BUCKET}"
 
 SERVICE_URL=$(gcloud run services describe "$SERVICE_NAME" \
   --project="$PROJECT_ID" \

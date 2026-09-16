@@ -103,6 +103,10 @@ class Network(_Base):
     hosting_environments: str | None = None
     transit_path: str | None = None
     firewall_proxy_status: str | None = None
+    #: Subcriterion 2.4, and one of the two hard blockers. An airgapped system
+    #: fails the gate outright no matter how well everything else scores, so it
+    #: is kept separate from `transit_path` rather than folded into it.
+    transit_blocker_status: str | None = None
 
 
 class Security(_Base):
@@ -110,11 +114,24 @@ class Security(_Base):
     service_authentication: str | None = None
     iam_least_privilege: str | None = None
     data_classification: str | None = None
+    #: Subcriterion 3.5, the other hard blocker. A corporate ban on cloud
+    #: processing ends the review regardless of technical readiness.
+    cloud_policy_status: str | None = None
+    #: Part of 3.4. Separate from classification because "confidential" and
+    #: "EU-only" are independent facts, and conflating them loses one of them.
+    residency_requirements: str | None = None
 
 
 class Grounding(_Base):
     acl_preservation_required: bool | None = None
     model_profile: str | None = None
+    #: Subcriterion 4.2.
+    citation_policy: str | None = None
+    #: Subcriterion 4.3. Two fields, because a volume estimate without a
+    #: latency target scores WARN and the pair scores PASS — one field could
+    #: not express the difference.
+    query_volume: str | None = None
+    latency_sla: str | None = None
 
 
 class Technical(_Base):
@@ -130,6 +147,10 @@ class Technical(_Base):
     systems: list[SystemEntry] = Field(default_factory=list)
     capability_level: CapabilityLevel | None = None
     capability_rationale: str | None = None
+    #: Subcriterion 1.4.
+    data_freshness: str | None = None
+    #: Subcriterion 5.3.
+    landing_zone_status: str | None = None
     network: Network = Field(default_factory=Network)
     security: Security = Field(default_factory=Security)
     grounding: Grounding = Field(default_factory=Grounding)

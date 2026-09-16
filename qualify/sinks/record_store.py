@@ -12,7 +12,7 @@ import logging
 import os
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Protocol, runtime_checkable
 
 from qualify.schema.use_case_record import UseCaseRecord
 from qualify.sinks.session import Session, SessionStore
@@ -20,8 +20,15 @@ from qualify.sinks.session import Session, SessionStore
 log = logging.getLogger(__name__)
 
 
+@runtime_checkable
 class RecordStore(Protocol):
-    """Protocol for persisting and retrieving UseCaseRecord instances by record_id."""
+    """Protocol for persisting and retrieving UseCaseRecord instances by record_id.
+
+    Runtime-checkable because the handover has to ask a store, at run time,
+    whether it can reach records written by an earlier conversation. The
+    in-memory fallback cannot, and the difference decides whether a technical
+    review can start at all.
+    """
 
     def save_record(self, record: UseCaseRecord) -> str: ...
 

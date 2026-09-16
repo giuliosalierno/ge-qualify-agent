@@ -18,19 +18,20 @@
             "stage-title",
             "stage-caption",
             "stage-rule",
-            "f-uc-meta-initiative-name",
-            "f-uc-business-problem-description",
-            "f-uc-business-user-profile",
-            "f-uc-business-user-count",
-            "f-uc-meta-department-bu",
-            "f-uc-business-user-stories",
-            "continue-button"
+            "f-uc-technical-grounding-acl-preservation-required",
+            "f-uc-technical-grounding-citation-policy",
+            "f-uc-technical-grounding-query-volume",
+            "f-uc-technical-grounding-latency-sla",
+            "f-uc-technical-grounding-model-profile-label",
+            "f-uc-technical-grounding-model-profile",
+            "continue-button",
+            "skip-button"
           ]
         },
         {
           "id": "stage-title",
           "component": "Text",
-          "text": "Business intake and value qualification",
+          "text": "Technical architecture and security review",
           "variant": "h3"
         },
         {
@@ -46,58 +47,112 @@
           "component": "Divider"
         },
         {
-          "id": "f-uc-meta-initiative-name",
-          "component": "TextField",
-          "label": "Initiative name * — A short name you would recognise in a list of fifty.",
+          "id": "f-uc-technical-grounding-acl-preservation-required",
+          "component": "CheckBox",
+          "label": "Document-level ACLs must be preserved — Subcriterion 4.1.",
           "value": {
-            "path": "/uc/meta/initiative_name"
-          },
-          "variant": "shortText"
+            "path": "/uc/technical/grounding/acl_preservation_required"
+          }
         },
         {
-          "id": "f-uc-business-problem-description",
-          "component": "TextField",
-          "label": "Problem and current manual process * — What happens today, step by step, and where it hurts.",
+          "id": "f-uc-technical-grounding-citation-policy",
+          "component": "MaterialSelect",
+          "options": [
+            {
+              "label": "Strict source attribution required and supported",
+              "value": "strict"
+            },
+            {
+              "label": "Loose attribution acceptable",
+              "value": "loose"
+            },
+            {
+              "label": "No citation requirement stated",
+              "value": "none"
+            }
+          ],
           "value": {
-            "path": "/uc/business/problem_description"
+            "path": "/uc/technical/grounding/citation_policy"
           },
-          "variant": "longText"
+          "label": "Citation and provenance — Subcriterion 4.2.",
+          "placeholder": "Choose one"
         },
         {
-          "id": "f-uc-business-user-profile",
-          "component": "TextField",
-          "label": "Who does this work * — The role, not the person. \"Claims handler\", not \"Ana\".",
+          "id": "f-uc-technical-grounding-query-volume",
+          "component": "MaterialSelect",
+          "options": [
+            {
+              "label": "Target QPS estimated",
+              "value": "qps_estimated"
+            },
+            {
+              "label": "Rough volume only",
+              "value": "rough"
+            },
+            {
+              "label": "Unbounded or unknown concurrency",
+              "value": "unbounded"
+            }
+          ],
           "value": {
-            "path": "/uc/business/user_profile"
+            "path": "/uc/technical/grounding/query_volume"
           },
-          "variant": "shortText"
+          "label": "Expected query volume — Subcriterion 4.3.",
+          "placeholder": "Choose one"
         },
         {
-          "id": "f-uc-business-user-count",
-          "component": "TextField",
-          "label": "How many people do it *",
+          "id": "f-uc-technical-grounding-latency-sla",
+          "component": "MaterialSelect",
+          "options": [
+            {
+              "label": "Under 2 seconds",
+              "value": "sub_2s"
+            },
+            {
+              "label": "Under 10 seconds",
+              "value": "sub_10s"
+            },
+            {
+              "label": "No latency SLA defined",
+              "value": "none"
+            }
+          ],
           "value": {
-            "path": "/uc/business/user_count"
+            "path": "/uc/technical/grounding/latency_sla"
           },
-          "variant": "number"
+          "label": "Latency target",
+          "placeholder": "Choose one"
         },
         {
-          "id": "f-uc-meta-department-bu",
-          "component": "TextField",
-          "label": "Department or business unit",
-          "value": {
-            "path": "/uc/meta/department_bu"
-          },
-          "variant": "shortText"
+          "id": "f-uc-technical-grounding-model-profile-label",
+          "component": "Text",
+          "text": "Model profile * — Subcriterion 4.4.",
+          "variant": "caption"
         },
         {
-          "id": "f-uc-business-user-stories",
-          "component": "TextField",
-          "label": "User stories — As a <role> I want <outcome> so that <benefit>.",
+          "id": "f-uc-technical-grounding-model-profile",
+          "component": "MaterialButtonToggle",
+          "options": [
+            {
+              "label": "Gemini Flash — search and summarisation",
+              "value": "flash"
+            },
+            {
+              "label": "Gemini Pro — multi-system synthesis",
+              "value": "pro"
+            },
+            {
+              "label": "Mixed routing by query type",
+              "value": "mixed"
+            },
+            {
+              "label": "Not yet decided",
+              "value": "undecided"
+            }
+          ],
           "value": {
-            "path": "/uc/business/user_stories"
-          },
-          "variant": "longText"
+            "path": "/uc/technical/grounding/model_profile"
+          }
         },
         {
           "id": "continue-label",
@@ -113,9 +168,33 @@
             "event": {
               "name": "commit_stage",
               "context": {
-                "prompt": "Continue — Problem and users",
-                "pack": "business",
-                "stage": "needs",
+                "prompt": "Continue — Data grounding and model routing",
+                "pack": "tech",
+                "stage": "grounding",
+                "data": {
+                  "path": "/uc"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "skip-label",
+          "component": "Text",
+          "text": "Skip for now"
+        },
+        {
+          "id": "skip-button",
+          "component": "Button",
+          "child": "skip-label",
+          "variant": "default",
+          "action": {
+            "event": {
+              "name": "skip_stage",
+              "context": {
+                "prompt": "Skip — Data grounding and model routing",
+                "pack": "tech",
+                "stage": "grounding",
                 "data": {
                   "path": "/uc"
                 }
@@ -218,10 +297,10 @@
         },
         "ui": {
           "stage": {
-            "index": 0,
-            "count": 4,
-            "id": "needs",
-            "caption": "Stage 1 of 4 — Problem and users"
+            "index": 3,
+            "count": 5,
+            "id": "grounding",
+            "caption": "Stage 4 of 5 — Data grounding and model routing"
           },
           "summary": {
             "hours_line": "Fill in the three numbers above to see the estimate.",

@@ -18,19 +18,21 @@
             "stage-title",
             "stage-caption",
             "stage-rule",
+            "f-uc-meta-initiative-name-label",
             "f-uc-meta-initiative-name",
+            "f-uc-business-problem-description-label",
             "f-uc-business-problem-description",
-            "f-uc-business-user-profile",
-            "f-uc-business-user-count",
-            "f-uc-meta-department-bu",
-            "f-uc-business-user-stories",
+            "f-uc-technical-capability-level-label",
+            "f-uc-technical-capability-level",
+            "f-uc-technical-data-freshness",
+            "f-uc-proposed-tech-owner",
             "continue-button"
           ]
         },
         {
           "id": "stage-title",
           "component": "Text",
-          "text": "Business intake and value qualification",
+          "text": "Technical architecture and security review",
           "variant": "h3"
         },
         {
@@ -46,58 +48,82 @@
           "component": "Divider"
         },
         {
+          "id": "f-uc-meta-initiative-name-label",
+          "component": "Text",
+          "text": "Initiative (from business intake)",
+          "variant": "caption"
+        },
+        {
           "id": "f-uc-meta-initiative-name",
-          "component": "TextField",
-          "label": "Initiative name * — A short name you would recognise in a list of fifty.",
-          "value": {
+          "component": "Text",
+          "text": {
             "path": "/uc/meta/initiative_name"
           },
-          "variant": "shortText"
+          "variant": "body"
+        },
+        {
+          "id": "f-uc-business-problem-description-label",
+          "component": "Text",
+          "text": "Problem statement (from business intake)",
+          "variant": "caption"
         },
         {
           "id": "f-uc-business-problem-description",
-          "component": "TextField",
-          "label": "Problem and current manual process * — What happens today, step by step, and where it hurts.",
-          "value": {
+          "component": "Text",
+          "text": {
             "path": "/uc/business/problem_description"
           },
-          "variant": "longText"
+          "variant": "body"
         },
         {
-          "id": "f-uc-business-user-profile",
-          "component": "TextField",
-          "label": "Who does this work * — The role, not the person. \"Claims handler\", not \"Ana\".",
+          "id": "f-uc-technical-capability-level-label",
+          "component": "Text",
+          "text": "Indicative delivery tier (from business intake)",
+          "variant": "caption"
+        },
+        {
+          "id": "f-uc-technical-capability-level",
+          "component": "Text",
+          "text": {
+            "path": "/uc/technical/capability_level"
+          },
+          "variant": "body"
+        },
+        {
+          "id": "f-uc-technical-data-freshness",
+          "component": "MaterialSelect",
+          "options": [
+            {
+              "label": "Sync schedule and SLA both documented",
+              "value": "sla_documented"
+            },
+            {
+              "label": "Refresh frequency known, sync mechanism unconfirmed",
+              "value": "frequency_only"
+            },
+            {
+              "label": "Real-time expected, no event stream identified",
+              "value": "realtime_assumed"
+            },
+            {
+              "label": "Not yet discussed",
+              "value": "unknown"
+            }
+          ],
           "value": {
-            "path": "/uc/business/user_profile"
+            "path": "/uc/technical/data_freshness"
+          },
+          "label": "Data freshness and sync * — Subcriterion 1.4.",
+          "placeholder": "Choose one"
+        },
+        {
+          "id": "f-uc-proposed-tech-owner",
+          "component": "TextField",
+          "label": "Lead DBA or data custodian * — A named person, not a team queue. Subcriterion 1.5.",
+          "value": {
+            "path": "/uc/proposed/tech_owner"
           },
           "variant": "shortText"
-        },
-        {
-          "id": "f-uc-business-user-count",
-          "component": "TextField",
-          "label": "How many people do it *",
-          "value": {
-            "path": "/uc/business/user_count"
-          },
-          "variant": "number"
-        },
-        {
-          "id": "f-uc-meta-department-bu",
-          "component": "TextField",
-          "label": "Department or business unit",
-          "value": {
-            "path": "/uc/meta/department_bu"
-          },
-          "variant": "shortText"
-        },
-        {
-          "id": "f-uc-business-user-stories",
-          "component": "TextField",
-          "label": "User stories — As a <role> I want <outcome> so that <benefit>.",
-          "value": {
-            "path": "/uc/business/user_stories"
-          },
-          "variant": "longText"
         },
         {
           "id": "continue-label",
@@ -113,9 +139,9 @@
             "event": {
               "name": "commit_stage",
               "context": {
-                "prompt": "Continue — Problem and users",
-                "pack": "business",
-                "stage": "needs",
+                "prompt": "Continue — Systems and data landscape",
+                "pack": "tech",
+                "stage": "systems",
                 "data": {
                   "path": "/uc"
                 }
@@ -219,9 +245,9 @@
         "ui": {
           "stage": {
             "index": 0,
-            "count": 4,
-            "id": "needs",
-            "caption": "Stage 1 of 4 — Problem and users"
+            "count": 5,
+            "id": "systems",
+            "caption": "Stage 1 of 5 — Systems and data landscape"
           },
           "summary": {
             "hours_line": "Fill in the three numbers above to see the estimate.",

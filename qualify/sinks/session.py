@@ -235,15 +235,22 @@ def new_session(
 
 
 def get_or_start(
-    store: SessionStore, context_id: str, pack_name: str = "business"
+    store: SessionStore,
+    context_id: str,
+    pack_name: str = "business",
+    record_id: str | None = None,
 ) -> Session:
     """Loads the interview for this conversation, or begins one.
 
     Every turn goes through here, so the "have we met?" decision is made in
     one place rather than at each entry point.
+
+    `record_id` is only consulted when starting fresh. An existing session
+    already has its record, and silently repointing it mid-interview would
+    discard the user's answers.
     """
     session = store.load(context_id)
     if session is None:
-        session = new_session(context_id, pack_name)
+        session = new_session(context_id, pack_name, record_id)
         store.save(session)
     return session
