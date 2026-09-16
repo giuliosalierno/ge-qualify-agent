@@ -29,7 +29,6 @@ from qualify.a2ui.actions import (
     parse_action,
 )
 from qualify.a2ui.compiler import (
-    build_collapsed_stage_patch,
     build_completion_surface,
     build_patch,
     build_surface,
@@ -156,7 +155,14 @@ def execute_turn(
     if session.active_stage not in session.rendered_stages:
         sid = session.next_surface_id()
         a2ui_messages.extend(
-            build_surface(session.pack, session.record, session.active_stage, surface_id=sid)
+            build_surface(
+                session.pack,
+                session.record,
+                session.active_stage,
+                surface_id=sid,
+                committed_stages=session.committed,
+                skipped_stages=session.skipped,
+            )
         )
         session.rendered_stages.add(session.active_stage)
     else:
@@ -221,20 +227,6 @@ def _handle_action_outcome(
 
     if outcome.action in (COMMIT_STAGE, SKIP_STAGE):
         if outcome.advanced:
-            if (
-                outcome.committed_stage_idx is not None
-                and outcome.committed_surface_id
-            ):
-                a2ui_messages.append(
-                    build_collapsed_stage_patch(
-                        session.pack,
-                        session.record,
-                        outcome.committed_stage_idx,
-                        surface_id=outcome.committed_surface_id,
-                        skipped=outcome.skipped,
-                    )
-                )
-
             if outcome.ready_to_finalize:
                 # All stages committed/skipped: emit the complete Markdown Business Value Brief,
                 # render a new summary/completion card, and sync to optional Google Sheet.
@@ -255,11 +247,17 @@ def _handle_action_outcome(
                 )
             else:
                 # Stage advanced: render the new stage surface as a new chat message card
+                # with compact summary headers for all completed/skipped stages.
                 sid = session.next_surface_id()
                 session.rendered_stages.add(session.active_stage)
                 a2ui_messages.extend(
                     build_surface(
-                        session.pack, session.record, session.active_stage, surface_id=sid
+                        session.pack,
+                        session.record,
+                        session.active_stage,
+                        surface_id=sid,
+                        committed_stages=session.committed,
+                        skipped_stages=session.skipped,
                     )
                 )
                 stage = session.pack.stages[session.active_stage]
@@ -291,7 +289,12 @@ def _handle_action_outcome(
             session.rendered_stages.add(session.active_stage)
             a2ui_messages.extend(
                 build_surface(
-                    session.pack, session.record, session.active_stage, surface_id=sid
+                    session.pack,
+                    session.record,
+                    session.active_stage,
+                    surface_id=sid,
+                    committed_stages=session.committed,
+                    skipped_stages=session.skipped,
                 )
             )
             stage = session.pack.stages[session.active_stage]

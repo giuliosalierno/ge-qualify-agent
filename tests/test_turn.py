@@ -153,10 +153,10 @@ def test_complete_commit_advances_and_renders_next_stage(store: InMemorySessionS
     assert out.outcome.advanced
     assert out.session.active_stage == 1
     assert out.session.stage == "sizing"
-    # Collapsed stage 0 patch + new surface rendered for stage 1
-    assert len(out.a2ui_messages) == 4
-    assert "updateComponents" in out.a2ui_messages[0]
-    assert "createSurface" in out.a2ui_messages[1]
+    # New surface rendered for stage 1 (3 messages, single surfaceId)
+    assert len(out.a2ui_messages) == 3
+    assert "createSurface" in out.a2ui_messages[0]
+    assert "updateComponents" in out.a2ui_messages[1]
     assert "Effort and value" in out.reply_text
 
 

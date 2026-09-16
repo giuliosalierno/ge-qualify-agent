@@ -286,7 +286,12 @@ def _label_with_help(field: FieldSpec) -> str:
     return label
 
 
-def build_stage_components(pack: Pack, stage_idx: int) -> list[dict[str, Any]]:
+def build_stage_components(
+    pack: Pack,
+    stage_idx: int,
+    committed_stages: set[int] | None = None,
+    skipped_stages: set[int] | None = None,
+) -> list[dict[str, Any]]:
     """The component list for one stage: caption, fields, Continue button.
 
     Returns a flat list. A2UI components are referenced by id rather than
@@ -294,7 +299,85 @@ def build_stage_components(pack: Pack, stage_idx: int) -> list[dict[str, Any]]:
     sibling entry.
     """
     stage: Stage = pack.stages[stage_idx]
-    children: list[str] = [_STAGE_TITLE_ID, _STAGE_CAPTION_ID, _STAGE_RULE_ID]
+    children: list[str] = [_STAGE_TITLE_ID]
+    header: list[dict[str, Any]] = [
+        {
+            "id": _STAGE_TITLE_ID,
+            "component": "Text",
+            "text": pack.title,
+            "variant": "h3",
+        },
+    ]
+
+    committed_set = committed_stages or set()
+    skipped_set = skipped_stages or set()
+    has_prev_summaries = False
+
+    for prev_idx, prev_stage in enumerate(pack.stages):
+        if prev_idx == stage_idx:
+            continue
+        if prev_idx in committed_set or prev_idx in skipped_set:
+            has_prev_summaries = True
+            is_skipped = prev_idx in skipped_set
+            title_id = f"prev-title-{prev_stage.id}"
+            lbl_id = f"prev-revise-lbl-{prev_stage.id}"
+            btn_id = f"prev-revise-btn-{prev_stage.id}"
+            banner_text = (
+                f"⚠ Stage {prev_idx + 1}: {prev_stage.label} — Skipped (Needs follow-up)"
+                if is_skipped
+                else f"✓ Stage {prev_idx + 1}: {prev_stage.label} — Confirmed"
+            )
+            btn_label = "Reopen & Fill" if is_skipped else "Revise"
+            children.extend([title_id, btn_id])
+            header.extend(
+                [
+                    {
+                        "id": title_id,
+                        "component": "Text",
+                        "text": banner_text,
+                        "variant": "caption",
+                    },
+                    {
+                        "id": lbl_id,
+                        "component": "Text",
+                        "text": btn_label,
+                    },
+                    {
+                        "id": btn_id,
+                        "component": "Button",
+                        "child": lbl_id,
+                        "variant": "default",
+                        "action": {
+                            "event": {
+                                "name": "revise_stage",
+                                "context": {
+                                    "prompt": f"Revise — {prev_stage.label}",
+                                    "stage": prev_stage.id,
+                                },
+                            }
+                        },
+                    },
+                ]
+            )
+
+    if has_prev_summaries:
+        prev_rule_id = "prev-stages-rule"
+        children.append(prev_rule_id)
+        header.append({"id": prev_rule_id, "component": "Divider"})
+
+    children.extend([_STAGE_CAPTION_ID, _STAGE_RULE_ID])
+    header.extend(
+        [
+            {
+                "id": _STAGE_CAPTION_ID,
+                "component": "Text",
+                "text": {"path": f"/{UI_ROOT}/stage/caption"},
+                "variant": "caption",
+            },
+            {"id": _STAGE_RULE_ID, "component": "Divider"},
+        ]
+    )
+
     nodes: list[dict[str, Any]] = []
 
     for field in stage.fields:
@@ -318,22 +401,6 @@ def build_stage_components(pack: Pack, stage_idx: int) -> list[dict[str, Any]]:
     children.append(_CONTINUE_ID)
     if stage_idx > 0:
         children.append(_SKIP_ID)
-
-    header = [
-        {
-            "id": _STAGE_TITLE_ID,
-            "component": "Text",
-            "text": pack.title,
-            "variant": "h3",
-        },
-        {
-            "id": _STAGE_CAPTION_ID,
-            "component": "Text",
-            "text": {"path": f"/{UI_ROOT}/stage/caption"},
-            "variant": "caption",
-        },
-        {"id": _STAGE_RULE_ID, "component": "Divider"},
-    ]
 
     root = {"id": ROOT_ID, "component": "Column", "children": children}
 
@@ -451,6 +518,8 @@ def build_surface(
     record: UseCaseRecord,
     active_stage: int,
     surface_id: str = SURFACE_ID,
+    committed_stages: set[int] | None = None,
+    skipped_stages: set[int] | None = None,
 ) -> list[dict[str, Any]]:
     """The full message sequence for a stage.
 
@@ -465,7 +534,15 @@ def build_surface(
 
     return [
         build_create_surface(surface_id),
-        build_update_components(build_stage_components(pack, active_stage), surface_id),
+        build_update_components(
+            build_stage_components(
+                pack,
+                active_stage,
+                committed_stages=committed_stages,
+                skipped_stages=skipped_stages,
+            ),
+            surface_id,
+        ),
         build_patch("/", build_data_model(record, pack, active_stage), surface_id),
     ]
 

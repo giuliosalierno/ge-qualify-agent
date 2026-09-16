@@ -50,43 +50,46 @@ def test_each_stage_renders_as_distinct_surface_id() -> None:
     sid_0 = t1.a2ui_messages[0]["createSurface"]["surfaceId"]
     assert sid_0.startswith("qualify-s0-")
 
-    # Turn 2: Commit Stage 0 -> collapses Stage 0 surface and advances to Stage 1
+    # Turn 2: Commit Stage 0 -> advances to Stage 1 with single surfaceId
     t2 = execute_turn(
         store,
         TurnInput(context_id=ctx, action_data={"name": COMMIT_STAGE, "context": NEEDS_PAYLOAD}),
     )
-    assert t2.a2ui_messages[0]["updateComponents"]["surfaceId"] == sid_0
-    sid_1 = t2.a2ui_messages[1]["createSurface"]["surfaceId"]
+    assert len(t2.a2ui_messages) == 3
+    sid_1 = t2.a2ui_messages[0]["createSurface"]["surfaceId"]
     assert sid_1.startswith("qualify-s1-")
     assert sid_1 != sid_0
+    # Verify Stage 0 summary banner appears inside Stage 1's components
+    s1_comps = t2.a2ui_messages[1]["updateComponents"]["components"]
+    assert any("✓ Stage 1: Problem and users — Confirmed" in str(c.get("text", "")) for c in s1_comps)
 
-    # Turn 3: Commit Stage 1 -> collapses Stage 1 surface and advances to Stage 2
+    # Turn 3: Commit Stage 1 -> advances to Stage 2
     t3 = execute_turn(
         store,
         TurnInput(context_id=ctx, action_data={"name": COMMIT_STAGE, "context": SIZING_PAYLOAD}),
     )
-    assert t3.a2ui_messages[0]["updateComponents"]["surfaceId"] == sid_1
-    sid_2 = t3.a2ui_messages[1]["createSurface"]["surfaceId"]
+    assert len(t3.a2ui_messages) == 3
+    sid_2 = t3.a2ui_messages[0]["createSurface"]["surfaceId"]
     assert sid_2.startswith("qualify-s2-")
     assert sid_2 not in {sid_0, sid_1}
 
-    # Turn 4: Commit Stage 2 -> collapses Stage 2 surface and advances to Stage 3
+    # Turn 4: Commit Stage 2 -> advances to Stage 3
     t4 = execute_turn(
         store,
         TurnInput(context_id=ctx, action_data={"name": COMMIT_STAGE, "context": DATA_PAYLOAD}),
     )
-    assert t4.a2ui_messages[0]["updateComponents"]["surfaceId"] == sid_2
-    sid_3 = t4.a2ui_messages[1]["createSurface"]["surfaceId"]
+    assert len(t4.a2ui_messages) == 3
+    sid_3 = t4.a2ui_messages[0]["createSurface"]["surfaceId"]
     assert sid_3.startswith("qualify-s3-")
     assert sid_3 not in {sid_0, sid_1, sid_2}
 
-    # Turn 5: Commit Stage 3 -> collapses Stage 3 surface, emits completion brief and completion surface
+    # Turn 5: Commit Stage 3 -> emits completion brief and completion surface
     t5 = execute_turn(
         store,
         TurnInput(context_id=ctx, action_data={"name": COMMIT_STAGE, "context": OWNERSHIP_PAYLOAD}),
     )
-    assert t5.a2ui_messages[0]["updateComponents"]["surfaceId"] == sid_3
-    sid_complete = t5.a2ui_messages[1]["createSurface"]["surfaceId"]
+    assert len(t5.a2ui_messages) == 3
+    sid_complete = t5.a2ui_messages[0]["createSurface"]["surfaceId"]
     assert sid_complete.startswith("qualify-complete-")
     assert sid_complete not in {sid_0, sid_1, sid_2, sid_3}
 
@@ -197,9 +200,13 @@ def test_skip_stage_button_and_chat_flow() -> None:
     assert t_skip1.session.active_stage == 2
     assert 1 in t_skip1.session.skipped
     assert "Skipped **Effort and value** for now" in t_skip1.reply_text
-    # Collapsed banner should show '⚠ Stage 2: Effort and value — Skipped'
-    collapsed_comps = t_skip1.a2ui_messages[0]["updateComponents"]["components"]
-    assert any("Skipped (Needs follow-up)" in c.get("text", "") for c in collapsed_comps)
+    assert len(t_skip1.a2ui_messages) == 3
+    from qualify.a2ui.validate import validate_surface
+
+    validate_surface(t_skip1.a2ui_messages)
+    # Summary banner inside Stage 2's card should show '⚠ Stage 2: Effort and value — Skipped'
+    s2_comps = t_skip1.a2ui_messages[1]["updateComponents"]["components"]
+    assert any("Skipped (Needs follow-up)" in str(c.get("text", "")) for c in s2_comps)
 
     # Commit Stage 2 (data) normally
     execute_turn(
