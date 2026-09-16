@@ -239,12 +239,18 @@ def _handle_action_outcome(
                 from qualify.sinks.sheets import sync_to_optional_sheet  # noqa: PLC0415
 
                 import os as _os  # noqa: PLC0415
+                import urllib.parse as _up  # noqa: PLC0415
                 sync_to_optional_sheet(session.record)
-                sp_res = sync_to_optional_sharepoint(session.record, skipped_stages=session.skipped)
+                sp_res = sync_to_optional_sharepoint(
+                    session.record,
+                    skipped_stages=session.skipped,
+                    context_id=session.context_id,
+                )
                 reply_text = render_business_brief(
                     session.record, skipped_stages=session.skipped
                 )
                 base_url = _os.environ.get("AGENT_URL", "https://ge-qualify-agent-g22bhpwccq-uc.a.run.app").rstrip("/")
+                auth_link = f"{base_url}/auth?context_id={_up.quote(session.context_id)}"
                 if sp_res and sp_res.auth_mode == "delegated":
                     reply_text += (
                         f"\n\n---\n✅ **Synced to SharePoint Online (On-Behalf-Of User)**: "
@@ -253,7 +259,8 @@ def _handle_action_outcome(
                 else:
                     reply_text += (
                         f"\n\n---\n⚠️ **SharePoint User Login Required**: Saved to local backup because no active Microsoft user session was found. "
-                        f"**[Click here to Sign in with Microsoft SharePoint]({base_url}/auth)** to sync directly under your user account."
+                        f"**[Click here to Sign in with Microsoft SharePoint]({auth_link})** to sync directly under your user account "
+                        f"(it will auto-sync immediately upon sign-in, or type `save to sharepoint` anytime)."
                     )
                 sid = session.next_surface_id("complete")
                 a2ui_messages.extend(
@@ -400,12 +407,84 @@ def _is_chat_skip_intent(user_text: str | None) -> bool:
 
 
 def _try_load_from_sharepoint(user_text: str | None, session: Session) -> TurnOutput | None:
-    """Detects chat commands to load an opportunity from SharePoint (e.g. 'load UC-2026-481209 from sharepoint')."""
+    """Detects chat commands to load, list, or save/sync an opportunity with SharePoint."""
     if not user_text:
         return None
+    import os as _os  # noqa: PLC0415
     import re  # noqa: PLC0415
+    import urllib.parse as _up  # noqa: PLC0415
 
     text_lower = user_text.strip().lower()
+
+    # Check if user is asking to save/sync to SharePoint or confirming they just logged in
+    is_save_or_login = any(
+        w in text_lower
+        for w in (
+            "save to sharepoint",
+            "save into sharepoint",
+            "save in sharepoint",
+            "save it into sharepoint",
+            "save it to sharepoint",
+            "sync to sharepoint",
+            "sync with sharepoint",
+            "push to sharepoint",
+            "upload to sharepoint",
+            "logged in",
+            "signed in",
+        )
+    ) or (
+        "sharepoint" in text_lower
+        and any(w in text_lower for w in ("save", "sync", "write", "push", "upload", "login", "sign in", "connect"))
+    )
+
+    if is_save_or_login:
+        from qualify.connectors.sharepoint import (
+            start_device_code_flow_for_session,
+            sync_to_optional_sharepoint,
+        )
+
+        sp_res = sync_to_optional_sharepoint(
+            session.record,
+            skipped_stages=session.skipped,
+            context_id=session.context_id,
+        )
+        if sp_res and sp_res.auth_mode == "delegated":
+            title = session.record.meta.initiative_name or session.record.meta.record_id or "Opportunity"
+            reply_text = (
+                f"✅ **Successfully Saved to SharePoint Online (On-Behalf-Of User)!**\n\n"
+                f"- **Initiative**: {title} (`{session.record.meta.record_id}`)\n"
+                f"- **SharePoint Folder**: [Open Opportunity Folder in SharePoint]({sp_res.folder_url})\n"
+                f"- **Business Value Brief**: [View Business_Value_Brief.md]({sp_res.brief_url})\n\n"
+                + render_business_brief(session.record, skipped_stages=session.skipped)
+            )
+            return TurnOutput(
+                reply_text=reply_text,
+                a2ui_messages=[],
+                session=session,
+            )
+
+        base_url = _os.environ.get("AGENT_URL", "https://ge-qualify-agent-g22bhpwccq-uc.a.run.app").rstrip("/")
+        auth_link = f"{base_url}/auth?context_id={_up.quote(session.context_id)}"
+        dc = start_device_code_flow_for_session(context_id=session.context_id)
+        if dc:
+            reply_text = (
+                f"🔐 **Microsoft SharePoint User Sign-In Required**\n\n"
+                f"No active Microsoft token was found yet for your session. To save **{session.record.meta.initiative_name or session.record.meta.record_id}** directly under your Microsoft account:\n\n"
+                f"1. **[Click here to open the 1-Click Sign-In Page]({auth_link})** *(or open [https://login.microsoft.com/device](https://login.microsoft.com/device) and enter code **`{dc['user_code']}`**)*\n"
+                f"2. Sign in with your Microsoft account.\n\n"
+                f"✨ **Automatic Sync**: As soon as you complete sign-in on Microsoft's page, this opportunity will **automatically sync to SharePoint Online in the background**! You can also type `save to sharepoint` here anytime to verify."
+            )
+        else:
+            reply_text = (
+                f"⚠️ **SharePoint User Login Required**: Please **[Click here to Sign in with Microsoft SharePoint]({auth_link})** "
+                f"to sync directly under your user account."
+            )
+        return TurnOutput(
+            reply_text=reply_text,
+            a2ui_messages=[],
+            session=session,
+        )
+
     # Match explicit SharePoint load/open requests or direct Record ID load
     has_sp_keyword = "sharepoint" in text_lower or "load uc-" in text_lower or "open uc-" in text_lower
     if not has_sp_keyword:

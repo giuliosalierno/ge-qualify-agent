@@ -216,3 +216,43 @@ def test_turn_loop_load_from_sharepoint_chat_command(tmp_path: Path, monkeypatch
     assert out.session.record.meta.initiative_name == "Treasury Cash Forecasting"
     assert len(out.a2ui_messages) == 3
     assert out.a2ui_messages[0]["createSurface"]["surfaceId"].startswith("qualify-complete-")
+
+
+def test_turn_loop_save_to_sharepoint_and_post_login_auto_sync(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verifies that typing 'logged in save it into sharepoint' saves the session record and auto_sync_pending_records works."""
+    monkeypatch.setenv("SHAREPOINT_MOCK_DIR", str(tmp_path))
+    import qualify.connectors.sharepoint as sp_mod
+    from qualify.sinks.session import get_or_start
+
+    sp_mod._CONNECTOR_INSTANCE = SharePointConnector(mock_dir=tmp_path)
+    sp_mod._TOKEN_VAULT.clear()
+    sp_mod._REFRESH_VAULT.clear()
+    sp_mod._PENDING_RECORDS.clear()
+    sp_mod._SYNCED_RESULTS.clear()
+
+    store = InMemorySessionStore(quiet=True)
+    # 1. Start session and populate initiative
+    session = get_or_start(store, "ctx-save-sp")
+    session.record.meta.record_id = "UC-2026-445566"
+    session.record.meta.initiative_name = "Automated Invoice Matching"
+    store.save(session)
+
+    # 2. User types 'logged in save it into sharepoint' BEFORE authenticating -> prompts login & queues pending record
+    out1 = execute_turn(
+        store,
+        TurnInput(context_id="ctx-save-sp", user_text="logged in save it into sharepoint"),
+    )
+    assert "SharePoint User Login Required" in out1.reply_text or "Sign-In Required" in out1.reply_text
+    assert "ctx-save-sp" in sp_mod._PENDING_RECORDS
+
+    # 3. Simulate Microsoft sign-in completion by caching a delegated user token
+    sp_mod.cache_delegated_token("eyJ_live_user_jwt", key="ctx-save-sp")
+
+    # 4. User types 'logged in save it into sharepoint' AFTER authenticating -> saves with delegated auth mode
+    out2 = execute_turn(
+        store,
+        TurnInput(context_id="ctx-save-sp", user_text="logged in save it into sharepoint"),
+    )
+    assert "Successfully Saved to SharePoint Online (On-Behalf-Of User)" in out2.reply_text
+    assert "Automated Invoice Matching" in out2.reply_text
+

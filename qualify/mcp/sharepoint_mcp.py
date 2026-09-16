@@ -321,31 +321,76 @@ async def handle_oauth_auth(request: Request) -> Response:
         if dc:
             user_code = dc["user_code"]
             verify_url = dc["verification_uri"]
+            safe_ctx = urllib.parse.quote(context_id)
             html = f"""<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8">
   <title>Sign in to Microsoft SharePoint</title>
   <style>
-    body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f8fafc; color: #0f172a; padding: 3rem 1.5rem; max-width: 560px; margin: 0 auto; text-align: center; }}
-    .card {{ background: white; border-radius: 12px; padding: 2.2rem; box-shadow: 0 4px 16px rgba(0,0,0,0.08); border: 1px solid #e2e8f0; }}
+    body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f8fafc; color: #0f172a; padding: 3rem 1.5rem; max-width: 580px; margin: 0 auto; text-align: center; }}
+    .card {{ background: white; border-radius: 12px; padding: 2.2rem; box-shadow: 0 4px 16px rgba(0,0,0,0.08); border: 1px solid #e2e8f0; transition: all 0.25s ease; }}
     .code-box {{ font-family: monospace; font-size: 2rem; font-weight: 700; letter-spacing: 0.15rem; background: #f1f5f9; border: 2px dashed #94a3b8; border-radius: 8px; padding: 1rem; margin: 1.5rem 0; color: #0f172a; user-select: all; }}
     .btn {{ display: inline-block; background: #2563eb; color: white; text-decoration: none; padding: 0.85rem 1.6rem; border-radius: 8px; font-weight: 600; font-size: 1rem; cursor: pointer; border: none; }}
     .btn:hover {{ background: #1d4ed8; }}
+    .btn-success {{ background: #16a34a; }}
+    .btn-success:hover {{ background: #15803d; }}
+    .status-badge {{ display: inline-block; margin-top: 1.25rem; font-size: 0.85rem; color: #64748b; background: #f1f5f9; padding: 0.4rem 0.9rem; border-radius: 999px; }}
   </style>
 </head>
 <body>
-  <div class="card">
+  <div class="card" id="main-card">
     <h2 style="margin-top:0;">🔐 Connect Microsoft SharePoint</h2>
     <p style="color:#475569;">Copy this 1-time code and click the button below to sign in with your Microsoft account:</p>
     <div class="code-box" id="code">{user_code}</div>
     <button class="btn" onclick="navigator.clipboard.writeText('{user_code}'); window.open('{verify_url}', '_blank');">
       Copy Code &amp; Open Microsoft Sign-In ↗
     </button>
-    <p style="margin-top:1.5rem;font-size:0.9rem;color:#64748b;">
-      Once you sign in on Microsoft's page, your SharePoint session is automatically active in Gemini Enterprise!
+    <div>
+      <span class="status-badge" id="poll-status">⏳ Waiting for Microsoft sign-in completion...</span>
+    </div>
+    <p style="margin-top:1.25rem;font-size:0.88rem;color:#64748b;">
+      Keep this tab open — as soon as you sign in on Microsoft's page, your opportunity will automatically sync to SharePoint Online!
     </p>
   </div>
+  <script>
+    const ctxId = "{safe_ctx}";
+    const timer = setInterval(async () => {{
+      try {{
+        const resp = await fetch(`/auth/status?context_id=${{ctxId}}`);
+        if (!resp.ok) return;
+        const data = await resp.json();
+        if (data.authenticated) {{
+          clearInterval(timer);
+          const card = document.getElementById("main-card");
+          if (data.synced && data.synced.syncedUrl) {{
+            card.innerHTML = `
+              <h2 style="color:#16a34a;margin-top:0;">✅ SharePoint Connected &amp; Opportunity Saved!</h2>
+              <p style="color:#334155;font-size:1.05rem;">
+                Your opportunity <strong>${{data.synced.title}}</strong> (<code>${{data.synced.recordId}}</code>) has been automatically saved to SharePoint Online under your Microsoft account!
+              </p>
+              <p style="margin: 1.5rem 0;">
+                <a class="btn btn-success" href="${{data.synced.syncedUrl}}" target="_blank">📂 Open Opportunity Folder in SharePoint ↗</a>
+              </p>
+              <p style="color:#16a34a;font-weight:600;font-size:0.95rem;">
+                You can now close this window and return to Gemini Enterprise.
+              </p>
+            `;
+          }} else {{
+            card.innerHTML = `
+              <h2 style="color:#16a34a;margin-top:0;">✅ Microsoft SharePoint Connected!</h2>
+              <p style="color:#334155;font-size:1.05rem;">
+                Your Microsoft account is now linked to your Gemini Enterprise session.
+              </p>
+              <p style="color:#475569;font-size:0.95rem;">
+                Return to Gemini Enterprise chat and type <strong>save to sharepoint</strong> (or submit Stage 4) to sync your opportunity directly under your user account!
+              </p>
+            `;
+          }}
+        }}
+      }} catch (e) {{}}
+    }}, 2000);
+  </script>
 </body>
 </html>"""
             return HTMLResponse(html)
@@ -357,6 +402,31 @@ async def handle_oauth_auth(request: Request) -> Response:
     sep = "&" if "?" in ge_redirect_uri else "?"
     target_url = f"{ge_redirect_uri}{sep}code={code}&state={ge_state}"
     return RedirectResponse(url=target_url, status_code=302)
+
+
+async def handle_oauth_status(request: Request) -> Response:
+    """Returns JSON status of whether the user session is authenticated with Microsoft SharePoint and any auto-synced folder URL."""
+    context_id = request.query_params.get("context_id") or "latest"
+    from qualify.connectors.sharepoint import (
+        get_cached_delegated_token,
+        get_synced_result,
+        load_delegated_refresh_token,
+    )
+
+    has_token = bool(
+        get_cached_delegated_token(context_id)
+        or get_cached_delegated_token("latest")
+        or load_delegated_refresh_token(context_id)
+    )
+    synced = get_synced_result(context_id)
+    return JSONResponse(
+        {
+            "authenticated": has_token,
+            "contextId": context_id,
+            "synced": synced,
+        }
+    )
+
 
 
 async def handle_oauth_callback(request: Request) -> Response:

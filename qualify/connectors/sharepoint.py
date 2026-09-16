@@ -184,6 +184,48 @@ def load_delegated_refresh_token(context_id: str | None = None) -> str:
     return ""
 
 
+# Pending records awaiting user authentication (context_id -> (UseCaseRecord, skipped_stages))
+_PENDING_RECORDS: dict[str, tuple[UseCaseRecord, set[int]]] = {}
+# Synced results after authentication (context_id -> dict with syncedUrl, recordId, title)
+_SYNCED_RESULTS: dict[str, dict[str, Any]] = {}
+
+
+def get_synced_result(context_id: str | None = None) -> dict[str, Any] | None:
+    """Returns the last synced SharePoint result for a user session (or latest)."""
+    if context_id and context_id in _SYNCED_RESULTS:
+        return _SYNCED_RESULTS[context_id]
+    return _SYNCED_RESULTS.get("latest")
+
+
+def auto_sync_pending_records(access_token: str, context_id: str = "latest") -> SharePointSyncResult | None:
+    """Automatically syncs any pending UseCaseRecord for the session immediately after user sign-in."""
+    pending = _PENDING_RECORDS.pop(context_id, None) or _PENDING_RECORDS.pop("latest", None)
+    if not pending:
+        return None
+    pending_rec, pending_skipped = pending
+    logger.info("Auto-syncing pending opportunity %s to SharePoint after user sign-in", pending_rec.meta.record_id)
+    try:
+        res = sync_to_optional_sharepoint(
+            pending_rec,
+            skipped_stages=pending_skipped,
+            delegated_token=access_token,
+            context_id=context_id,
+        )
+        if res and res.auth_mode == "delegated":
+            info = {
+                "syncedUrl": res.folder_url,
+                "briefUrl": res.brief_url,
+                "recordId": res.record_id,
+                "title": pending_rec.meta.initiative_name or res.record_id,
+            }
+            _SYNCED_RESULTS[context_id] = info
+            _SYNCED_RESULTS["latest"] = info
+        return res
+    except Exception as exc:
+        logger.warning("Auto-sync after sign-in failed: %s", exc)
+        return None
+
+
 def start_device_code_flow_for_session(context_id: str = "latest") -> dict[str, Any] | None:
     """Initiates a Microsoft Device Code OAuth 2.0 flow for a specific user session (context_id) and polls in background."""
     tenant_id = os.environ.get("MS_GRAPH_TENANT_ID", "").strip()
@@ -219,14 +261,17 @@ def start_device_code_flow_for_session(context_id: str = "latest") -> dict[str, 
             time.sleep(interval)
             try:
                 with httpx.Client(timeout=8.0) as client:
+                    # Microsoft Device Code flow is a public client flow; do NOT send client_secret first
                     payload = {
                         "client_id": client_id,
                         "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
                         "device_code": device_code,
                     }
-                    if client_secret:
-                        payload["client_secret"] = client_secret
                     r = client.post(token_url, data=payload)
+                    if r.status_code in (400, 401) and client_secret and "authorization_pending" not in r.text:
+                        # Retry with client_secret if app registration requires confidential client auth
+                        payload["client_secret"] = client_secret
+                        r = client.post(token_url, data=payload)
                     if r.status_code == 200:
                         res = r.json()
                         access_token = res.get("access_token", "")
@@ -239,12 +284,17 @@ def start_device_code_flow_for_session(context_id: str = "latest") -> dict[str, 
                             context_id=context_id,
                         )
                         logger.info("Successfully authenticated Microsoft user for session context_id=%s", context_id)
+                        auto_sync_pending_records(access_token, context_id=context_id)
                         return
-                    err = r.json().get("error", "")
-                    if err not in ("authorization_pending", "slow_down"):
+                    try:
+                        err = r.json().get("error", "")
+                    except Exception:
+                        err = ""
+                    if err not in ("authorization_pending", "slow_down", "invalid_client"):
+                        logger.warning("Device code poll stopped on error %s: %s", err, r.text[:200])
                         return
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Device code poll exception: %s", exc)
 
     threading.Thread(target=_poll_worker, daemon=True).start()
     return {
@@ -252,6 +302,7 @@ def start_device_code_flow_for_session(context_id: str = "latest") -> dict[str, 
         "verification_uri": verification_uri,
         "message": data.get("message", f"Open {verification_uri} and enter code {user_code}"),
     }
+
 
 
 class SharePointConnector:
@@ -328,13 +379,19 @@ class SharePointConnector:
                         "refresh_token": refresh_token,
                         "scope": "https://graph.microsoft.com/Sites.ReadWrite.All offline_access",
                     }
-                    if self.client_secret:
-                        payload["client_secret"] = self.client_secret
+                    # Try public client refresh first (for Device Code tokens), then confidential client if needed
                     resp = client.post(
                         token_url,
                         data=payload,
                         headers={"Content-Type": "application/x-www-form-urlencoded"},
                     )
+                    if resp.status_code in (400, 401) and self.client_secret:
+                        payload["client_secret"] = self.client_secret
+                        resp = client.post(
+                            token_url,
+                            data=payload,
+                            headers={"Content-Type": "application/x-www-form-urlencoded"},
+                        )
                     if resp.status_code == 200:
                         data = resp.json()
                         access_token = data["access_token"]
@@ -386,7 +443,7 @@ class SharePointConnector:
         return {"Authorization": "Bearer mock_graph_token", "Accept": "application/json"}, "mock"
 
     # -----------------------------------------------------------------------
-    # Smart Name-to-GUID Resolvers (Ported from L400 SharePoint MCP Server)
+    # Smart Name-to-GUID Resolvers (Ported from  SharePoint MCP Server)
     # -----------------------------------------------------------------------
 
     def resolve_site_id(self, headers: dict[str, str], site_query: str | None = None) -> str:
@@ -474,9 +531,10 @@ class SharePointConnector:
         *,
         skipped_stages: set[int] | None = None,
         delegated_token: str | None = None,
+        context_id: str | None = None,
     ) -> SharePointSyncResult:
         """Synchronizes a UseCaseRecord and Business Value Brief to SharePoint."""
-        headers, auth_mode = self.get_graph_headers(delegated_token)
+        headers, auth_mode = self.get_graph_headers(delegated_token, context_id=context_id)
         record_id = sanitize_path_segment(record.meta.record_id or "UC-UNKNOWN")
         init_name = sanitize_path_segment(record.meta.initiative_name or "Untitled Initiative")
         folder_name = f"{record_id} - {init_name}"
@@ -504,8 +562,8 @@ class SharePointConnector:
             "Gate1Status": gate1_status,
         }
 
-        if auth_mode == "mock":
-            return self._sync_mock(record_id, folder_name, brief_md, record_json, list_fields)
+        if auth_mode == "mock" or self._custom_mock_dir is not None:
+            return self._sync_mock(record_id, folder_name, brief_md, record_json, list_fields, auth_mode=auth_mode)
 
         try:
             site_id = self.resolve_site_id(headers)
@@ -595,6 +653,7 @@ class SharePointConnector:
         brief_md: str,
         record_json: str,
         list_fields: dict[str, Any],
+        auth_mode: str = "mock",
     ) -> SharePointSyncResult:
         """Writes SharePoint folder & list state to local filesystem mock directory."""
         base_folder = self.mock_dir / "drives" / sanitize_path_segment(self.drive_name) / sanitize_path_segment(self.folder_path) / folder_name
@@ -639,7 +698,7 @@ class SharePointConnector:
             folder_url=folder_url,
             brief_url=brief_url,
             list_item_id=list_item_id,
-            auth_mode="mock",
+            auth_mode=auth_mode,
             message=f"Synced {record_id} to SharePoint local mock ({base_folder}).",
         )
 
@@ -840,15 +899,34 @@ def sync_to_optional_sharepoint(
     *,
     skipped_stages: set[int] | None = None,
     delegated_token: str | None = None,
+    context_id: str | None = None,
 ) -> SharePointSyncResult | None:
     """Non-blocking helper called on Stage 4 completion to sync the opportunity to SharePoint."""
     try:
         connector = get_sharepoint_connector()
-        return connector.sync_opportunity(
+        res = connector.sync_opportunity(
             record,
             skipped_stages=skipped_stages,
             delegated_token=delegated_token,
+            context_id=context_id,
         )
+        if res:
+            cid = context_id or "latest"
+            if res.auth_mode != "delegated":
+                _PENDING_RECORDS[cid] = (record, set(skipped_stages or set()))
+                _PENDING_RECORDS["latest"] = (record, set(skipped_stages or set()))
+            else:
+                info = {
+                    "syncedUrl": res.folder_url,
+                    "briefUrl": res.brief_url,
+                    "recordId": res.record_id,
+                    "title": record.meta.initiative_name or res.record_id,
+                }
+                _SYNCED_RESULTS[cid] = info
+                _SYNCED_RESULTS["latest"] = info
+                _PENDING_RECORDS.pop(cid, None)
+        return res
     except Exception as exc:
         logger.warning("SharePoint sync skipped due to error: %s", exc)
         return None
+
