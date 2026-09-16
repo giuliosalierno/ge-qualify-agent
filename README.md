@@ -93,6 +93,7 @@ python3 tests/run_eval.py
 | :--- | :--- |
 | [`doc/a2ui_integration.md`](doc/a2ui_integration.md) | A2UI wire format, component catalog, and **every verified Gemini Enterprise behaviour** — including the task states that silently break server-dispatched buttons |
 | [`doc/sharepoint_auth.md`](doc/sharepoint_auth.md) | Per-user (on-behalf-of) SharePoint OAuth: the flow, the traps, and why GE withholding the token is spec-mandated |
+| [`doc/technical_review.md`](doc/technical_review.md) | The Phase 2 pack: starting a review from a business record, the 22-subcriteria score, and why the systems inventory is extracted rather than typed |
 | [`doc/design_plan.md`](doc/design_plan.md) | Qualification model, stages, and scoring |
 | [`doc/implementation_plan.md`](doc/implementation_plan.md) | Build phases and decisions |
 | [`doc/skill_best_practices.md`](doc/skill_best_practices.md) | Authoring guidance for the two skills |
