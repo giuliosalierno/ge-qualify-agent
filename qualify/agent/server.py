@@ -15,6 +15,7 @@ import uvicorn
 
 from qualify.agent.card import build_agent_card
 from qualify.agent.executor import QualifyAgentExecutor
+from qualify.agent.task_store import ReopenableTaskStore
 from qualify.agent.turn import GeminiChatClient
 from qualify.a2ui.patcher import GeminiExtractionClient
 from qualify.mcp import (
@@ -85,7 +86,10 @@ def build_app():
 
     handler = DefaultRequestHandler(
         agent_executor=executor,
-        task_store=InMemoryTaskStore(),
+        # A2UI buttons dispatch against the task that drew them, and every turn
+        # ends `completed`. See task_store.py for why that state cannot change
+        # and why the fix belongs here.
+        task_store=ReopenableTaskStore(InMemoryTaskStore()),
     )
     server = A2AStarletteApplication(agent_card=agent_card, http_handler=handler)
     app = server.build()

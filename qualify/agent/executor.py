@@ -95,21 +95,18 @@ class QualifyAgentExecutor(AgentExecutor):
             task = new_task(context.message)
             await event_queue.enqueue_event(task)
 
-        # A2UI buttons dispatch against the task that drew them, and a task in a
-        # terminal state cannot receive anything. Ending each turn `completed`
-        # made the A2A SDK reject every button click before this executor ran:
+        # `completed` is the only state Gemini Enterprise renders properly:
         #
-        #   -32602  Task <id> is in terminal state: completed
+        #   input_required  GE replaces the agent's UI with its own approval
+        #                   widget ("Review: Mock Function Call For Required
+        #                   User Input")
+        #   auth_required   GE renders nothing; the turn appears blank
         #
-        # Gemini Enterprise reported that as "Something went wrong", with no
-        # server-side error to find, because the request never got this far.
-        #
-        # `input_required` is both the fix and the honest description: a form
-        # has been rendered and the agent is waiting for the user. Only the end
-        # of the interview is `completed`.
-        #
-        # Set TASK_STATE_COMPAT=1 to restore the old always-terminal behaviour.
-        final_state = TaskState.input_required
+        # Ending every turn terminal would normally break A2UI buttons, which
+        # dispatch against the task that drew them — the SDK rejects follow-ups
+        # to a finished task with -32602 before this executor runs. That is
+        # handled in ReopenableTaskStore instead, where GE cannot see it.
+        final_state = TaskState.completed
         try:
             output: TurnOutput = execute_turn(
                 self._session_store,
@@ -121,12 +118,6 @@ class QualifyAgentExecutor(AgentExecutor):
             parts: list[Part] = [Part(root=TextPart(text=output.reply_text))]
             for a2ui_msg in output.a2ui_messages:
                 parts.append(create_a2ui_part(a2ui_msg, version=WIRE_VERSION))
-
-            if self._interview_finished(output):
-                final_state = TaskState.completed
-
-            if os.environ.get("TASK_STATE_COMPAT") == "1":
-                final_state = TaskState.completed
 
             # Gemini Enterprise currently renders NOTHING for a task in `auth-required` state:
             # the reply text is swallowed and the user sees an empty turn. So we stay off
@@ -162,24 +153,6 @@ class QualifyAgentExecutor(AgentExecutor):
             new_agent_parts_message(parts, task.context_id, task.id),
             final=True,
         )
-
-    def _interview_finished(self, output: TurnOutput) -> bool:
-        """Returns True when no further input is expected for this qualification.
-
-        Only then should the task go terminal. Get this wrong in the optimistic
-        direction and every button on the final card stops working, which is the
-        bug this whole mechanism exists to prevent — so anything unclear counts
-        as unfinished.
-        """
-        session = getattr(output, "session", None)
-        if session is None:
-            return False
-        try:
-            stages = len(session.pack.stages)
-            settled = len(set(session.committed) | set(session.skipped))
-        except Exception:  # pragma: no cover - defensive, shape is stable
-            return False
-        return stages > 0 and settled >= stages
 
     def _extract_action(self, message: Any) -> dict[str, Any] | None:
         """Pulls an A2UI action out of inbound parts, if present."""

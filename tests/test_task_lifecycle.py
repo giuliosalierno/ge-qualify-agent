@@ -109,22 +109,28 @@ _SKIP_PART = {
 }
 
 
-def test_turn_leaves_the_task_open_for_the_next_click(client: TestClient) -> None:
-    """A rendered form means the agent is waiting, not finished."""
+def test_turn_reports_completed_on_the_wire(client: TestClient) -> None:
+    """`completed` is the only state Gemini Enterprise renders properly.
+
+    `input_required` makes GE discard the agent's UI and show its own approval
+    widget instead ("Review: Mock Function Call For Required User Input").
+    `auth_required` renders nothing at all. Both were tried in production.
+    """
     results, errors = _stream(
         client, _envelope([{"kind": "text", "text": "hello"}], "ctx-open")
     )
 
     assert not errors
-    assert _state_of(results) == "input-required"
+    assert _state_of(results) == "completed"
 
 
-def test_button_click_against_the_same_task_is_accepted(client: TestClient) -> None:
-    """The exact production failure.
+def test_button_click_against_a_completed_task_is_accepted(client: TestClient) -> None:
+    """The production failure, and the thing the task store exists to fix.
 
-    Gemini Enterprise sends a button click with the taskId of the task that drew
-    the button. If that task is terminal the SDK rejects it with -32602 and the
-    executor never runs, which surfaces as a bare "Something went wrong".
+    GE sends a button click carrying the taskId of the task that drew the
+    button. That task is `completed`, and the SDK rejects follow-ups to a
+    terminal task with -32602 before the executor runs — which surfaced as a
+    bare "Something went wrong" with nothing in the server logs.
     """
     opening, _ = _stream(
         client, _envelope([{"kind": "text", "text": "hello"}], "ctx-click")
@@ -141,34 +147,63 @@ def test_button_click_against_the_same_task_is_accepted(client: TestClient) -> N
     )
 
     assert not errors, f"button click rejected: {errors}"
-    assert _state_of(results) == "input-required"
+    assert _state_of(results) == "completed"
 
 
-def test_compat_flag_restores_the_terminal_state(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """The escape hatch works, and demonstrates the bug it escapes from.
+def test_several_clicks_in_a_row_all_land(client: TestClient) -> None:
+    """One reopening must not be a one-off.
 
-    With the old behaviour restored, the click is rejected — which is what makes
-    this a regression test rather than a description.
+    An interview is four stages of buttons, so the task gets reopened on every
+    single turn.
     """
-    monkeypatch.setenv("TASK_STATE_COMPAT", "1")
-
     opening, _ = _stream(
-        client, _envelope([{"kind": "text", "text": "hello"}], "ctx-compat")
+        client, _envelope([{"kind": "text", "text": "hello"}], "ctx-many")
     )
     task_id = next(r["id"] for r in opening if r.get("kind") == "task")
-    assert _state_of(opening) == "completed"
+
+    for attempt in range(3):
+        _results, errors = _stream(
+            client,
+            _envelope(
+                [{"kind": "text", "text": "Skip"}, _SKIP_PART],
+                "ctx-many",
+                task_id=task_id,
+            ),
+        )
+        assert not errors, f"click {attempt + 1} rejected: {errors}"
+
+
+def test_without_the_wrapper_the_click_is_rejected() -> None:
+    """Proves the wrapper is load-bearing rather than decorative.
+
+    Builds the same app with a plain InMemoryTaskStore and shows the -32602 that
+    users actually hit.
+    """
+    from a2a.server.apps import A2AStarletteApplication
+    from a2a.server.request_handlers import DefaultRequestHandler
+    from a2a.server.tasks import InMemoryTaskStore
+
+    from qualify.agent.card import build_agent_card
+    from qualify.agent.executor import QualifyAgentExecutor
+    from qualify.sinks.session import InMemorySessionStore
+
+    card = build_agent_card("http://testserver")
+    handler = DefaultRequestHandler(
+        agent_executor=QualifyAgentExecutor(
+            agent_card=card, session_store=InMemorySessionStore(quiet=True)
+        ),
+        task_store=InMemoryTaskStore(),  # deliberately unwrapped
+    )
+    bare = TestClient(A2AStarletteApplication(agent_card=card, http_handler=handler).build())
+
+    opening, _ = _stream(bare, _envelope([{"kind": "text", "text": "hello"}], "ctx-bare"))
+    task_id = next(r["id"] for r in opening if r.get("kind") == "task")
 
     _results, errors = _stream(
-        client,
-        _envelope(
-            [{"kind": "text", "text": "Skip"}, _SKIP_PART],
-            "ctx-compat",
-            task_id=task_id,
-        ),
+        bare,
+        _envelope([{"kind": "text", "text": "Skip"}, _SKIP_PART], "ctx-bare", task_id=task_id),
     )
 
-    assert errors, "expected the terminal-state rejection"
+    assert errors, "expected the terminal-state rejection without the wrapper"
     assert errors[0]["code"] == -32602
     assert "terminal state" in errors[0]["message"]
