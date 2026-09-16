@@ -84,3 +84,21 @@ To run the verification tests:
 ```bash
 python3 tests/run_eval.py
 ```
+
+---
+
+## Documentation
+
+| Document | What it covers |
+| :--- | :--- |
+| [`doc/a2ui_integration.md`](doc/a2ui_integration.md) | A2UI wire format, component catalog, and **every verified Gemini Enterprise behaviour** — including the task states that silently break server-dispatched buttons |
+| [`doc/sharepoint_auth.md`](doc/sharepoint_auth.md) | Per-user (on-behalf-of) SharePoint OAuth: the flow, the traps, and why GE withholding the token is spec-mandated |
+| [`doc/design_plan.md`](doc/design_plan.md) | Qualification model, stages, and scoring |
+| [`doc/implementation_plan.md`](doc/implementation_plan.md) | Build phases and decisions |
+| [`doc/skill_best_practices.md`](doc/skill_best_practices.md) | Authoring guidance for the two skills |
+
+> [!TIP]
+> Read §8 of `a2ui_integration.md` before changing anything that touches the A2A
+> protocol boundary. Several of its findings cost days to discover and produce no
+> error message when violated — a broken agent looks identical to a working one from
+> the unit tests.
