@@ -501,6 +501,64 @@ def _maybe_offer_signin(session: Session) -> TurnOutput | None:
     )
 
 
+def _record_has_content(session: Session) -> bool:
+    """Returns True if the record holds anything worth writing to SharePoint.
+
+    A committed stage is the strongest signal, but a named initiative counts on
+    its own: the user can set the name and ask to save before finishing a stage,
+    and refusing that would be surprising.
+
+    The point of this check is narrow — stop the agent creating a folder full of
+    "Untitled Initiative" placeholders when a message is misread as a save.
+    """
+    if session.committed:
+        return True
+    return bool(session.record.meta.initiative_name)
+
+
+def _acknowledge_signin(session: Session) -> TurnOutput:
+    """Confirms the SharePoint connection and opens the first stage.
+
+    Reached when the user says "signed in" with no save verb. They are reporting
+    progress on the connect card, not asking for a write, so the right response
+    is to start the interview.
+    """
+    a2ui_messages: list[dict[str, Any]] = []
+
+    # The card has served its purpose; make sure it cannot be offered again.
+    session.signin_prompted = True
+
+    if not session.rendered_stages:
+        sid = session.next_surface_id()
+        session.rendered_stages.add(session.active_stage)
+        a2ui_messages.extend(
+            build_surface(
+                session.pack,
+                session.record,
+                session.active_stage,
+                surface_id=sid,
+                committed_stages=session.committed,
+                skipped_stages=session.skipped,
+            )
+        )
+        reply_text = (
+            "✅ **SharePoint connected.** Nothing is saved yet — we'll write the "
+            "opportunity to your SharePoint site once the qualification is "
+            "complete.\n\nLet's begin."
+        )
+    else:
+        reply_text = (
+            "✅ **SharePoint connected.** Carry on where we left off — I'll save "
+            "to SharePoint when we finish, or sooner if you ask me to."
+        )
+
+    return TurnOutput(
+        reply_text=reply_text,
+        a2ui_messages=a2ui_messages,
+        session=session,
+    )
+
+
 def _try_a2ui_probe(user_text: str | None, session: Session) -> TurnOutput | None:
     """Renders the ``openUrl`` diagnostic surface on an exact trigger phrase.
 
@@ -584,8 +642,25 @@ def _try_load_from_sharepoint(user_text: str | None, session: Session) -> TurnOu
             session=session,
         )
 
-    # Case B: User asks to save/sync to SharePoint or confirms they just logged in
-    is_save_or_login = any(
+    # Case B0: the user is telling us they finished signing in.
+    #
+    # "signed in" and "logged in" used to be treated as save commands. That was
+    # reasonable when the only reason to say them was after a save attempt had
+    # demanded a login. The connect card now asks at the very start of the
+    # conversation, so the same words mean "I'm connected, let's begin" — and
+    # reading them as "save now" wrote an empty record to SharePoint.
+    _SAVE_VERBS = ("save", "sync", "push", "upload", "write", "store")
+    _ACK_PHRASES = ("logged in", "signed in", "log in done", "i'm connected", "im connected")
+
+    mentions_save = any(v in text_lower for v in _SAVE_VERBS)
+    if any(p in text_lower for p in _ACK_PHRASES) and not mentions_save:
+        return _acknowledge_signin(session)
+
+    # Case B: an explicit request to save or sync.
+    #
+    # Note "connect", "login" and "sign in" are deliberately absent. They are
+    # requests to authenticate, not to write anything.
+    is_save_request = any(
         w in text_lower
         for w in (
             "save to sharepoint",
@@ -597,15 +672,23 @@ def _try_load_from_sharepoint(user_text: str | None, session: Session) -> TurnOu
             "sync with sharepoint",
             "push to sharepoint",
             "upload to sharepoint",
-            "logged in",
-            "signed in",
         )
-    ) or (
-        "sharepoint" in text_lower
-        and any(w in text_lower for w in ("save", "sync", "write", "push", "upload", "login", "sign in", "connect"))
-    )
+    ) or ("sharepoint" in text_lower and mentions_save)
 
-    if is_save_or_login:
+    if is_save_request:
+        if not _record_has_content(session):
+            return TurnOutput(
+                reply_text=(
+                    "There's nothing to save yet — we haven't captured any "
+                    "details for this opportunity.\n\n"
+                    "Let's work through the qualification first, and I'll write "
+                    "it to SharePoint at the end. You can also save at any point "
+                    "once we've covered a stage or two."
+                ),
+                a2ui_messages=[],
+                session=session,
+            )
+
         from qualify.connectors.sharepoint import sync_to_optional_sharepoint  # noqa: PLC0415
 
         sp_res = sync_to_optional_sharepoint(
