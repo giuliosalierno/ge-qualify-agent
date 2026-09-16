@@ -80,6 +80,8 @@ class QualifyAgentExecutor(AgentExecutor):
             or "default"
         )
 
+        self._extract_and_cache_oauth_tokens(message, context_id)
+
         turn_input = TurnInput(
             context_id=context_id,
             user_text=user_text,
@@ -149,6 +151,22 @@ class QualifyAgentExecutor(AgentExecutor):
             if isinstance(part.root, TextPart) and part.root.text:
                 texts.append(part.root.text.strip())
         return " ".join(texts) if texts else None
+
+    def _extract_and_cache_oauth_tokens(self, message: Any, context_id: str) -> None:
+        """Extracts any OAuth tokens injected by Gemini Enterprise (e.g. temp:sharepoint-auth) and caches them per-user."""
+        if message is None:
+            return
+        from qualify.connectors.sharepoint import cache_delegated_token, is_microsoft_graph_token  # noqa: PLC0415
+
+        metadata = getattr(message, "metadata", None)
+        if isinstance(metadata, dict):
+            for key, val in metadata.items():
+                if isinstance(val, str) and is_microsoft_graph_token(val):
+                    cache_delegated_token(val, key=context_id)
+                elif isinstance(val, dict):
+                    for sub_v in val.values():
+                        if isinstance(sub_v, str) and is_microsoft_graph_token(sub_v):
+                            cache_delegated_token(sub_v, key=context_id)
 
     async def cancel(self, request: RequestContext, event_queue: EventQueue) -> Task | None:
         raise ServerError(error=UnsupportedOperationError())

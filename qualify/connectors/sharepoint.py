@@ -21,6 +21,7 @@ import json
 import logging
 import os
 import re
+import threading
 import time
 import urllib.parse
 import xml.etree.ElementTree as ET
@@ -118,39 +119,139 @@ def get_cached_delegated_token(key: str = "latest") -> str | None:
     return token
 
 
-def save_delegated_refresh_token(refresh_token: str, access_token: str = "", expires_in: int = 3599) -> None:
-    """Stores a delegated user refresh token and access token in memory, env, and local disk."""
+# Per-user refresh token vault: maps context_id -> refresh_token
+_REFRESH_VAULT: dict[str, str] = {}
+
+
+def save_delegated_refresh_token(
+    refresh_token: str,
+    access_token: str = "",
+    expires_in: int = 3599,
+    context_id: str | None = None,
+) -> None:
+    """Stores a delegated user refresh token and access token per-user (context_id) as well as latest."""
+    keys = ["latest"]
+    if context_id and context_id != "latest":
+        keys.insert(0, context_id)
+
+    for k in keys:
+        if refresh_token:
+            _REFRESH_VAULT[k] = refresh_token
+        if access_token:
+            cache_delegated_token(access_token, key=k, ttl_seconds=max(60, expires_in - 60))
+
     if refresh_token:
         os.environ["MS_GRAPH_REFRESH_TOKEN"] = refresh_token
-    if access_token:
-        cache_delegated_token(access_token, key="latest", ttl_seconds=max(60, expires_in - 60))
+
     try:
-        token_file = Path(".data/sharepoint_token.json")
-        token_file.parent.mkdir(parents=True, exist_ok=True)
-        token_file.write_text(
-            json.dumps({"refresh_token": refresh_token, "access_token": access_token}, indent=2),
-            encoding="utf-8",
-        )
+        token_dir = Path(".data/sharepoint_tokens")
+        token_dir.mkdir(parents=True, exist_ok=True)
+        for k in keys:
+            safe_k = re.sub(r"[^a-zA-Z0-9_-]", "_", k)
+            (token_dir / f"{safe_k}.json").write_text(
+                json.dumps({"refresh_token": refresh_token, "access_token": access_token}, indent=2),
+                encoding="utf-8",
+            )
     except Exception as exc:
-        logger.debug("Could not write .data/sharepoint_token.json: %s", exc)
+        logger.debug("Could not write token file: %s", exc)
 
 
-def load_delegated_refresh_token() -> str:
-    """Loads a persisted delegated user refresh token from env or disk."""
+def load_delegated_refresh_token(context_id: str | None = None) -> str:
+    """Loads a persisted delegated user refresh token for a specific user session (context_id) or latest."""
+    keys = []
+    if context_id and context_id != "latest":
+        keys.append(context_id)
+    keys.append("latest")
+
+    for k in keys:
+        if k in _REFRESH_VAULT and _REFRESH_VAULT[k]:
+            return _REFRESH_VAULT[k]
+        try:
+            safe_k = re.sub(r"[^a-zA-Z0-9_-]", "_", k)
+            token_file = Path(f".data/sharepoint_tokens/{safe_k}.json")
+            if token_file.exists():
+                data = json.loads(token_file.read_text(encoding="utf-8"))
+                tok = data.get("refresh_token", "").strip()
+                if tok:
+                    _REFRESH_VAULT[k] = tok
+                    return tok
+        except Exception:
+            pass
+
     env_tok = os.environ.get("MS_GRAPH_REFRESH_TOKEN", "").strip()
     if env_tok:
         return env_tok
-    try:
-        token_file = Path(".data/sharepoint_token.json")
-        if token_file.exists():
-            data = json.loads(token_file.read_text(encoding="utf-8"))
-            tok = data.get("refresh_token", "").strip()
-            if tok:
-                os.environ["MS_GRAPH_REFRESH_TOKEN"] = tok
-                return tok
-    except Exception:
-        pass
     return ""
+
+
+def start_device_code_flow_for_session(context_id: str = "latest") -> dict[str, Any] | None:
+    """Initiates a Microsoft Device Code OAuth 2.0 flow for a specific user session (context_id) and polls in background."""
+    tenant_id = os.environ.get("MS_GRAPH_TENANT_ID", "").strip()
+    client_id = os.environ.get("MS_GRAPH_CLIENT_ID", "").strip()
+    client_secret = os.environ.get("MS_GRAPH_CLIENT_SECRET", "").strip()
+    if not tenant_id or not client_id:
+        return None
+
+    try:
+        with httpx.Client(timeout=8.0) as client:
+            resp = client.post(
+                f"https://login.microsoftonline.com/{urllib.parse.quote(tenant_id)}/oauth2/v2.0/devicecode",
+                data={
+                    "client_id": client_id,
+                    "scope": "https://graph.microsoft.com/Sites.ReadWrite.All offline_access",
+                },
+            )
+            resp.raise_for_status()
+            data = resp.json()
+    except Exception as exc:
+        logger.warning("Device code request failed: %s", exc)
+        return None
+
+    user_code = data.get("user_code", "")
+    device_code = data.get("device_code", "")
+    verification_uri = data.get("verification_uri", "https://login.microsoft.com/device")
+    interval = int(data.get("interval", 5))
+
+    def _poll_worker() -> None:
+        token_url = f"https://login.microsoftonline.com/{urllib.parse.quote(tenant_id)}/oauth2/v2.0/token"
+        start_time = time.time()
+        while time.time() - start_time < 600:
+            time.sleep(interval)
+            try:
+                with httpx.Client(timeout=8.0) as client:
+                    payload = {
+                        "client_id": client_id,
+                        "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
+                        "device_code": device_code,
+                    }
+                    if client_secret:
+                        payload["client_secret"] = client_secret
+                    r = client.post(token_url, data=payload)
+                    if r.status_code == 200:
+                        res = r.json()
+                        access_token = res.get("access_token", "")
+                        refresh_token = res.get("refresh_token", "")
+                        expires_in = int(res.get("expires_in", 3599))
+                        save_delegated_refresh_token(
+                            refresh_token,
+                            access_token,
+                            expires_in,
+                            context_id=context_id,
+                        )
+                        logger.info("Successfully authenticated Microsoft user for session context_id=%s", context_id)
+                        return
+                    err = r.json().get("error", "")
+                    if err not in ("authorization_pending", "slow_down"):
+                        return
+            except Exception:
+                pass
+
+    threading.Thread(target=_poll_worker, daemon=True).start()
+    return {
+        "user_code": user_code,
+        "verification_uri": verification_uri,
+        "message": data.get("message", f"Open {verification_uri} and enter code {user_code}"),
+    }
 
 
 class SharePointConnector:
@@ -184,7 +285,11 @@ class SharePointConnector:
             return self._custom_mock_dir
         return Path(os.environ.get("SHAREPOINT_MOCK_DIR", ".data/sharepoint_mock"))
 
-    def get_graph_headers(self, delegated_token: str | None = None) -> tuple[dict[str, str], str]:
+    def get_graph_headers(
+        self,
+        delegated_token: str | None = None,
+        context_id: str | None = None,
+    ) -> tuple[dict[str, str], str]:
         """Resolves Microsoft Graph Authorization headers using Dual-Layer OAuth 2.0.
 
         Returns:
@@ -194,21 +299,25 @@ class SharePointConnector:
         if os.environ.get("SHAREPOINT_MOCK") == "1":
             return {"Authorization": "Bearer mock_graph_token", "Accept": "application/json"}, "mock"
 
-        # Layer 1: Explicit or cached Delegated User Identity Token
-        token_candidate = delegated_token or get_cached_delegated_token("latest")
+        # Layer 1: Explicit or cached Delegated User Identity Token (per-user context_id first, then latest)
+        token_candidate = (
+            delegated_token
+            or (get_cached_delegated_token(context_id) if context_id else None)
+            or get_cached_delegated_token("latest")
+        )
         if token_candidate:
             clean = token_candidate.strip()
             if clean.lower().startswith("bearer "):
                 clean = clean[7:].strip()
             if is_microsoft_graph_token(clean):
-                cache_delegated_token(clean)
+                cache_delegated_token(clean, key=context_id or "latest")
                 return {
                     "Authorization": f"Bearer {clean}",
                     "Accept": "application/json",
                 }, "delegated"
 
-        # Layer 1b: Refresh Token exchange for Delegated User Identity
-        refresh_token = load_delegated_refresh_token()
+        # Layer 1b: Refresh Token exchange for Delegated User Identity (per-user context_id first)
+        refresh_token = load_delegated_refresh_token(context_id)
         if refresh_token and self.tenant_id and self.client_id:
             token_url = f"https://login.microsoftonline.com/{urllib.parse.quote(self.tenant_id)}/oauth2/v2.0/token"
             try:
@@ -231,7 +340,7 @@ class SharePointConnector:
                         access_token = data["access_token"]
                         new_rt = data.get("refresh_token", refresh_token)
                         expires_in = int(data.get("expires_in", 3599))
-                        save_delegated_refresh_token(new_rt, access_token, expires_in)
+                        save_delegated_refresh_token(new_rt, access_token, expires_in, context_id=context_id)
                         return {
                             "Authorization": f"Bearer {access_token}",
                             "Accept": "application/json",

@@ -286,33 +286,69 @@ async def handle_mcp_request(request: Request) -> Response:
 
 
 async def handle_oauth_auth(request: Request) -> Response:
-    """OAuth 2.0 Authorization Endpoint (`/auth`) for browser login and Gemini Enterprise connector registration."""
+    """OAuth 2.0 Authorization Endpoint (`/auth`) for Gemini Enterprise native OAuth and direct browser login."""
     ge_redirect_uri = request.query_params.get("redirect_uri", "")
     ge_state = request.query_params.get("state", "")
+    context_id = request.query_params.get("context_id", "latest")
 
     tenant_id = os.environ.get("MS_GRAPH_TENANT_ID", "").strip()
     client_id = os.environ.get("MS_GRAPH_CLIENT_ID", "").strip()
-    base_url = os.environ.get("AGENT_URL", f"http://{request.url.netloc}").rstrip("/")
-    callback_uri = ge_redirect_uri or f"{base_url}/auth/callback"
 
     if tenant_id and client_id:
-        # When Gemini Enterprise provides its registered redirect_uri (e.g. vertexaisearch.cloud.google.com/oauth-redirect),
-        # pass it directly to Microsoft Entra ID so it matches Azure Portal's registered Redirect URIs without AADSTS50011.
-        params: dict[str, str] = {
-            "client_id": client_id,
-            "response_type": "code",
-            "redirect_uri": callback_uri,
-            "response_mode": "query",
-            "scope": "https://graph.microsoft.com/Sites.ReadWrite.All offline_access",
-            "prompt": request.query_params.get("prompt", "select_account"),
-        }
-        if ge_state:
-            params["state"] = ge_state
-        auth_url = (
-            f"https://login.microsoftonline.com/{urllib.parse.quote(tenant_id)}/oauth2/v2.0/authorize?"
-            + urllib.parse.urlencode(params)
-        )
-        return RedirectResponse(url=auth_url, status_code=302)
+        if ge_redirect_uri:
+            # Gemini Enterprise native OAuth popup (registered via authorizationConfig.toolAuthorizations):
+            # Pass Gemini Enterprise's registered redirect_uri directly to Microsoft Entra ID so Azure accepts it.
+            params: dict[str, str] = {
+                "client_id": client_id,
+                "response_type": "code",
+                "redirect_uri": ge_redirect_uri,
+                "response_mode": "query",
+                "scope": "https://graph.microsoft.com/Sites.ReadWrite.All offline_access",
+                "prompt": request.query_params.get("prompt", "select_account"),
+            }
+            if ge_state:
+                params["state"] = ge_state
+            auth_url = (
+                f"https://login.microsoftonline.com/{urllib.parse.quote(tenant_id)}/oauth2/v2.0/authorize?"
+                + urllib.parse.urlencode(params)
+            )
+            return RedirectResponse(url=auth_url, status_code=302)
+
+        # Direct browser click without redirect_uri: use Device Code flow to avoid AADSTS50011
+        from qualify.connectors.sharepoint import start_device_code_flow_for_session  # noqa: PLC0415
+
+        dc = start_device_code_flow_for_session(context_id=context_id)
+        if dc:
+            user_code = dc["user_code"]
+            verify_url = dc["verification_uri"]
+            html = f"""<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Sign in to Microsoft SharePoint</title>
+  <style>
+    body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f8fafc; color: #0f172a; padding: 3rem 1.5rem; max-width: 560px; margin: 0 auto; text-align: center; }}
+    .card {{ background: white; border-radius: 12px; padding: 2.2rem; box-shadow: 0 4px 16px rgba(0,0,0,0.08); border: 1px solid #e2e8f0; }}
+    .code-box {{ font-family: monospace; font-size: 2rem; font-weight: 700; letter-spacing: 0.15rem; background: #f1f5f9; border: 2px dashed #94a3b8; border-radius: 8px; padding: 1rem; margin: 1.5rem 0; color: #0f172a; user-select: all; }}
+    .btn {{ display: inline-block; background: #2563eb; color: white; text-decoration: none; padding: 0.85rem 1.6rem; border-radius: 8px; font-weight: 600; font-size: 1rem; cursor: pointer; border: none; }}
+    .btn:hover {{ background: #1d4ed8; }}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2 style="margin-top:0;">🔐 Connect Microsoft SharePoint</h2>
+    <p style="color:#475569;">Copy this 1-time code and click the button below to sign in with your Microsoft account:</p>
+    <div class="code-box" id="code">{user_code}</div>
+    <button class="btn" onclick="navigator.clipboard.writeText('{user_code}'); window.open('{verify_url}', '_blank');">
+      Copy Code &amp; Open Microsoft Sign-In ↗
+    </button>
+    <p style="margin-top:1.5rem;font-size:0.9rem;color:#64748b;">
+      Once you sign in on Microsoft's page, your SharePoint session is automatically active in Gemini Enterprise!
+    </p>
+  </div>
+</body>
+</html>"""
+            return HTMLResponse(html)
 
     if not ge_redirect_uri:
         return JSONResponse({"error": "Missing redirect_uri and MS_GRAPH_CLIENT_ID not configured"}, status_code=400)
