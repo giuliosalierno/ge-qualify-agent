@@ -30,6 +30,10 @@ from qualify.connectors.sharepoint import (
 
 logger = logging.getLogger(__name__)
 
+# Delegated Microsoft Graph scope. `offline_access` is mandatory for Entra to return a refresh
+# token; without it the user would have to re-consent roughly every hour.
+DEFAULT_GRAPH_SCOPE = "https://graph.microsoft.com/Sites.ReadWrite.All offline_access"
+
 MCP_TOOLS: list[dict[str, Any]] = [
     {
         "name": "search_qualification_opportunities",
@@ -298,13 +302,18 @@ async def handle_oauth_auth(request: Request) -> Response:
         if ge_redirect_uri:
             # Gemini Enterprise native OAuth popup (registered via authorizationConfig.toolAuthorizations):
             # Pass Gemini Enterprise's registered redirect_uri directly to Microsoft Entra ID so Azure accepts it.
+            # Forward the inbound scope/prompt verbatim: `offline_access` is what makes Microsoft
+            # Entra return a refresh token, and `prompt=consent` re-issues it after any scope change.
+            requested_scope = request.query_params.get("scope", "").strip() or DEFAULT_GRAPH_SCOPE
+            if "offline_access" not in requested_scope:
+                requested_scope = f"{requested_scope} offline_access"
             params: dict[str, str] = {
                 "client_id": client_id,
                 "response_type": "code",
                 "redirect_uri": ge_redirect_uri,
                 "response_mode": "query",
-                "scope": "https://graph.microsoft.com/Sites.ReadWrite.All offline_access",
-                "prompt": request.query_params.get("prompt", "select_account"),
+                "scope": requested_scope,
+                "prompt": request.query_params.get("prompt", "consent"),
             }
             if ge_state:
                 params["state"] = ge_state
@@ -312,6 +321,7 @@ async def handle_oauth_auth(request: Request) -> Response:
                 f"https://login.microsoftonline.com/{urllib.parse.quote(tenant_id)}/oauth2/v2.0/authorize?"
                 + urllib.parse.urlencode(params)
             )
+            logger.info("Redirecting Gemini Enterprise OAuth popup to Microsoft Entra ID (scope=%s)", requested_scope)
             return RedirectResponse(url=auth_url, status_code=302)
 
         # Direct browser click without redirect_uri: provide both Web Auth Code flow (using registered vertexaisearch redirect URI) AND Device Code flow
