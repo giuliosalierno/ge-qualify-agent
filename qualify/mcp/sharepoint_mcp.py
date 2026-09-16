@@ -436,7 +436,6 @@ async def handle_oauth_auth(request: Request) -> Response:
 
   <script>
     const ctxId = "{safe_ctx}";
-    const redirectUri = "{registered_redirect}";
 
     function renderSuccess(data) {{
       const card = document.getElementById("main-card");
@@ -482,34 +481,9 @@ async def handle_oauth_auth(request: Request) -> Response:
       }}
     }}
 
-    async function exchangePastedCode() {{
-      const val = document.getElementById("paste-url").value.trim();
-      const msgEl = document.getElementById("exchange-msg");
-      if (!val) {{
-        msgEl.style.color = "#dc2626";
-        msgEl.textContent = "Please paste the redirect URL or authorization code first.";
-        return;
-      }}
-      msgEl.style.color = "#2563eb";
-      msgEl.textContent = "⏳ Exchanging authorization code with Microsoft Entra ID & syncing to SharePoint...";
-      try {{
-        const resp = await fetch("/auth/exchange", {{
-          method: "POST",
-          headers: {{ "Content-Type": "application/json" }},
-          body: JSON.stringify({{ code_or_url: val, redirect_uri: redirectUri, context_id: ctxId }})
-        }});
-        const res = await resp.json();
-        if (res.success) {{
-          renderSuccess(res);
-        }} else {{
-          msgEl.style.color = "#dc2626";
-          msgEl.textContent = "❌ " + (res.error || "Exchange failed.");
-        }}
-      }} catch (err) {{
-        msgEl.style.color = "#dc2626";
-        msgEl.textContent = "❌ Network error: " + err;
-      }}
-    }}
+    // The paste-a-URL flow is gone: it only ever existed to recover an
+    // authorization code from Gemini Enterprise's error page. `/auth/exchange`
+    // is still served, because a code pasted into chat still goes through it.
 
     const timer = setInterval(async () => {{
       try {{
