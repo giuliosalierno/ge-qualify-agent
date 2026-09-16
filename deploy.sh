@@ -31,6 +31,7 @@ gcloud run deploy "$SERVICE_NAME" \
   --memory "$MEMORY" \
   --min-instances 1 \
   --max-instances "$MAX_INSTANCES" \
+  --clear-base-image \
   --no-allow-unauthenticated \
   --set-env-vars=GOOGLE_CLOUD_PROJECT="$PROJECT_ID",GOOGLE_CLOUD_LOCATION="$GENAI_LOCATION",GOOGLE_GENAI_USE_VERTEXAI=TRUE,MODEL="$MODEL_NAME"
 
