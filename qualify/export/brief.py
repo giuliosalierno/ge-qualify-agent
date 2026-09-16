@@ -9,11 +9,14 @@ Implements Section 8.1 of the design plan and Decision D8:
 from __future__ import annotations
 
 from datetime import date
+from qualify.scoring.business_tier import classify_capability
 from qualify.schema.use_case_record import UseCaseRecord, WORK_WEEKS_PER_YEAR
 
 
 def render_business_brief(record: UseCaseRecord) -> str:
     """Renders a complete Business Value Brief Markdown document from a UseCaseRecord."""
+    classify_capability(record)
+
     meta = record.meta
     biz = record.business
     sizing = record.sizing
@@ -43,8 +46,8 @@ def render_business_brief(record: UseCaseRecord) -> str:
     classification = (tech.security.data_classification or "Unspecified").capitalize()
 
     # Capability & Delivery Tier
-    cap_level = tech.capability_level.value if tech.capability_level else "Pending Assessment"
-    tier = derived.delivery_tier.value if derived.delivery_tier else "To Be Determined by CoE"
+    cap_level = f"Level {tech.capability_level.value}: {tech.capability_level.label}" if tech.capability_level else "Pending Assessment"
+    tier = derived.delivery_tier.label if derived.delivery_tier else "To Be Determined by CoE"
     rationale = tech.capability_rationale or _default_tier_guidance(cap_level, tier)
 
     lines = [

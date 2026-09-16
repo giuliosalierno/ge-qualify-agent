@@ -11,7 +11,8 @@ PROJECT_ID="${PROJECT_ID:-vais-c-exp}"
 PROJECT_NUMBER="${PROJECT_NUMBER:-369594916120}"
 SERVICE_NAME="${SERVICE_NAME:-ge-qualify-agent}"
 REGION="${REGION:-us-central1}"
-MODEL_NAME="${MODEL_NAME:-gemini-2.5-flash}"
+GENAI_LOCATION="${GENAI_LOCATION:-global}"
+MODEL_NAME="${MODEL_NAME:-gemini-3-flash-preview}"
 MEMORY="${MEMORY:-1Gi}"
 MAX_INSTANCES="${MAX_INSTANCES:-1}"
 
@@ -19,7 +20,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 echo "============================================================"
 echo "Deploying '$SERVICE_NAME' to '$PROJECT_ID' / '$REGION'"
-echo "Model: $MODEL_NAME | Max Instances: $MAX_INSTANCES (L13 guard)"
+echo "Model: $MODEL_NAME ($GENAI_LOCATION) | Max Instances: $MAX_INSTANCES (L13 guard)"
 echo "============================================================"
 
 # Initial deployment from source
@@ -30,7 +31,7 @@ gcloud run deploy "$SERVICE_NAME" \
   --memory "$MEMORY" \
   --max-instances "$MAX_INSTANCES" \
   --no-allow-unauthenticated \
-  --set-env-vars=GOOGLE_CLOUD_PROJECT="$PROJECT_ID",GOOGLE_CLOUD_LOCATION="$REGION",GOOGLE_GENAI_USE_VERTEXAI=TRUE,MODEL="$MODEL_NAME",GOOGLE_PYTHON_PACKAGE_MANAGER=uv
+  --set-env-vars=GOOGLE_CLOUD_PROJECT="$PROJECT_ID",GOOGLE_CLOUD_LOCATION="$GENAI_LOCATION",GOOGLE_GENAI_USE_VERTEXAI=TRUE,MODEL="$MODEL_NAME",GOOGLE_PYTHON_PACKAGE_MANAGER=uv
 
 SERVICE_URL=$(gcloud run services describe "$SERVICE_NAME" \
   --project="$PROJECT_ID" \

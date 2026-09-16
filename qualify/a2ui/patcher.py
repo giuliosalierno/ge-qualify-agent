@@ -374,9 +374,22 @@ class GeminiExtractionClient:
         if client is not None:
             self._client = client
             return
+        import os  # noqa: PLC0415
         from google import genai  # noqa: PLC0415 - deliberate, see docstring
 
-        self._client = genai.Client()
+        # Gemini 3 preview models require the 'global' location on Vertex AI.
+        location = os.environ.get("GOOGLE_CLOUD_LOCATION", "global")
+        if "gemini-3" in self.model and location != "global":
+            location = "global"
+
+        if os.environ.get("GOOGLE_GENAI_USE_VERTEXAI", "").upper() == "TRUE":
+            self._client = genai.Client(
+                vertexai=True,
+                project=os.environ.get("GOOGLE_CLOUD_PROJECT"),
+                location=location,
+            )
+        else:
+            self._client = genai.Client()
 
     def propose(
         self, *, instruction: str, schema: dict[str, Any], conversation: str

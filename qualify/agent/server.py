@@ -14,6 +14,7 @@ import uvicorn
 
 from qualify.agent.card import build_agent_card
 from qualify.agent.executor import QualifyAgentExecutor
+from qualify.agent.turn import GeminiChatClient
 from qualify.a2ui.patcher import GeminiExtractionClient
 from qualify.sinks.session import InMemorySessionStore
 
@@ -31,19 +32,24 @@ def build_app():
     host = os.environ.get("HOST", "0.0.0.0")
     port = int(os.environ.get("PORT", 8080))
     base_url = os.environ.get("AGENT_URL", f"http://localhost:{port}")
+    model_name = os.environ.get("MODEL", "gemini-3-flash-preview")
 
-    # Use Gemini extraction client if credentials / environment permits
+    # Use Gemini extraction and chat clients if credentials / environment permits
     extraction_client = None
+    chat_client = None
     try:
-        extraction_client = GeminiExtractionClient()
+        extraction_client = GeminiExtractionClient(model=model_name)
+        chat_client = GeminiChatClient(model=model_name)
+        log.info("Initialized GeminiExtractionClient and GeminiChatClient with model %s", model_name)
     except Exception as exc:
-        log.warning("GeminiExtractionClient initialization deferred/failed: %s", exc)
+        log.warning("Gemini clients initialization deferred/failed: %s", exc)
 
     agent_card = build_agent_card(base_url)
     executor = QualifyAgentExecutor(
         agent_card=agent_card,
         session_store=InMemorySessionStore(),
         extraction_client=extraction_client,
+        chat_client=chat_client,
     )
 
     handler = DefaultRequestHandler(

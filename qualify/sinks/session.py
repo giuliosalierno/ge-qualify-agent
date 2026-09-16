@@ -184,13 +184,17 @@ def new_session(
     its conversation.
     """
     load_pack(pack_name)  # fail fast on a bad pack name, before any state exists
+    if not record_id:
+        clean_suffix = context_id.replace("-", "").upper()[:6] or "0001"
+        record_id = f"UC-{_now().year}-{clean_suffix}"
     return Session(
         context_id=context_id,
         pack_name=pack_name,
         record=UseCaseRecord(
             meta=Meta(
-                record_id=record_id or f"uc-{context_id}",
+                record_id=record_id,
                 context_id=context_id,
+                submission_date=_now().date(),
             )
         ),
     )

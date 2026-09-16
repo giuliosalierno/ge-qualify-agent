@@ -41,6 +41,7 @@ from qualify.a2ui.patcher import (
 from qualify.a2ui.provenance import missing_required, unconfirmed_in_stage
 from qualify.export.brief import render_business_brief
 from qualify.packs.loader import Stage
+from qualify.schema.coerce import get_by_path
 from qualify.sinks.session import Session, SessionStore, get_or_start
 
 log = logging.getLogger(__name__)
@@ -274,6 +275,29 @@ def _stage_intro_text(stage: Stage) -> str:
     )
 
 
+def _build_stage_state_summary(session: Session, stage: Stage) -> str:
+    """Formats the current stage's filled and missing fields for the chat model."""
+    lines = [
+        f"Record ID: {session.record.meta.record_id}",
+        f"Active Stage ({session.active_stage + 1} of {len(session.pack.stages)}): {stage.label}",
+        "Stage Probing Questions:",
+    ]
+    for q in stage.chat_questions:
+        lines.append(f"  - {q}")
+
+    lines.append("\nForm Field Status in Active Stage:")
+    for f in stage.fields:
+        val = get_by_path(session.record, f.path)
+        if val is not None and val != "" and val != []:
+            lines.append(f"  [FILLED] {f.label}: {val!r}")
+        elif f.required:
+            lines.append(f"  [MISSING - REQUIRED] {f.label} (Help: {f.help or 'none'})")
+        else:
+            lines.append(f"  [MISSING - OPTIONAL] {f.label}")
+
+    return "\n".join(lines)
+
+
 def _generate_chat_reply(
     session: Session,
     stage: Stage,
@@ -284,14 +308,18 @@ def _generate_chat_reply(
     """Generates the chat reply for a conversational turn."""
     if chat_client is not None:
         instructions = load_instructions()
-        stage_context = f"Active Stage: {stage.label} (stage {session.active_stage + 1} of {len(session.pack.stages)})"
-        record_summary = f"Record ID: {session.record.meta.record_id}"
-        return chat_client.reply(
-            instruction=instructions,
-            conversation=conversation_history or (user_text or ""),
-            stage_label=stage.label,
-            record_summary=record_summary,
-        )
+        record_summary = _build_stage_state_summary(session, stage)
+        try:
+            reply = chat_client.reply(
+                instruction=instructions,
+                conversation=conversation_history or (user_text or ""),
+                stage_label=stage.label,
+                record_summary=record_summary,
+            )
+            if reply and reply.strip():
+                return reply.strip()
+        except Exception as exc:
+            log.warning("ChatClient reply failed, using deterministic fallback: %s", exc)
 
     # Deterministic fallback when no LLM client is supplied (e.g. unit tests)
     missing = missing_required(session.record, stage)
@@ -309,3 +337,60 @@ def _generate_chat_reply(
         f"All required fields for **{stage.label}** are filled!\n\n"
         "Please review the form and click **Continue** to confirm."
     )
+
+
+class GeminiChatClient:
+    """Calls Gemini (default: gemini-3-flash-preview) for consultative coaching replies."""
+
+    def __init__(self, model: str = "gemini-3-flash-preview", client: Any = None) -> None:
+        self.model = model
+        if client is not None:
+            self._client = client
+            return
+        import os  # noqa: PLC0415
+        from google import genai  # noqa: PLC0415
+
+        location = os.environ.get("GOOGLE_CLOUD_LOCATION", "global")
+        if "gemini-3" in self.model and location != "global":
+            location = "global"
+
+        if os.environ.get("GOOGLE_GENAI_USE_VERTEXAI", "").upper() == "TRUE":
+            self._client = genai.Client(
+                vertexai=True,
+                project=os.environ.get("GOOGLE_CLOUD_PROJECT"),
+                location=location,
+            )
+        else:
+            self._client = genai.Client()
+
+    def reply(
+        self,
+        *,
+        instruction: str,
+        conversation: str,
+        stage_label: str,
+        record_summary: str,
+    ) -> str:
+        system_prompt = (
+            f"{instruction}\n\n"
+            f"=== CURRENT FORM & STAGE STATE ===\n"
+            f"{record_summary}\n\n"
+            "=== CONSULTATIVE COACHING RULES ===\n"
+            "1. Keep your response concise (2–4 sentences max). Do not output markdown tables.\n"
+            "2. Never invent or guess numbers on your own (Zero Extrapolation Rule).\n"
+            "3. If the user says they don't know or don't have exact numbers (e.g., 'I don't have them'), "
+            "coach them warmly: explain that stopwatch precision isn't needed and suggest simple ballpark ranges "
+            "(e.g., 'Is this closer to a daily task (~5 times/week) or once a week? Does a typical run take ~15 minutes or an hour?'), "
+            "or offer a conservative placeholder they can confirm or type into the form.\n"
+            "4. If all [MISSING - REQUIRED] fields for this stage are now filled, congratulate them and invite them to click **Continue** on the form card."
+        )
+        response = self._client.models.generate_content(
+            model=self.model,
+            contents=conversation,
+            config={
+                "system_instruction": system_prompt,
+                "temperature": 0.3,
+            },
+        )
+        return (getattr(response, "text", "") or "").strip()
+

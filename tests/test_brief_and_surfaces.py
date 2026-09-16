@@ -109,3 +109,24 @@ def test_completion_surface_passes_schema_and_structural_validation() -> None:
     messages = build_completion_surface(pack, record, surface_id="qualify-complete-99")
     # Strict schema + component graph validation
     validate_surface(messages)
+
+
+def test_chat_client_receives_form_state_and_brief_classifies_tier() -> None:
+    """Verifies that a custom chat client receives active field statuses and brief classifies tier."""
+    store = InMemorySessionStore(quiet=True)
+    ctx = "a1b2c3d4-5678"
+
+    captured_summary: list[str] = []
+
+    class StubChatClient:
+        def reply(self, *, instruction: str, conversation: str, stage_label: str, record_summary: str) -> str:
+            captured_summary.append(record_summary)
+            return "No problem—rough ballpark estimates work! Is it closer to 5x a week or 1x a week?"
+
+    t1 = execute_turn(store, TurnInput(context_id=ctx, user_text="I don't have exact numbers"), chat_client=StubChatClient())
+    assert "No problem—rough ballpark estimates work!" in t1.reply_text
+    assert len(captured_summary) == 1
+    assert "[MISSING - REQUIRED]" in captured_summary[0]
+    assert t1.session.record.meta.record_id.startswith("UC-")
+    assert t1.session.record.meta.submission_date is not None
+
