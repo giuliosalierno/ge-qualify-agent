@@ -293,24 +293,24 @@ async def handle_oauth_auth(request: Request) -> Response:
     tenant_id = os.environ.get("MS_GRAPH_TENANT_ID", "").strip()
     client_id = os.environ.get("MS_GRAPH_CLIENT_ID", "").strip()
     base_url = os.environ.get("AGENT_URL", f"http://{request.url.netloc}").rstrip("/")
-    callback_uri = f"{base_url}/auth/callback"
+    callback_uri = ge_redirect_uri or f"{base_url}/auth/callback"
 
     if tenant_id and client_id:
-        # Encode Gemini Enterprise redirect_uri & state into state payload
-        state_payload = json.dumps({"redirect_uri": ge_redirect_uri, "state": ge_state})
-        encoded_state = base64.urlsafe_b64encode(state_payload.encode("utf-8")).decode("ascii")
+        # When Gemini Enterprise provides its registered redirect_uri (e.g. vertexaisearch.cloud.google.com/oauth-redirect),
+        # pass it directly to Microsoft Entra ID so it matches Azure Portal's registered Redirect URIs without AADSTS50011.
+        params: dict[str, str] = {
+            "client_id": client_id,
+            "response_type": "code",
+            "redirect_uri": callback_uri,
+            "response_mode": "query",
+            "scope": "https://graph.microsoft.com/Sites.ReadWrite.All offline_access",
+            "prompt": request.query_params.get("prompt", "select_account"),
+        }
+        if ge_state:
+            params["state"] = ge_state
         auth_url = (
             f"https://login.microsoftonline.com/{urllib.parse.quote(tenant_id)}/oauth2/v2.0/authorize?"
-            + urllib.parse.urlencode(
-                {
-                    "client_id": client_id,
-                    "response_type": "code",
-                    "redirect_uri": callback_uri,
-                    "response_mode": "query",
-                    "scope": "https://graph.microsoft.com/Sites.ReadWrite.All offline_access",
-                    "state": encoded_state,
-                }
-            )
+            + urllib.parse.urlencode(params)
         )
         return RedirectResponse(url=auth_url, status_code=302)
 
@@ -441,11 +441,59 @@ def _fetch_cloud_run_oidc_token(audience: str) -> str | None:
 async def handle_oauth_token(request: Request) -> Response:
     """OAuth 2.0 Token Exchange Endpoint (`/token`) for Gemini Enterprise Connector registration.
 
+    If Gemini Enterprise sends a Microsoft `authorization_code` (received from `/auth` redirect),
+    exchanges it with Microsoft Entra ID for the user's personal Delegated Access & Refresh Token
+    and caches it in the server vault.
     Returns a Cloud Run-compatible Google OIDC transport token as `access_token` so Gemini Enterprise's
     subsequent `Authorization: Bearer <token>` calls to `POST /mcp` pass Google Cloud Run Frontend (GFE)
-    with 200 OK, while our server executes all SharePoint Graph API queries using the user's personal
-    Microsoft Delegated Access Token & Refresh Token captured during `/auth/callback`.
+    with 200 OK, while our server executes all SharePoint Graph API queries on behalf of the user.
     """
+    form_data: dict[str, str] = {}
+    try:
+        raw_form = await request.form()
+        form_data = {k: str(v) for k, v in raw_form.items()}
+    except Exception:
+        pass
+
+    code = form_data.get("code") or request.query_params.get("code", "")
+    redirect_uri = form_data.get("redirect_uri") or request.query_params.get("redirect_uri", "")
+    grant_type = form_data.get("grant_type") or request.query_params.get("grant_type", "")
+
+    tenant_id = os.environ.get("MS_GRAPH_TENANT_ID", "").strip()
+    client_id = os.environ.get("MS_GRAPH_CLIENT_ID", "").strip()
+    client_secret = os.environ.get("MS_GRAPH_CLIENT_SECRET", "").strip()
+
+    if code and tenant_id and client_id and not code.startswith("refresh_"):
+        token_url = f"https://login.microsoftonline.com/{urllib.parse.quote(tenant_id)}/oauth2/v2.0/token"
+        try:
+            with httpx.Client(timeout=10.0) as client:
+                payload = {
+                    "client_id": client_id,
+                    "grant_type": grant_type or "authorization_code",
+                    "code": code,
+                    "scope": "https://graph.microsoft.com/Sites.ReadWrite.All offline_access",
+                }
+                if redirect_uri:
+                    payload["redirect_uri"] = redirect_uri
+                if client_secret:
+                    payload["client_secret"] = client_secret
+                resp = client.post(
+                    token_url,
+                    data=payload,
+                    headers={"Content-Type": "application/x-www-form-urlencoded"},
+                )
+                if resp.status_code == 200:
+                    data = resp.json()
+                    access_token = data.get("access_token", "")
+                    refresh_token = data.get("refresh_token", "")
+                    expires_in = int(data.get("expires_in", 3599))
+                    save_delegated_refresh_token(refresh_token, access_token, expires_in)
+                    logger.info("Successfully captured Microsoft Delegated User Token & Refresh Token via /token exchange.")
+                else:
+                    logger.warning("Microsoft token exchange in /token returned %s: %s", resp.status_code, resp.text[:200])
+        except Exception as exc:
+            logger.warning("Microsoft token exchange in /token failed: %s", exc)
+
     connector = get_sharepoint_connector()
     headers, auth_mode = connector.get_graph_headers()
     auth_val = headers.get("Authorization", "Bearer mock_graph_token")
