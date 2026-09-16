@@ -22,7 +22,8 @@
             "f-uc-technical-security-data-classification-label",
             "f-uc-technical-security-data-classification",
             "f-uc-technical-grounding-acl-preservation-required",
-            "continue-button"
+            "continue-button",
+            "skip-button"
           ]
         },
         {
@@ -164,6 +165,30 @@
               "name": "commit_stage",
               "context": {
                 "prompt": "Continue — Data and systems",
+                "pack": "business",
+                "stage": "data",
+                "data": {
+                  "path": "/uc"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "skip-label",
+          "component": "Text",
+          "text": "Skip for now"
+        },
+        {
+          "id": "skip-button",
+          "component": "Button",
+          "child": "skip-label",
+          "variant": "default",
+          "action": {
+            "event": {
+              "name": "skip_stage",
+              "context": {
+                "prompt": "Skip — Data and systems",
                 "pack": "business",
                 "stage": "data",
                 "data": {

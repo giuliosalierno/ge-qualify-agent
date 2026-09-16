@@ -38,13 +38,14 @@ from qualify.sinks.session import Session
 log = logging.getLogger(__name__)
 
 COMMIT_STAGE = "commit_stage"
+SKIP_STAGE = "skip_stage"
 REVISE_STAGE = "revise_stage"
 REQUEST_GUIDANCE = "request_guidance"
 FINALIZE = "finalize"
 ATTACH_DOCUMENT = "attach_document"
 
 KNOWN_ACTIONS = frozenset(
-    {COMMIT_STAGE, REVISE_STAGE, REQUEST_GUIDANCE, FINALIZE, ATTACH_DOCUMENT}
+    {COMMIT_STAGE, SKIP_STAGE, REVISE_STAGE, REQUEST_GUIDANCE, FINALIZE, ATTACH_DOCUMENT}
 )
 
 
@@ -81,6 +82,8 @@ class ActionOutcome:
     handled: bool
     #: True when the interview may move on.
     advanced: bool = False
+    #: True when the stage was skipped rather than fully confirmed.
+    skipped: bool = False
     #: Set when the action changed which stage is active.
     stage: str | None = None
     commit: CommitResult | None = None
@@ -129,6 +132,8 @@ def dispatch(session: Session, event: ActionEvent) -> ActionOutcome:
     """
     if event.name == COMMIT_STAGE:
         return _commit_stage(session, event)
+    if event.name == SKIP_STAGE:
+        return _skip_stage(session, event)
     if event.name == REVISE_STAGE:
         return _revise_stage(session, event)
     if event.name == REQUEST_GUIDANCE:
@@ -215,6 +220,45 @@ def _commit_stage(session: Session, event: ActionEvent) -> ActionOutcome:
             f"committed {result.stage_id}, now on {session.stage}"
             if moved
             else f"committed {result.stage_id}, all stages done"
+        ),
+    )
+
+
+def _skip_stage(session: Session, event: ActionEvent) -> ActionOutcome:
+    """Skips the active stage (allowed for stage_idx > 0), saving any partial inputs."""
+    pack: Pack = session.pack
+    stage_idx = session.active_stage
+
+    if stage_idx == 0:
+        return ActionOutcome(
+            action=SKIP_STAGE,
+            handled=True,
+            advanced=False,
+            stage=pack.stages[0].id,
+            message="Stage 1 (The problem) cannot be skipped because every use case requires at least an initiative name and problem description.",
+        )
+
+    payload = _record_payload(event.context)
+    # Save any partial valid inputs without blocking on missing required fields
+    result = apply_commit(session.record, pack, stage_idx, payload)
+
+    committed_idx = stage_idx
+    committed_sid = event.surface_id or session.stage_surface_ids.get(stage_idx)
+    moved = session.skip_active_stage()
+    return ActionOutcome(
+        action=SKIP_STAGE,
+        handled=True,
+        advanced=True,
+        skipped=True,
+        stage=session.stage,
+        commit=result,
+        committed_stage_idx=committed_idx,
+        committed_surface_id=committed_sid,
+        ready_to_finalize=session.is_complete,
+        message=(
+            f"skipped {result.stage_id}, now on {session.stage}"
+            if moved
+            else f"skipped {result.stage_id}, all stages done"
         ),
     )
 

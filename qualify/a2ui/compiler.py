@@ -46,12 +46,15 @@ SURFACE_ID = "qualify"
 ROOT_ID = "root"
 _CONTINUE_ID = "continue-button"
 _CONTINUE_LABEL_ID = "continue-label"
+_SKIP_ID = "skip-button"
+_SKIP_LABEL_ID = "skip-label"
 _STAGE_CAPTION_ID = "stage-caption"
 _STAGE_TITLE_ID = "stage-title"
 _STAGE_RULE_ID = "stage-rule"
 
 #: Action fired by the Continue button. Routed in `a2ui/actions.py`.
 COMMIT_STAGE = "commit_stage"
+SKIP_STAGE = "skip_stage"
 
 #: Components with no label slot of their own, which therefore need a
 #: preceding `Text` caption.
@@ -313,6 +316,8 @@ def build_stage_components(pack: Pack, stage_idx: int) -> list[dict[str, Any]]:
             children.append(node["id"])
 
     children.append(_CONTINUE_ID)
+    if stage_idx > 0:
+        children.append(_SKIP_ID)
 
     header = [
         {
@@ -336,23 +341,12 @@ def build_stage_components(pack: Pack, stage_idx: int) -> list[dict[str, Any]]:
 
 
 def build_continue_button(pack: Pack, stage_idx: int) -> list[dict[str, Any]]:
-    """The Continue button, and the `Text` that is its child.
-
-    The base `Button` requires a child component and has no `disabled` prop,
-    so there is no client-side gate here. Required fields are enforced
-    server-side when `commit_stage` arrives, which is the only enforcement
-    that counts anyway — a disabled button stops an honest user, not a
-    malformed payload.
-
-    The context carries `{"path": "/uc"}`, which Phase 0 confirmed resolves to
-    the whole record subtree. That is the workaround for `sendDataModel` being
-    a no-op in GE (D14).
-    """
+    """The Continue button (and optional Skip for now button for Stages 2-4)."""
     stage = pack.stages[stage_idx]
     is_last = stage_idx == len(pack.stages) - 1
     label = "Submit" if is_last else "Continue"
 
-    return [
+    buttons: list[dict[str, Any]] = [
         {
             "id": _CONTINUE_LABEL_ID,
             "component": "Text",
@@ -376,6 +370,36 @@ def build_continue_button(pack: Pack, stage_idx: int) -> list[dict[str, Any]]:
             },
         },
     ]
+
+    if stage_idx > 0:
+        buttons.extend(
+            [
+                {
+                    "id": _SKIP_LABEL_ID,
+                    "component": "Text",
+                    "text": "Skip for now",
+                },
+                {
+                    "id": _SKIP_ID,
+                    "component": "Button",
+                    "child": _SKIP_LABEL_ID,
+                    "variant": "default",
+                    "action": {
+                        "event": {
+                            "name": SKIP_STAGE,
+                            "context": {
+                                "prompt": f"Skip — {stage.label}",
+                                "pack": pack.pack,
+                                "stage": stage.id,
+                                "data": {"path": f"/{DATA_MODEL_ROOT}"},
+                            },
+                        }
+                    },
+                },
+            ]
+        )
+
+    return buttons
 
 
 # ---------------------------------------------------------------------------
@@ -447,11 +471,12 @@ def build_surface(
 
 
 def build_completion_components(
-    pack: Pack, record: UseCaseRecord
+    pack: Pack, record: UseCaseRecord, skipped_stages: set[int] | None = None
 ) -> list[dict[str, Any]]:
     """Builds a read-only summary card with reopen buttons for each stage."""
     sums = summary_strings(record)
     title = record.meta.initiative_name or "Qualified Use Case"
+    skipped_set = skipped_stages or set()
 
     children = [
         "summary-title",
@@ -463,17 +488,23 @@ def build_completion_components(
         "summary-reopen-caption",
     ]
 
+    status_text = (
+        f"Record ID: {record.meta.record_id} | Gate 1: Follow-Up Items Pending"
+        if skipped_set
+        else f"Record ID: {record.meta.record_id} | Gate 1: Ready for CoE Review"
+    )
+
     nodes: list[dict[str, Any]] = [
         {
             "id": "summary-title",
             "component": "Text",
-            "text": f"Qualification Complete — {title}",
+            "text": f"Qualification Summary — {title}",
             "variant": "h3",
         },
         {
             "id": "summary-caption",
             "component": "Text",
-            "text": f"Record ID: {record.meta.record_id} | Gate 1: Ready for CoE Review",
+            "text": status_text,
             "variant": "caption",
         },
         {"id": "summary-rule-1", "component": "Divider"},
@@ -493,7 +524,7 @@ def build_completion_components(
         {
             "id": "summary-reopen-caption",
             "component": "Text",
-            "text": "Need to adjust an answer? Click below to reopen any stage:",
+            "text": "Need to adjust or complete an answer? Click below to reopen any stage:",
             "variant": "caption",
         },
     ]
@@ -501,12 +532,18 @@ def build_completion_components(
     for idx, stage in enumerate(pack.stages):
         btn_id = f"revise-btn-{stage.id}"
         lbl_id = f"revise-lbl-{stage.id}"
+        is_skipped = idx in skipped_set
+        btn_text = (
+            f"⚠ Fill Skipped Stage {idx + 1}: {stage.label}"
+            if is_skipped
+            else f"Reopen Stage {idx + 1}: {stage.label}"
+        )
         children.append(btn_id)
         nodes.append(
             {
                 "id": lbl_id,
                 "component": "Text",
-                "text": f"Reopen Stage {idx + 1}: {stage.label}",
+                "text": btn_text,
             }
         )
         nodes.append(
@@ -532,37 +569,50 @@ def build_completion_components(
 
 
 def build_completion_surface(
-    pack: Pack, record: UseCaseRecord, surface_id: str = SURFACE_ID
+    pack: Pack,
+    record: UseCaseRecord,
+    surface_id: str = SURFACE_ID,
+    skipped_stages: set[int] | None = None,
 ) -> list[dict[str, Any]]:
-    """Emits the final summary surface when all stages have been confirmed."""
+    """Emits the final summary surface when all stages have been confirmed or skipped."""
     last_idx = len(pack.stages) - 1
     return [
         build_create_surface(surface_id),
-        build_update_components(build_completion_components(pack, record), surface_id),
+        build_update_components(
+            build_completion_components(pack, record, skipped_stages=skipped_stages),
+            surface_id,
+        ),
         build_patch("/", build_data_model(record, pack, last_idx), surface_id),
     ]
 
 
 def build_collapsed_stage_components(
-    pack: Pack, record: UseCaseRecord, stage_idx: int
+    pack: Pack, record: UseCaseRecord, stage_idx: int, skipped: bool = False
 ) -> list[dict[str, Any]]:
-    """Builds a compact 1-line summary banner for a completed stage card."""
+    """Builds a compact 1-line summary banner for a completed or skipped stage card."""
     stage = pack.stages[stage_idx]
     title_id = f"collapsed-title-{stage.id}"
     btn_id = f"collapsed-revise-btn-{stage.id}"
     lbl_id = f"collapsed-revise-lbl-{stage.id}"
 
+    banner_text = (
+        f"⚠ Stage {stage_idx + 1}: {stage.label} — Skipped (Needs follow-up)"
+        if skipped
+        else f"✓ Stage {stage_idx + 1}: {stage.label} — Confirmed"
+    )
+    btn_label = "Reopen & Fill" if skipped else "Revise"
+
     nodes: list[dict[str, Any]] = [
         {
             "id": title_id,
             "component": "Text",
-            "text": f"✓ Stage {stage_idx + 1}: {stage.label} — Confirmed",
+            "text": banner_text,
             "variant": "caption",
         },
         {
             "id": lbl_id,
             "component": "Text",
-            "text": "Revise",
+            "text": btn_label,
         },
         {
             "id": btn_id,
@@ -590,10 +640,11 @@ def build_collapsed_stage_patch(
     record: UseCaseRecord,
     stage_idx: int,
     surface_id: str,
+    skipped: bool = False,
 ) -> dict[str, Any]:
     """Emits an updateComponents message replacing the completed stage's form with a compact banner."""
     return build_update_components(
-        build_collapsed_stage_components(pack, record, stage_idx),
+        build_collapsed_stage_components(pack, record, stage_idx, skipped=skipped),
         surface_id=surface_id,
     )
 

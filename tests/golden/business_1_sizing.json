@@ -26,7 +26,8 @@
             "f-ui-summary-hours-line",
             "f-ui-summary-hours-basis-label",
             "f-ui-summary-hours-basis",
-            "continue-button"
+            "continue-button",
+            "skip-button"
           ]
         },
         {
@@ -126,6 +127,30 @@
               "name": "commit_stage",
               "context": {
                 "prompt": "Continue — Effort and value",
+                "pack": "business",
+                "stage": "sizing",
+                "data": {
+                  "path": "/uc"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "skip-label",
+          "component": "Text",
+          "text": "Skip for now"
+        },
+        {
+          "id": "skip-button",
+          "component": "Button",
+          "child": "skip-label",
+          "variant": "default",
+          "action": {
+            "event": {
+              "name": "skip_stage",
+              "context": {
+                "prompt": "Skip — Effort and value",
                 "pack": "business",
                 "stage": "sizing",
                 "data": {

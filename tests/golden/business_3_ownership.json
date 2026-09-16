@@ -23,7 +23,8 @@
             "f-uc-proposed-executive-sponsor",
             "f-uc-proposed-domain-sme",
             "f-uc-proposed-adoption-kpi",
-            "continue-button"
+            "continue-button",
+            "skip-button"
           ]
         },
         {
@@ -104,6 +105,30 @@
               "name": "commit_stage",
               "context": {
                 "prompt": "Submit — Ownership and next steps",
+                "pack": "business",
+                "stage": "ownership",
+                "data": {
+                  "path": "/uc"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "skip-label",
+          "component": "Text",
+          "text": "Skip for now"
+        },
+        {
+          "id": "skip-button",
+          "component": "Button",
+          "child": "skip-label",
+          "variant": "default",
+          "action": {
+            "event": {
+              "name": "skip_stage",
+              "context": {
+                "prompt": "Skip — Ownership and next steps",
                 "pack": "business",
                 "stage": "ownership",
                 "data": {

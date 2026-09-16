@@ -53,6 +53,8 @@ class Session:
     #: high-water mark because `revise_stage` can reopen stage 1 while stages
     #: 2 and 3 stay committed, and a single integer cannot express that.
     committed: set[int] = field(default_factory=set)
+    #: Stage indices the user chose to skip for now (allowed for stage_idx > 0).
+    skipped: set[int] = field(default_factory=set)
     #: Stage indices whose initial surface has already been emitted to the client.
     rendered_stages: set[int] = field(default_factory=set)
     #: Monotonic counter used to give each newly rendered stage a distinct
@@ -89,7 +91,7 @@ class Session:
 
     @property
     def is_complete(self) -> bool:
-        """Every stage committed. The precondition for `finalize`."""
+        """Every stage committed (or skipped). The precondition for `finalize`."""
         return len(self.committed) == len(self.pack.stages)
 
     def advance(self) -> bool:
@@ -99,6 +101,19 @@ class Session:
         to. The caller should treat that as "ready to finalise", not as an
         error — running off the end of the pack is the goal, not a fault.
         """
+        self.skipped.discard(self.active_stage)
+        self.committed.add(self.active_stage)
+        self.touch()
+        if self.is_last_stage:
+            return False
+        self.active_stage += 1
+        return True
+
+    def skip_active_stage(self) -> bool:
+        """Marks the active stage as skipped (allowed for stage_idx > 0) and advances."""
+        if self.active_stage == 0:
+            raise ValueError("Stage 0 cannot be skipped.")
+        self.skipped.add(self.active_stage)
         self.committed.add(self.active_stage)
         self.touch()
         if self.is_last_stage:
@@ -119,6 +134,7 @@ class Session:
                 f"(0-{len(self.pack.stages) - 1})"
             )
         self.committed.discard(stage_idx)
+        self.skipped.discard(stage_idx)
         self.rendered_stages.discard(stage_idx)
         self.active_stage = stage_idx
         self.touch()

@@ -171,4 +171,55 @@ def test_stage_2_sizing_chat_turn_with_ui_paths() -> None:
     assert "ballpark figures" in out.reply_text
 
 
+def test_skip_stage_button_and_chat_flow() -> None:
+    """Verifies that Stage 0 cannot be skipped, Stages 1-3 can be skipped via button or chat, and skipped items appear in the Brief."""
+    from qualify.a2ui.actions import SKIP_STAGE
+
+    store = InMemorySessionStore(quiet=True)
+    ctx = "ctx-skip-test"
+
+    # Turn 1: Start on Stage 0
+    execute_turn(store, TurnInput(context_id=ctx, user_text="Start"))
+
+    # Attempting to skip Stage 0 in chat is refused
+    t_refuse = execute_turn(store, TurnInput(context_id=ctx, user_text="skip"))
+    assert "Stage 1 (The problem) cannot be skipped" in t_refuse.reply_text
+    assert t_refuse.session.active_stage == 0
+
+    # Commit Stage 0 -> advances to Stage 1 (sizing)
+    execute_turn(
+        store,
+        TurnInput(context_id=ctx, action_data={"name": COMMIT_STAGE, "context": NEEDS_PAYLOAD}),
+    )
+
+    # Skip Stage 1 (sizing) via chat command 'skip for now'
+    t_skip1 = execute_turn(store, TurnInput(context_id=ctx, user_text="skip for now"))
+    assert t_skip1.session.active_stage == 2
+    assert 1 in t_skip1.session.skipped
+    assert "Skipped **Effort and value** for now" in t_skip1.reply_text
+    # Collapsed banner should show '⚠ Stage 2: Effort and value — Skipped'
+    collapsed_comps = t_skip1.a2ui_messages[0]["updateComponents"]["components"]
+    assert any("Skipped (Needs follow-up)" in c.get("text", "") for c in collapsed_comps)
+
+    # Commit Stage 2 (data) normally
+    execute_turn(
+        store,
+        TurnInput(context_id=ctx, action_data={"name": COMMIT_STAGE, "context": DATA_PAYLOAD}),
+    )
+
+    # Skip Stage 3 (ownership) via SKIP_STAGE button action -> finalizes
+    t_final = execute_turn(
+        store,
+        TurnInput(
+            context_id=ctx,
+            action_data={"name": SKIP_STAGE, "context": {"stage": "ownership"}},
+        ),
+    )
+    assert t_final.is_complete
+    assert "## ⚠️ Open Discovery Items (Pending Follow-Up)" in t_final.reply_text
+    assert "CONDITIONAL QUALIFICATION" in t_final.reply_text
+    assert "Effort and value" in t_final.reply_text
+
+
+
 

@@ -22,6 +22,8 @@ from qualify.a2ui.actions import (
     FINALIZE,
     REQUEST_GUIDANCE,
     REVISE_STAGE,
+    SKIP_STAGE,
+    ActionEvent,
     ActionOutcome,
     dispatch,
     parse_action,
@@ -132,6 +134,19 @@ def execute_turn(
     # -----------------------------------------------------------------------
     # Case 2: Inbound chat message
     # -----------------------------------------------------------------------
+    if _is_chat_skip_intent(turn_input.user_text):
+        event = ActionEvent(
+            name=SKIP_STAGE,
+            context={"stage": session.stage},
+            surface_id=session.current_surface_id,
+        )
+        outcome = dispatch(session, event)
+        output = _handle_action_outcome(
+            session, outcome, chat_client, turn_input.conversation_history
+        )
+        store.save(session)
+        return output
+
     a2ui_messages: list[dict[str, Any]] = []
     drafts: list[FieldDraft] = []
     stage = session.pack.stages[session.active_stage]
@@ -204,7 +219,7 @@ def _handle_action_outcome(
     """Produces the TurnOutput for an action dispatch."""
     a2ui_messages: list[dict[str, Any]] = []
 
-    if outcome.action == COMMIT_STAGE:
+    if outcome.action in (COMMIT_STAGE, SKIP_STAGE):
         if outcome.advanced:
             if (
                 outcome.committed_stage_idx is not None
@@ -216,19 +231,27 @@ def _handle_action_outcome(
                         session.record,
                         outcome.committed_stage_idx,
                         surface_id=outcome.committed_surface_id,
+                        skipped=outcome.skipped,
                     )
                 )
 
             if outcome.ready_to_finalize:
-                # All stages committed: emit the complete Markdown Business Value Brief,
+                # All stages committed/skipped: emit the complete Markdown Business Value Brief,
                 # render a new summary/completion card, and sync to optional Google Sheet.
                 from qualify.sinks.sheets import sync_to_optional_sheet  # noqa: PLC0415
 
                 sync_to_optional_sheet(session.record)
-                reply_text = render_business_brief(session.record)
+                reply_text = render_business_brief(
+                    session.record, skipped_stages=session.skipped
+                )
                 sid = session.next_surface_id("complete")
                 a2ui_messages.extend(
-                    build_completion_surface(session.pack, session.record, surface_id=sid)
+                    build_completion_surface(
+                        session.pack,
+                        session.record,
+                        surface_id=sid,
+                        skipped_stages=session.skipped,
+                    )
                 )
             else:
                 # Stage advanced: render the new stage surface as a new chat message card
@@ -240,14 +263,27 @@ def _handle_action_outcome(
                     )
                 )
                 stage = session.pack.stages[session.active_stage]
-                reply_text = _stage_intro_text(stage)
+                if outcome.skipped and outcome.committed_stage_idx is not None:
+                    prev_label = session.pack.stages[outcome.committed_stage_idx].label
+                    reply_text = (
+                        f"Skipped **{prev_label}** for now (you can reopen and complete it anytime).\n\n"
+                        + _stage_intro_text(stage)
+                    )
+                else:
+                    reply_text = _stage_intro_text(stage)
         else:
-            # Stage commit failed (e.g. required fields blank or rejected)
-            reply_text = (
-                f"Before we can continue to the next stage, please provide the required information:\n"
-                f"- {outcome.message}\n\n"
-                "You can fill these in directly on the form or tell me in chat."
-            )
+            # Stage commit/skip blocked (e.g. required fields blank on Stage 1)
+            if outcome.action == SKIP_STAGE:
+                reply_text = (
+                    f"{outcome.message}\n\n"
+                    "Please fill in the initiative name and problem description above, or tell me in chat."
+                )
+            else:
+                reply_text = (
+                    f"Before we can continue to the next stage, please provide the required information:\n"
+                    f"- {outcome.message}\n\n"
+                    "You can fill these in directly on the form, tell me in chat, or click **Skip for now** if you need to gather this later."
+                )
 
     elif outcome.action == REVISE_STAGE:
         if outcome.handled:
@@ -321,6 +357,26 @@ def _build_stage_state_summary(session: Session, stage: Stage) -> str:
     return "\n".join(lines)
 
 
+def _is_chat_skip_intent(user_text: str | None) -> bool:
+    """Returns True if the user explicitly asks to skip the active section in chat."""
+    if not user_text:
+        return False
+    stripped = user_text.strip().lower()
+    if len(stripped) > 60:
+        return False
+    skip_phrases = (
+        "skip",
+        "skip this",
+        "skip for now",
+        "skip section",
+        "skip stage",
+        "let's skip",
+        "lets skip",
+        "skip it",
+    )
+    return stripped in skip_phrases or any(stripped.startswith(p + " ") for p in skip_phrases)
+
+
 def _should_skip_extraction(user_text: str | None) -> bool:
     """Returns True if the user message is a short uncertainty/question phrase with no digits."""
     if not user_text:
@@ -373,7 +429,8 @@ def _generate_chat_reply(
             "- **Frequency**: Is this closer to a daily task (**5** times/week) or once a week (**1** time/week)?\n"
             "- **Baseline**: Does a typical run take around **30** minutes today?\n"
             "- **Savings**: Would saving **15** minutes per run be a fair conservative target?\n\n"
-            "Feel free to reply with your best guess (e.g., *'5 times a week, 30 mins baseline, 15 mins saved'*) or type them into the form."
+            "Feel free to reply with your best guess (e.g., *'5 times a week, 30 mins baseline, 15 mins saved'*), "
+            "or click **Skip for now** on the form (or reply **'skip'**) to come back to sizing later."
         )
 
     missing = missing_required(session.record, stage)
@@ -382,10 +439,15 @@ def _generate_chat_reply(
 
     missing_labels = [f.label for f in missing]
     if missing_labels:
+        skip_hint = (
+            " (or click **Skip for now** if you don't have this yet)"
+            if session.active_stage > 0
+            else ""
+        )
         return (
             f"Thanks. For **{stage.label}**, we still need:\n"
             + "\n".join(f"- {label}" for label in missing_labels)
-            + "\n\nWhen ready, click **Continue** on the form."
+            + f"\n\nWhen ready, click **Continue** on the form{skip_hint}."
         )
     return (
         f"All required fields for **{stage.label}** are filled!\n\n"
@@ -436,7 +498,7 @@ class GeminiChatClient:
             "3. If the user says they don't know or don't have exact numbers (e.g., 'I don't have them'), "
             "coach them warmly: explain that stopwatch precision isn't needed and suggest simple ballpark ranges "
             "(e.g., 'Is this closer to a daily task (~5 times/week) or once a week? Does a typical run take ~15 minutes or an hour?'), "
-            "or offer a conservative placeholder they can confirm or type into the form.\n"
+            "and remind them they can also click **Skip for now** on the form (or type 'skip') if they want to come back to this section later.\n"
             "4. If all [MISSING - REQUIRED] fields for this stage are now filled, congratulate them and invite them to click **Continue** on the form card."
         )
         base_config: dict[str, Any] = {

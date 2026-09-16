@@ -13,9 +13,23 @@ from qualify.scoring.business_tier import classify_capability
 from qualify.schema.use_case_record import UseCaseRecord, WORK_WEEKS_PER_YEAR
 
 
-def render_business_brief(record: UseCaseRecord) -> str:
+def render_business_brief(
+    record: UseCaseRecord, skipped_stages: set[int] | None = None
+) -> str:
     """Renders a complete Business Value Brief Markdown document from a UseCaseRecord."""
+    from qualify.a2ui.provenance import missing_required  # noqa: PLC0415
+    from qualify.packs.loader import load_pack  # noqa: PLC0415
+
     classify_capability(record)
+    pack = load_pack("business")
+    skipped_set = skipped_stages or set()
+
+    open_stage_items: list[tuple[str, list[str]]] = []
+    for idx, st in enumerate(pack.stages):
+        missing = missing_required(record, st)
+        if missing or idx in skipped_set:
+            labels = [f.label for f in missing] or ["Pending confirmation"]
+            open_stage_items.append((st.label, labels))
 
     meta = record.meta
     biz = record.business
@@ -50,12 +64,34 @@ def render_business_brief(record: UseCaseRecord) -> str:
     tier = derived.delivery_tier.label if derived.delivery_tier else "To Be Determined by CoE"
     rationale = tech.capability_rationale or _default_tier_guidance(cap_level, tier)
 
+    gate_status = (
+        "`⚠️ CONDITIONAL QUALIFICATION — OPEN DISCOVERY ITEMS PENDING`"
+        if open_stage_items
+        else "`BUSINESS QUALIFICATION COMPLETE — READY FOR COE & TECHNICAL REVIEW`"
+    )
+
     lines = [
         f"# Business Value Brief: {title}",
         "",
-        "> **Gate 1 Status:** `BUSINESS QUALIFICATION COMPLETE — READY FOR COE & TECHNICAL REVIEW`  ",
+        f"> **Gate 1 Status:** {gate_status}  ",
         f"> **Record ID:** `{meta.record_id}` | **Date:** `{sub_date}`",
         "",
+    ]
+
+    if open_stage_items:
+        lines.extend([
+            "---",
+            "",
+            "## ⚠️ Open Discovery Items (Pending Follow-Up)",
+            "",
+            "The following items were skipped during initial intake and should be confirmed prior to final Gate 1 sign-off:",
+            "",
+        ])
+        for st_label, item_labels in open_stage_items:
+            lines.append(f"- **{st_label}**: {', '.join(item_labels)}")
+        lines.append("")
+
+    lines.extend([
         "---",
         "",
         "## 1. Executive Summary & Governance",
@@ -72,7 +108,7 @@ def render_business_brief(record: UseCaseRecord) -> str:
         "### As-Is Problem & Bottlenecks",
         biz.problem_description or "_No problem description recorded._",
         "",
-    ]
+    ])
 
     if biz.user_stories:
         lines.extend([
