@@ -40,6 +40,12 @@ echo "Deploying '$SERVICE_NAME' to '$PROJECT_ID' / '$REGION'"
 echo "Model: $MODEL_NAME ($GENAI_LOCATION) | Max Instances: $MAX_INSTANCES (L13 guard)"
 echo "============================================================"
 
+# WEB_OAUTH_CALLBACK gates one-click browser sign-in. It requires
+# "${SERVICE_URL}/auth/callback" to be registered under Authentication -> Web
+# on the Azure app, otherwise Microsoft answers AADSTS50011. Set it to 0 to
+# fall back to device code.
+WEB_OAUTH_CALLBACK="${WEB_OAUTH_CALLBACK:-1}"
+
 # Initial deployment from source (builds Dockerfile)
 gcloud run deploy "$SERVICE_NAME" \
   --source "$SCRIPT_DIR" \
@@ -50,7 +56,7 @@ gcloud run deploy "$SERVICE_NAME" \
   --max-instances "$MAX_INSTANCES" \
   --clear-base-image \
   --allow-unauthenticated \
-  --set-env-vars="GOOGLE_CLOUD_PROJECT=${PROJECT_ID},GOOGLE_CLOUD_LOCATION=${GENAI_LOCATION},GOOGLE_GENAI_USE_VERTEXAI=TRUE,MODEL=${MODEL_NAME},MS_GRAPH_TENANT_ID=${MS_GRAPH_TENANT_ID:-},MS_GRAPH_CLIENT_ID=${MS_GRAPH_CLIENT_ID:-},MS_GRAPH_CLIENT_SECRET=${MS_GRAPH_CLIENT_SECRET:-},MS_GRAPH_REFRESH_TOKEN=${MS_GRAPH_REFRESH_TOKEN:-},SHAREPOINT_INSTANCE_URL=${SHAREPOINT_INSTANCE_URL:-}"
+  --set-env-vars="GOOGLE_CLOUD_PROJECT=${PROJECT_ID},GOOGLE_CLOUD_LOCATION=${GENAI_LOCATION},GOOGLE_GENAI_USE_VERTEXAI=TRUE,MODEL=${MODEL_NAME},MS_GRAPH_TENANT_ID=${MS_GRAPH_TENANT_ID:-},MS_GRAPH_CLIENT_ID=${MS_GRAPH_CLIENT_ID:-},MS_GRAPH_CLIENT_SECRET=${MS_GRAPH_CLIENT_SECRET:-},MS_GRAPH_REFRESH_TOKEN=${MS_GRAPH_REFRESH_TOKEN:-},SHAREPOINT_INSTANCE_URL=${SHAREPOINT_INSTANCE_URL:-},WEB_OAUTH_CALLBACK=${WEB_OAUTH_CALLBACK}"
 
 SERVICE_URL=$(gcloud run services describe "$SERVICE_NAME" \
   --project="$PROJECT_ID" \
