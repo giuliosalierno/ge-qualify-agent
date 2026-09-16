@@ -416,7 +416,36 @@ def _try_load_from_sharepoint(user_text: str | None, session: Session) -> TurnOu
 
     text_lower = user_text.strip().lower()
 
-    # Check if user is asking to save/sync to SharePoint or confirming they just logged in
+    # Case A: User pasted a Microsoft OAuth redirect URL (https://vertexaisearch.cloud.google.com/oauth-redirect?code=...) or raw code
+    if "vertexaisearch.cloud.google.com/oauth-redirect" in text_lower or "code=0." in text_lower or user_text.strip().startswith("0.A"):
+        from qualify.connectors.sharepoint import (
+            exchange_auth_code_for_session,
+            sync_to_optional_sharepoint,
+        )
+
+        ex_res = exchange_auth_code_for_session(user_text.strip(), context_id=session.context_id)
+        if ex_res.get("success"):
+            sp_res = sync_to_optional_sharepoint(
+                session.record,
+                skipped_stages=session.skipped,
+                context_id=session.context_id,
+            )
+            folder_url = (sp_res.folder_url if sp_res else None) or ex_res.get("folderUrl") or "https://zd8vn.sharepoint.com/"
+            title = session.record.meta.initiative_name or session.record.meta.record_id or "Opportunity"
+            reply_text = (
+                f"✅ **Microsoft SharePoint Connected & Opportunity Saved!**\n\n"
+                f"- **Initiative**: {title} (`{session.record.meta.record_id}`)\n"
+                f"- **SharePoint Folder**: [Open Opportunity Folder in SharePoint]({folder_url})\n\n"
+                + render_business_brief(session.record, skipped_stages=session.skipped)
+            )
+            return TurnOutput(reply_text=reply_text, a2ui_messages=[], session=session)
+        return TurnOutput(
+            reply_text=f"⚠️ Could not exchange Microsoft authorization code: `{ex_res.get('error')}`. Please click the sign-in link again to generate a fresh code.",
+            a2ui_messages=[],
+            session=session,
+        )
+
+    # Case B: User asks to save/sync to SharePoint or confirms they just logged in
     is_save_or_login = any(
         w in text_lower
         for w in (
@@ -438,10 +467,7 @@ def _try_load_from_sharepoint(user_text: str | None, session: Session) -> TurnOu
     )
 
     if is_save_or_login:
-        from qualify.connectors.sharepoint import (
-            start_device_code_flow_for_session,
-            sync_to_optional_sharepoint,
-        )
+        from qualify.connectors.sharepoint import sync_to_optional_sharepoint  # noqa: PLC0415
 
         sp_res = sync_to_optional_sharepoint(
             session.record,
@@ -465,20 +491,27 @@ def _try_load_from_sharepoint(user_text: str | None, session: Session) -> TurnOu
 
         base_url = _os.environ.get("AGENT_URL", "https://ge-qualify-agent-g22bhpwccq-uc.a.run.app").rstrip("/")
         auth_link = f"{base_url}/auth?context_id={_up.quote(session.context_id)}"
-        dc = start_device_code_flow_for_session(context_id=session.context_id)
-        if dc:
-            reply_text = (
-                f"🔐 **Microsoft SharePoint User Sign-In Required**\n\n"
-                f"No active Microsoft token was found yet for your session. To save **{session.record.meta.initiative_name or session.record.meta.record_id}** directly under your Microsoft account:\n\n"
-                f"1. **[Click here to open the 1-Click Sign-In Page]({auth_link})** *(or open [https://login.microsoft.com/device](https://login.microsoft.com/device) and enter code **`{dc['user_code']}`**)*\n"
-                f"2. Sign in with your Microsoft account.\n\n"
-                f"✨ **Automatic Sync**: As soon as you complete sign-in on Microsoft's page, this opportunity will **automatically sync to SharePoint Online in the background**! You can also type `save to sharepoint` here anytime to verify."
-            )
-        else:
-            reply_text = (
-                f"⚠️ **SharePoint User Login Required**: Please **[Click here to Sign in with Microsoft SharePoint]({auth_link})** "
-                f"to sync directly under your user account."
-            )
+        tenant_id = _os.environ.get("MS_GRAPH_TENANT_ID", "918002ad-54bb-4139-804a-2da0d762bd54").strip()
+        client_id = _os.environ.get("MS_GRAPH_CLIENT_ID", "d8a18018-c2a9-4f7e-b464-320141d6623d").strip()
+        ms_direct_auth = (
+            f"https://login.microsoftonline.com/{_up.quote(tenant_id)}/oauth2/v2.0/authorize?"
+            + _up.urlencode({
+                "client_id": client_id,
+                "response_type": "code",
+                "redirect_uri": "https://vertexaisearch.cloud.google.com/oauth-redirect",
+                "response_mode": "query",
+                "scope": "https://graph.microsoft.com/Sites.ReadWrite.All offline_access",
+                "state": session.context_id,
+                "prompt": "select_account",
+            })
+        )
+        reply_text = (
+            f"🔐 **Microsoft SharePoint User Sign-In Required**\n\n"
+            f"To save **{session.record.meta.initiative_name or session.record.meta.record_id}** directly under your Microsoft account (without Azure Device Code restrictions):\n\n"
+            f"1. **[Click here to Sign In with Microsoft ↗]({ms_direct_auth})** *(uses your registered `vertexaisearch` Redirect URI)*\n"
+            f"2. After signing in, **copy the URL from your browser's address bar** (`https://vertexaisearch.cloud.google.com/oauth-redirect?code=...`) and **paste it right here in chat** (or paste it on the **[SharePoint Auth Page]({auth_link})**).\n\n"
+            f"As soon as you paste that URL here, I will immediately exchange your token and save this opportunity to SharePoint Online!"
+        )
         return TurnOutput(
             reply_text=reply_text,
             a2ui_messages=[],

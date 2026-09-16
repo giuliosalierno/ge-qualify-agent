@@ -21,6 +21,7 @@ from qualify.mcp import (
     handle_mcp_request,
     handle_oauth_auth,
     handle_oauth_callback,
+    handle_oauth_exchange,
     handle_oauth_status,
     handle_oauth_token,
 )
@@ -73,6 +74,7 @@ def build_app():
             Route("/mcp", handle_mcp_request, methods=["POST", "GET", "OPTIONS"]),
             Route("/auth", handle_oauth_auth, methods=["GET", "POST"]),
             Route("/auth/status", handle_oauth_status, methods=["GET"]),
+            Route("/auth/exchange", handle_oauth_exchange, methods=["POST"]),
             Route("/auth/callback", handle_oauth_callback, methods=["GET", "POST"]),
             Route("/token", handle_oauth_token, methods=["POST", "GET"]),
         ]

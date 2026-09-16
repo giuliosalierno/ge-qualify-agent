@@ -314,47 +314,163 @@ async def handle_oauth_auth(request: Request) -> Response:
             )
             return RedirectResponse(url=auth_url, status_code=302)
 
-        # Direct browser click without redirect_uri: use Device Code flow to avoid AADSTS50011
+        # Direct browser click without redirect_uri: provide both Web Auth Code flow (using registered vertexaisearch redirect URI) AND Device Code flow
         from qualify.connectors.sharepoint import start_device_code_flow_for_session  # noqa: PLC0415
 
         dc = start_device_code_flow_for_session(context_id=context_id)
-        if dc:
-            user_code = dc["user_code"]
-            verify_url = dc["verification_uri"]
-            safe_ctx = urllib.parse.quote(context_id)
-            html = f"""<!DOCTYPE html>
+        user_code = dc["user_code"] if dc else "N/A"
+        verify_url = dc["verification_uri"] if dc else "https://login.microsoft.com/device"
+        safe_ctx = urllib.parse.quote(context_id)
+
+        registered_redirect = "https://vertexaisearch.cloud.google.com/oauth-redirect"
+        web_auth_params = {
+            "client_id": client_id,
+            "response_type": "code",
+            "redirect_uri": registered_redirect,
+            "response_mode": "query",
+            "scope": "https://graph.microsoft.com/Sites.ReadWrite.All offline_access",
+            "state": context_id,
+            "prompt": "select_account",
+        }
+        ms_web_auth_url = (
+            f"https://login.microsoftonline.com/{urllib.parse.quote(tenant_id)}/oauth2/v2.0/authorize?"
+            + urllib.parse.urlencode(web_auth_params)
+        )
+
+        html = f"""<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8">
   <title>Sign in to Microsoft SharePoint</title>
   <style>
-    body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f8fafc; color: #0f172a; padding: 3rem 1.5rem; max-width: 580px; margin: 0 auto; text-align: center; }}
-    .card {{ background: white; border-radius: 12px; padding: 2.2rem; box-shadow: 0 4px 16px rgba(0,0,0,0.08); border: 1px solid #e2e8f0; transition: all 0.25s ease; }}
-    .code-box {{ font-family: monospace; font-size: 2rem; font-weight: 700; letter-spacing: 0.15rem; background: #f1f5f9; border: 2px dashed #94a3b8; border-radius: 8px; padding: 1rem; margin: 1.5rem 0; color: #0f172a; user-select: all; }}
-    .btn {{ display: inline-block; background: #2563eb; color: white; text-decoration: none; padding: 0.85rem 1.6rem; border-radius: 8px; font-weight: 600; font-size: 1rem; cursor: pointer; border: none; }}
+    body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f8fafc; color: #0f172a; padding: 2.5rem 1.25rem; max-width: 640px; margin: 0 auto; text-align: center; }}
+    .card {{ background: white; border-radius: 12px; padding: 2rem; box-shadow: 0 4px 16px rgba(0,0,0,0.08); border: 1px solid #e2e8f0; margin-bottom: 1.5rem; text-align: left; }}
+    .code-box {{ font-family: monospace; font-size: 1.7rem; font-weight: 700; letter-spacing: 0.15rem; background: #f1f5f9; border: 2px dashed #94a3b8; border-radius: 8px; padding: 0.85rem; margin: 1rem 0; color: #0f172a; text-align: center; user-select: all; }}
+    .btn {{ display: inline-block; background: #2563eb; color: white; text-decoration: none; padding: 0.75rem 1.4rem; border-radius: 8px; font-weight: 600; font-size: 0.95rem; cursor: pointer; border: none; text-align: center; }}
     .btn:hover {{ background: #1d4ed8; }}
     .btn-success {{ background: #16a34a; }}
     .btn-success:hover {{ background: #15803d; }}
-    .status-badge {{ display: inline-block; margin-top: 1.25rem; font-size: 0.85rem; color: #64748b; background: #f1f5f9; padding: 0.4rem 0.9rem; border-radius: 999px; }}
+    .input-box {{ width: 100%; box-sizing: border-box; padding: 0.75rem; border: 1px solid #cbd5e1; border-radius: 8px; font-family: monospace; font-size: 0.88rem; margin: 0.6rem 0; }}
+    .status-badge {{ display: inline-block; margin-top: 0.8rem; font-size: 0.85rem; color: #64748b; background: #f1f5f9; padding: 0.4rem 0.9rem; border-radius: 999px; }}
+    .badge-warn {{ background: #fef3c7; color: #92400e; border: 1px solid #fde68a; border-radius: 8px; padding: 0.75rem; font-size: 0.85rem; margin-top: 0.8rem; display: none; }}
   </style>
 </head>
 <body>
   <div class="card" id="main-card">
-    <h2 style="margin-top:0;">🔐 Connect Microsoft SharePoint</h2>
-    <p style="color:#475569;">Copy this 1-time code and click the button below to sign in with your Microsoft account:</p>
-    <div class="code-box" id="code">{user_code}</div>
-    <button class="btn" onclick="navigator.clipboard.writeText('{user_code}'); window.open('{verify_url}', '_blank');">
-      Copy Code &amp; Open Microsoft Sign-In ↗
-    </button>
-    <div>
-      <span class="status-badge" id="poll-status">⏳ Waiting for Microsoft sign-in completion...</span>
+    <h2 style="margin-top:0;text-align:center;">🔐 Connect Microsoft SharePoint Online</h2>
+    
+    <!-- Method 1: Guaranteed Web OAuth Flow using registered vertexaisearch Redirect URI -->
+    <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:1.25rem;margin-bottom:1.5rem;">
+      <h3 style="margin-top:0;color:#1e40af;font-size:1.05rem;">⚡ Method 1: Instant Web Sign-In (Recommended — Works Immediately)</h3>
+      <p style="margin:0.4rem 0 0.9rem;font-size:0.9rem;color:#334155;">
+        Uses your Azure App's registered Redirect URI (<code>https://vertexaisearch.cloud.google.com/oauth-redirect</code>) so Azure never blocks confidential client login:
+      </p>
+      <p style="margin:0 0 0.9rem;">
+        <a class="btn" href="{ms_web_auth_url}" target="_blank">1. Click to Sign In with Microsoft ↗</a>
+      </p>
+      <p style="margin:0.5rem 0 0.3rem;font-size:0.88rem;color:#334155;">
+        <strong>2. After signing in</strong>, copy the URL from that browser tab's address bar (<code>https://vertexaisearch.cloud.google.com/oauth-redirect?code=...</code>) and paste it here:
+      </p>
+      <input type="text" id="paste-url" class="input-box" placeholder="Paste https://vertexaisearch.cloud.google.com/oauth-redirect?code=0.AXEA... here" />
+      <button class="btn btn-success" style="width:100%;margin-top:0.4rem;" onclick="exchangePastedCode()">
+        ✅ Connect &amp; Auto-Save Opportunity to SharePoint
+      </button>
+      <div id="exchange-msg" style="margin-top:0.6rem;font-size:0.88rem;font-weight:600;"></div>
     </div>
-    <p style="margin-top:1.25rem;font-size:0.88rem;color:#64748b;">
-      Keep this tab open — as soon as you sign in on Microsoft's page, your opportunity will automatically sync to SharePoint Online!
-    </p>
+
+    <!-- Method 2: Device Code Flow -->
+    <div style="border-top:1px solid #e2e8f0;padding-top:1.2rem;">
+      <h3 style="margin-top:0;color:#475569;font-size:0.98rem;">🔑 Alternative: Device Code Flow (Requires Azure "Allow public client flows = Yes")</h3>
+      <div class="code-box" id="code">{user_code}</div>
+      <div style="text-align:center;">
+        <button class="btn" style="background:#475569;" onclick="navigator.clipboard.writeText('{user_code}'); window.open('{verify_url}', '_blank');">
+          Copy Code &amp; Open Microsoft Device Login ↗
+        </button>
+        <div>
+          <span class="status-badge" id="poll-status">⏳ Waiting for sign-in completion...</span>
+        </div>
+        <div class="badge-warn" id="poll-error-box"></div>
+      </div>
+    </div>
   </div>
+
   <script>
     const ctxId = "{safe_ctx}";
+    const redirectUri = "{registered_redirect}";
+
+    function renderSuccess(data) {{
+      const card = document.getElementById("main-card");
+      if (data.synced && data.synced.syncedUrl) {{
+        card.innerHTML = `
+          <div style="text-align:center;padding:1rem;">
+            <h2 style="color:#16a34a;margin-top:0;">✅ SharePoint Connected &amp; Opportunity Saved!</h2>
+            <p style="color:#334155;font-size:1.05rem;">
+              Your opportunity <strong>${{data.synced.title}}</strong> (<code>${{data.synced.recordId}}</code>) has been automatically saved to SharePoint Online under your Microsoft account!
+            </p>
+            <p style="margin: 1.5rem 0;">
+              <a class="btn btn-success" href="${{data.synced.syncedUrl}}" target="_blank">📂 Open Opportunity Folder in SharePoint ↗</a>
+            </p>
+            <p style="color:#16a34a;font-weight:600;font-size:0.95rem;">
+              You can now close this window and return to Gemini Enterprise.
+            </p>
+          </div>
+        `;
+      }} else if (data.folderUrl) {{
+        card.innerHTML = `
+          <div style="text-align:center;padding:1rem;">
+            <h2 style="color:#16a34a;margin-top:0;">✅ SharePoint Connected &amp; Opportunity Saved!</h2>
+            <p style="margin: 1.5rem 0;">
+              <a class="btn btn-success" href="${{data.folderUrl}}" target="_blank">📂 Open Opportunity Folder in SharePoint ↗</a>
+            </p>
+            <p style="color:#16a34a;font-weight:600;font-size:0.95rem;">
+              You can now close this window and return to Gemini Enterprise.
+            </p>
+          </div>
+        `;
+      }} else {{
+        card.innerHTML = `
+          <div style="text-align:center;padding:1rem;">
+            <h2 style="color:#16a34a;margin-top:0;">✅ Microsoft SharePoint Connected!</h2>
+            <p style="color:#334155;font-size:1.05rem;">
+              Your Microsoft account is now linked to your Gemini Enterprise session.
+            </p>
+            <p style="color:#475569;font-size:0.95rem;">
+              Return to Gemini Enterprise chat and type <strong>save to sharepoint</strong> (or submit Stage 4) to sync your opportunity directly under your user account!
+            </p>
+          </div>
+        `;
+      }}
+    }}
+
+    async function exchangePastedCode() {{
+      const val = document.getElementById("paste-url").value.trim();
+      const msgEl = document.getElementById("exchange-msg");
+      if (!val) {{
+        msgEl.style.color = "#dc2626";
+        msgEl.textContent = "Please paste the redirect URL or authorization code first.";
+        return;
+      }}
+      msgEl.style.color = "#2563eb";
+      msgEl.textContent = "⏳ Exchanging authorization code with Microsoft Entra ID & syncing to SharePoint...";
+      try {{
+        const resp = await fetch("/auth/exchange", {{
+          method: "POST",
+          headers: {{ "Content-Type": "application/json" }},
+          body: JSON.stringify({{ code_or_url: val, redirect_uri: redirectUri, context_id: ctxId }})
+        }});
+        const res = await resp.json();
+        if (res.success) {{
+          renderSuccess(res);
+        }} else {{
+          msgEl.style.color = "#dc2626";
+          msgEl.textContent = "❌ " + (res.error || "Exchange failed.");
+        }}
+      }} catch (err) {{
+        msgEl.style.color = "#dc2626";
+        msgEl.textContent = "❌ Network error: " + err;
+      }}
+    }}
+
     const timer = setInterval(async () => {{
       try {{
         const resp = await fetch(`/auth/status?context_id=${{ctxId}}`);
@@ -362,30 +478,12 @@ async def handle_oauth_auth(request: Request) -> Response:
         const data = await resp.json();
         if (data.authenticated) {{
           clearInterval(timer);
-          const card = document.getElementById("main-card");
-          if (data.synced && data.synced.syncedUrl) {{
-            card.innerHTML = `
-              <h2 style="color:#16a34a;margin-top:0;">✅ SharePoint Connected &amp; Opportunity Saved!</h2>
-              <p style="color:#334155;font-size:1.05rem;">
-                Your opportunity <strong>${{data.synced.title}}</strong> (<code>${{data.synced.recordId}}</code>) has been automatically saved to SharePoint Online under your Microsoft account!
-              </p>
-              <p style="margin: 1.5rem 0;">
-                <a class="btn btn-success" href="${{data.synced.syncedUrl}}" target="_blank">📂 Open Opportunity Folder in SharePoint ↗</a>
-              </p>
-              <p style="color:#16a34a;font-weight:600;font-size:0.95rem;">
-                You can now close this window and return to Gemini Enterprise.
-              </p>
-            `;
-          }} else {{
-            card.innerHTML = `
-              <h2 style="color:#16a34a;margin-top:0;">✅ Microsoft SharePoint Connected!</h2>
-              <p style="color:#334155;font-size:1.05rem;">
-                Your Microsoft account is now linked to your Gemini Enterprise session.
-              </p>
-              <p style="color:#475569;font-size:0.95rem;">
-                Return to Gemini Enterprise chat and type <strong>save to sharepoint</strong> (or submit Stage 4) to sync your opportunity directly under your user account!
-              </p>
-            `;
+          renderSuccess(data);
+        }} else if (data.error) {{
+          const errBox = document.getElementById("poll-error-box");
+          if (errBox) {{
+            errBox.style.display = "block";
+            errBox.innerHTML = `<strong>⚠️ Note on Device Code:</strong> Azure blocked Device Code token redemption because "Allow public client flows" is disabled in Azure Portal. <strong>Please use Method 1 (top blue box) above!</strong>`;
           }}
         }}
       }} catch (e) {{}}
@@ -393,7 +491,7 @@ async def handle_oauth_auth(request: Request) -> Response:
   </script>
 </body>
 </html>"""
-            return HTMLResponse(html)
+        return HTMLResponse(html)
 
     if not ge_redirect_uri:
         return JSONResponse({"error": "Missing redirect_uri and MS_GRAPH_CLIENT_ID not configured"}, status_code=400)
@@ -404,11 +502,31 @@ async def handle_oauth_auth(request: Request) -> Response:
     return RedirectResponse(url=target_url, status_code=302)
 
 
+async def handle_oauth_exchange(request: Request) -> Response:
+    """POST `/auth/exchange` endpoint to exchange a pasted Microsoft OAuth redirect URL or code."""
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    code_or_url = str(body.get("code_or_url") or "")
+    redirect_uri = str(body.get("redirect_uri") or "https://vertexaisearch.cloud.google.com/oauth-redirect")
+    context_id = str(body.get("context_id") or "latest")
+    from qualify.connectors.sharepoint import exchange_auth_code_for_session  # noqa: PLC0415
+
+    res = exchange_auth_code_for_session(
+        code_or_url=code_or_url,
+        redirect_uri=redirect_uri,
+        context_id=context_id,
+    )
+    return JSONResponse(res)
+
+
 async def handle_oauth_status(request: Request) -> Response:
     """Returns JSON status of whether the user session is authenticated with Microsoft SharePoint and any auto-synced folder URL."""
     context_id = request.query_params.get("context_id") or "latest"
     from qualify.connectors.sharepoint import (
         get_cached_delegated_token,
+        get_poll_error,
         get_synced_result,
         load_delegated_refresh_token,
     )
@@ -419,11 +537,13 @@ async def handle_oauth_status(request: Request) -> Response:
         or load_delegated_refresh_token(context_id)
     )
     synced = get_synced_result(context_id)
+    poll_err = get_poll_error(context_id)
     return JSONResponse(
         {
             "authenticated": has_token,
             "contextId": context_id,
             "synced": synced,
+            "error": poll_err,
         }
     )
 

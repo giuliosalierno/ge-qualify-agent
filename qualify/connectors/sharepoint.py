@@ -188,6 +188,8 @@ def load_delegated_refresh_token(context_id: str | None = None) -> str:
 _PENDING_RECORDS: dict[str, tuple[UseCaseRecord, set[int]]] = {}
 # Synced results after authentication (context_id -> dict with syncedUrl, recordId, title)
 _SYNCED_RESULTS: dict[str, dict[str, Any]] = {}
+# Poll/auth errors (context_id -> error message)
+_POLL_ERRORS: dict[str, str] = {}
 
 
 def get_synced_result(context_id: str | None = None) -> dict[str, Any] | None:
@@ -197,8 +199,17 @@ def get_synced_result(context_id: str | None = None) -> dict[str, Any] | None:
     return _SYNCED_RESULTS.get("latest")
 
 
+def get_poll_error(context_id: str | None = None) -> str | None:
+    """Returns any OAuth error encountered during background polling for a user session."""
+    if context_id and context_id in _POLL_ERRORS:
+        return _POLL_ERRORS[context_id]
+    return _POLL_ERRORS.get("latest")
+
+
 def auto_sync_pending_records(access_token: str, context_id: str = "latest") -> SharePointSyncResult | None:
     """Automatically syncs any pending UseCaseRecord for the session immediately after user sign-in."""
+    _POLL_ERRORS.pop(context_id, None)
+    _POLL_ERRORS.pop("latest", None)
     pending = _PENDING_RECORDS.pop(context_id, None) or _PENDING_RECORDS.pop("latest", None)
     if not pending:
         return None
@@ -226,6 +237,75 @@ def auto_sync_pending_records(access_token: str, context_id: str = "latest") -> 
         return None
 
 
+def exchange_auth_code_for_session(
+    code_or_url: str,
+    redirect_uri: str = "https://vertexaisearch.cloud.google.com/oauth-redirect",
+    context_id: str = "latest",
+) -> dict[str, Any]:
+    """Exchanges a Microsoft OAuth 2.0 authorization code (or full redirect URL) for a user token and auto-syncs pending records."""
+    raw = code_or_url.strip()
+    code = raw
+    if "code=" in raw:
+        try:
+            parsed = urllib.parse.urlparse(raw)
+            qs = urllib.parse.parse_qs(parsed.query)
+            if "code" in qs and qs["code"]:
+                code = qs["code"][0]
+            else:
+                m = re.search(r"[?&]code=([^&#\s]+)", raw)
+                if m:
+                    code = urllib.parse.unquote(m.group(1))
+        except Exception:
+            pass
+
+    tenant_id = os.environ.get("MS_GRAPH_TENANT_ID", "").strip()
+    client_id = os.environ.get("MS_GRAPH_CLIENT_ID", "").strip()
+    client_secret = os.environ.get("MS_GRAPH_CLIENT_SECRET", "").strip()
+    if not tenant_id or not client_id or not code:
+        return {"success": False, "error": "Missing tenant_id, client_id, or authorization code."}
+
+    token_url = f"https://login.microsoftonline.com/{urllib.parse.quote(tenant_id)}/oauth2/v2.0/token"
+    try:
+        with httpx.Client(timeout=10.0) as client:
+            payload = {
+                "client_id": client_id,
+                "grant_type": "authorization_code",
+                "code": code,
+                "redirect_uri": redirect_uri,
+                "scope": "https://graph.microsoft.com/Sites.ReadWrite.All offline_access",
+            }
+            if client_secret:
+                payload["client_secret"] = client_secret
+            resp = client.post(
+                token_url,
+                data=payload,
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+            )
+            if resp.status_code != 200:
+                err_body = resp.text[:300]
+                logger.warning("Microsoft auth code exchange failed (%s): %s", resp.status_code, err_body)
+                return {"success": False, "error": f"Microsoft returned {resp.status_code}: {err_body}"}
+
+            data = resp.json()
+            access_token = data.get("access_token", "")
+            refresh_token = data.get("refresh_token", "")
+            expires_in = int(data.get("expires_in", 3599))
+            save_delegated_refresh_token(
+                refresh_token,
+                access_token,
+                expires_in,
+                context_id=context_id,
+            )
+            sync_res = auto_sync_pending_records(access_token, context_id=context_id)
+            return {
+                "success": True,
+                "synced": get_synced_result(context_id),
+                "folderUrl": sync_res.folder_url if sync_res else None,
+            }
+    except Exception as exc:
+        return {"success": False, "error": str(exc)}
+
+
 def start_device_code_flow_for_session(context_id: str = "latest") -> dict[str, Any] | None:
     """Initiates a Microsoft Device Code OAuth 2.0 flow for a specific user session (context_id) and polls in background."""
     tenant_id = os.environ.get("MS_GRAPH_TENANT_ID", "").strip()
@@ -233,6 +313,9 @@ def start_device_code_flow_for_session(context_id: str = "latest") -> dict[str, 
     client_secret = os.environ.get("MS_GRAPH_CLIENT_SECRET", "").strip()
     if not tenant_id or not client_id:
         return None
+
+    _POLL_ERRORS.pop(context_id, None)
+    _POLL_ERRORS.pop("latest", None)
 
     try:
         with httpx.Client(timeout=8.0) as client:
@@ -287,11 +370,17 @@ def start_device_code_flow_for_session(context_id: str = "latest") -> dict[str, 
                         auto_sync_pending_records(access_token, context_id=context_id)
                         return
                     try:
-                        err = r.json().get("error", "")
+                        err_json = r.json()
+                        err = err_json.get("error", "")
+                        err_desc = err_json.get("error_description", "")
                     except Exception:
                         err = ""
-                    if err not in ("authorization_pending", "slow_down", "invalid_client"):
-                        logger.warning("Device code poll stopped on error %s: %s", err, r.text[:200])
+                        err_desc = r.text[:200]
+                    if err not in ("authorization_pending", "slow_down"):
+                        msg = f"Device Code flow blocked by Azure AD ({err}): {err_desc[:180]}"
+                        _POLL_ERRORS[context_id] = msg
+                        _POLL_ERRORS["latest"] = msg
+                        logger.warning("Device code poll stopped: %s", msg)
                         return
             except Exception as exc:
                 logger.debug("Device code poll exception: %s", exc)
