@@ -386,6 +386,7 @@ def test_the_picker_survives_the_a2a_protocol_boundary(
     monkeypatch.setattr(server_mod, "GeminiExtractionClient", _no_llm)
     monkeypatch.setattr(server_mod, "GeminiChatClient", _no_llm)
     monkeypatch.setenv("SIGNIN_CARD", "0")
+    monkeypatch.setenv("SHAREPOINT_MOCK", "1")
     monkeypatch.setenv("QUALIFY_DATA_DIR", str(tmp_path / "store"))
 
     app, _host, _port = server_mod.build_app()
@@ -424,3 +425,52 @@ def test_the_picker_survives_the_a2a_protocol_boundary(
 
     assert errors == [], f"protocol boundary rejected the turn: {errors}"
     assert any("UC-2026-WIRE01" in t for t in texts), texts
+
+
+def test_graph_401_raises_rather_than_falling_back_to_empty_mock(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Reproduces the exact Cloud Run bug where Graph 401 fell back to empty mock.
+
+    When real Graph credentials are configured (`auth_mode != 'mock'`), a Graph
+    failure (`_list_graph_opportunities` -> `None`) must raise rather than
+    silently falling back to `.data/sharepoint_mock` (which is empty in Cloud
+    Run) and telling the user every opportunity already has a dossier.
+    """
+    connector = SharePointConnector()
+    monkeypatch.setattr(
+        connector,
+        "get_graph_headers",
+        lambda *_a, **_kw: ({"Authorization": "Bearer fake"}, "client_credentials"),
+    )
+    monkeypatch.setattr(
+        connector, "_list_graph_opportunities", lambda *_a, **_kw: None
+    )
+
+    with pytest.raises(RuntimeError, match="SharePoint Graph opportunity listing failed"):
+        connector.list_opportunities(pending_technical_review=True)
+
+
+def test_unreachable_sharepoint_emits_signin_card_when_enabled(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """When SharePoint cannot be reached, the reviewer gets the Microsoft sign-in button."""
+    import qualify.connectors.sharepoint as sp_mod
+
+    monkeypatch.setenv("SIGNIN_CARD", "1")
+    monkeypatch.setattr(
+        sp_mod,
+        "get_sharepoint_connector",
+        lambda: (_ for _ in ()).throw(RuntimeError("401 Unauthorized")),
+    )
+    store = LocalRecordStore(tmp_path / "store")
+
+    out = execute_turn(
+        store,
+        TurnInput(context_id="ctx-reviewer", user_text="let's start a tech review"),
+    )
+
+    assert "couldn't reach sharepoint" in out.reply_text.lower()
+    assert "nothing is waiting" not in out.reply_text.lower()
+    assert len(out.a2ui_messages) > 0
+

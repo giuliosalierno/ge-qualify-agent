@@ -198,16 +198,70 @@ def cache_delegated_token(token: str, key: str = "latest", ttl_seconds: int = 36
         logger.info("Cached delegated Microsoft Graph user token (key=%s, ttl=%ds)", key, ttl_seconds)
 
 
+def _gcs_token_blob(safe_k: str) -> Any | None:
+    """Returns a GCS blob for sharepoint_tokens/{safe_k}.json if QUALIFY_GCS_BUCKET is set."""
+    bucket_name = os.environ.get("QUALIFY_GCS_BUCKET", "").strip()
+    if not bucket_name:
+        return None
+    try:
+        from google.cloud import storage  # type: ignore[import-untyped] # noqa: PLC0415
+
+        return storage.Client().bucket(bucket_name).blob(f"sharepoint_tokens/{safe_k}.json")
+    except Exception as exc:
+        logger.debug("Could not access GCS token blob %s: %s", safe_k, exc)
+        return None
+
+
+def _load_persisted_token_dict(key: str) -> dict[str, Any]:
+    """Reads token JSON from local disk or GCS bucket."""
+    safe_k = re.sub(r"[^a-zA-Z0-9_-]", "_", key)
+    try:
+        token_file = Path(f".data/sharepoint_tokens/{safe_k}.json")
+        if token_file.exists():
+            return json.loads(token_file.read_text(encoding="utf-8"))
+    except Exception:
+        pass
+
+    blob = _gcs_token_blob(safe_k)
+    if blob is not None:
+        try:
+            if blob.exists():
+                data = json.loads(blob.download_as_text(encoding="utf-8"))
+                # Mirror to local disk for fast subsequent reads in this container
+                try:
+                    token_dir = Path(".data/sharepoint_tokens")
+                    token_dir.mkdir(parents=True, exist_ok=True)
+                    (token_dir / f"{safe_k}.json").write_text(
+                        json.dumps(data, indent=2), encoding="utf-8"
+                    )
+                except Exception:
+                    pass
+                return data
+        except Exception as exc:
+            logger.debug("Could not download GCS token blob %s: %s", safe_k, exc)
+
+    return {}
+
+
 def get_cached_delegated_token(key: str = "latest") -> str | None:
-    """Retrieves a non-expired delegated user token from the in-memory vault."""
+    """Retrieves a non-expired delegated user token from the vault, local disk, or GCS."""
     entry = _TOKEN_VAULT.get(key)
-    if entry is None:
-        return None
-    token, expires_at = entry
-    if time.time() >= expires_at:
+    if entry is not None:
+        token, expires_at = entry
+        if time.time() < expires_at:
+            return token
         _TOKEN_VAULT.pop(key, None)
-        return None
-    return token
+
+    data = _load_persisted_token_dict(key)
+    acc = str(data.get("access_token", "")).strip()
+    exp = float(data.get("expires_at", 0.0) or 0.0)
+    rt = str(data.get("refresh_token", "")).strip()
+    if rt:
+        _REFRESH_VAULT[key] = rt
+    if acc and exp > time.time() and is_microsoft_graph_token(acc):
+        _TOKEN_VAULT[key] = (acc, exp)
+        return acc
+    return None
 
 
 def harvest_microsoft_tokens(
@@ -296,26 +350,45 @@ def save_delegated_refresh_token(
     if context_id and context_id != "latest":
         keys.insert(0, context_id)
 
+    ttl = max(60, expires_in - 60)
+    expires_at = time.time() + ttl if access_token else 0.0
+
     for k in keys:
         if refresh_token:
             _REFRESH_VAULT[k] = refresh_token
         if access_token:
-            cache_delegated_token(access_token, key=k, ttl_seconds=max(60, expires_in - 60))
+            cache_delegated_token(access_token, key=k, ttl_seconds=ttl)
 
     if refresh_token:
         os.environ["MS_GRAPH_REFRESH_TOKEN"] = refresh_token
+
+    payload_str = json.dumps(
+        {
+            "refresh_token": refresh_token,
+            "access_token": access_token,
+            "expires_at": expires_at,
+        },
+        indent=2,
+    )
 
     try:
         token_dir = Path(".data/sharepoint_tokens")
         token_dir.mkdir(parents=True, exist_ok=True)
         for k in keys:
             safe_k = re.sub(r"[^a-zA-Z0-9_-]", "_", k)
-            (token_dir / f"{safe_k}.json").write_text(
-                json.dumps({"refresh_token": refresh_token, "access_token": access_token}, indent=2),
-                encoding="utf-8",
-            )
+            (token_dir / f"{safe_k}.json").write_text(payload_str, encoding="utf-8")
     except Exception as exc:
         logger.debug("Could not write token file: %s", exc)
+
+    for k in keys:
+        safe_k = re.sub(r"[^a-zA-Z0-9_-]", "_", k)
+        blob = _gcs_token_blob(safe_k)
+        if blob is not None:
+            try:
+                blob.upload_from_string(payload_str, content_type="application/json")
+                logger.info("Persisted SharePoint OAuth tokens to GCS (key=%s)", safe_k)
+            except Exception as exc:
+                logger.warning("Could not upload SharePoint token blob %s to GCS: %s", safe_k, exc)
 
 
 def load_delegated_refresh_token(context_id: str | None = None) -> str:
@@ -328,17 +401,11 @@ def load_delegated_refresh_token(context_id: str | None = None) -> str:
     for k in keys:
         if k in _REFRESH_VAULT and _REFRESH_VAULT[k]:
             return _REFRESH_VAULT[k]
-        try:
-            safe_k = re.sub(r"[^a-zA-Z0-9_-]", "_", k)
-            token_file = Path(f".data/sharepoint_tokens/{safe_k}.json")
-            if token_file.exists():
-                data = json.loads(token_file.read_text(encoding="utf-8"))
-                tok = data.get("refresh_token", "").strip()
-                if tok:
-                    _REFRESH_VAULT[k] = tok
-                    return tok
-        except Exception:
-            pass
+        data = _load_persisted_token_dict(k)
+        tok = str(data.get("refresh_token", "")).strip()
+        if tok:
+            _REFRESH_VAULT[k] = tok
+            return tok
 
     env_tok = os.environ.get("MS_GRAPH_REFRESH_TOKEN", "").strip()
     if env_tok:
@@ -997,11 +1064,14 @@ class SharePointConnector:
         headers, auth_mode = self.get_graph_headers(delegated_token, context_id=context_id)
         q_norm = query.strip().lower()
 
-        entries: list[dict[str, Any]] | None = None
-        if auth_mode != "mock":
-            entries = self._list_graph_opportunities(headers, q_norm, limit)
-        if entries is None:
+        if auth_mode == "mock" or self._custom_mock_dir is not None:
             entries = self._list_mock_opportunities(q_norm)
+        else:
+            entries = self._list_graph_opportunities(headers, q_norm, limit)
+            if entries is None:
+                raise RuntimeError(
+                    f"SharePoint Graph opportunity listing failed (auth_mode={auth_mode})"
+                )
 
         if pending_technical_review:
             entries = [e for e in entries if e["hasBrief"] and not e["hasDossier"]]
@@ -1033,7 +1103,7 @@ class SharePointConnector:
                 resp = client.get(endpoint, headers=headers)
                 if resp.status_code != 200:
                     logger.warning(
-                        "SharePoint opportunity listing returned %s; using the local mock.",
+                        "SharePoint opportunity listing returned %s.",
                         resp.status_code,
                     )
                     return None
@@ -1064,7 +1134,7 @@ class SharePointConnector:
                 return results
         except Exception as exc:
             logger.warning(
-                "SharePoint opportunity listing failed (%s); using the local mock.", exc
+                "SharePoint opportunity listing failed (%s).", exc
             )
             return None
 
@@ -1138,10 +1208,13 @@ class SharePointConnector:
         return results
 
     def load_opportunity(
-        self, query_or_record_id: str, delegated_token: str | None = None
+        self,
+        query_or_record_id: str,
+        delegated_token: str | None = None,
+        context_id: str | None = None,
     ) -> UseCaseRecord | None:
         """Loads a UseCaseRecord from SharePoint by Record ID (e.g. UC-2026-XXXXXX) or Initiative Name."""
-        headers, auth_mode = self.get_graph_headers(delegated_token)
+        headers, auth_mode = self.get_graph_headers(delegated_token, context_id=context_id)
         target = query_or_record_id.strip()
         if not target:
             return None

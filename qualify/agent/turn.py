@@ -812,13 +812,27 @@ def _offer_pending_reviews(
     pending, reachable = pending_and_reachable
 
     if not reachable:
+        import os as _os  # noqa: PLC0415
+        import urllib.parse as _up  # noqa: PLC0415
+        from qualify.a2ui.signin import build_signin_card  # noqa: PLC0415
+
+        base_url = _os.environ.get(
+            "AGENT_URL", "https://ge-qualify-agent-g22bhpwccq-uc.a.run.app"
+        ).rstrip("/")
+        auth_url = f"{base_url}/auth?context_id={_up.quote(session.context_id)}"
+        cards = (
+            build_signin_card(auth_url)
+            if _os.environ.get("SIGNIN_CARD") != "0"
+            else []
+        )
         return TurnOutput(
             reply_text=(
                 "Happy to start a technical review — but I couldn't reach "
-                "SharePoint to see which opportunities are waiting. You may "
-                "need to sign in first.\n\n" + _ID_FALLBACK_HINT
+                "SharePoint to see which opportunities are waiting. Please "
+                "sign in with Microsoft below, then type `technical review` "
+                "again.\n\n" + _ID_FALLBACK_HINT
             ),
-            a2ui_messages=[],
+            a2ui_messages=cards,
             session=session,
         )
 
@@ -1014,7 +1028,28 @@ def _try_load_from_sharepoint(user_text: str | None, session: Session) -> TurnOu
         # `list_opportunities`, not `search_opportunities` — the latter never
         # existed, so this command raised AttributeError into the executor's
         # guard from the day it was written. `tests/test_turn.py` now calls it.
-        items = connector.list_opportunities(context_id=session.context_id)
+        try:
+            items = connector.list_opportunities(context_id=session.context_id)
+        except Exception:
+            from qualify.a2ui.signin import build_signin_card  # noqa: PLC0415
+
+            base_url = _os.environ.get(
+                "AGENT_URL", "https://ge-qualify-agent-g22bhpwccq-uc.a.run.app"
+            ).rstrip("/")
+            auth_url = f"{base_url}/auth?context_id={_up.quote(session.context_id)}"
+            cards = (
+                build_signin_card(auth_url)
+                if _os.environ.get("SIGNIN_CARD") != "0"
+                else []
+            )
+            return TurnOutput(
+                reply_text=(
+                    "⚠️ I couldn't reach SharePoint to list your opportunities. "
+                    "Please sign in with Microsoft below, then try `list sharepoint` again."
+                ),
+                a2ui_messages=cards,
+                session=session,
+            )
         if not items:
             return TurnOutput(
                 reply_text=(

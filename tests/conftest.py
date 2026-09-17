@@ -38,3 +38,4 @@ def _isolate_sharepoint_mock_dir(
     suite reported three opportunities that exist nowhere in the repository.
     """
     monkeypatch.setenv("SHAREPOINT_MOCK_DIR", str(tmp_path / "sharepoint_mock"))
+    monkeypatch.delenv("QUALIFY_GCS_BUCKET", raising=False)

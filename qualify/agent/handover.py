@@ -119,7 +119,7 @@ def load_review_record(
         )
 
         record = get_sharepoint_connector().load_opportunity(
-            record_id, delegated_token=None
+            record_id, delegated_token=None, context_id=context_id
         )
     except Exception as exc:
         # A SharePoint outage must not turn into a stack trace in the chat.
