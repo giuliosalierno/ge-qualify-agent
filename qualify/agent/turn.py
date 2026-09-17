@@ -727,25 +727,82 @@ def _try_start_tech_review(
         baseline_summary,
         list_pending_reviews,
         parse_tech_review_intent,
+        resolve_pending_review_choice,
         start_tech_review,
     )
 
-    wants, record_id = parse_tech_review_intent(user_text)
-    if not wants:
+    if not user_text:
         return None
+
+    wants, record_id = parse_tech_review_intent(user_text)
 
     # Already in a technical review: let the normal interview handle the turn
     # rather than restarting it and throwing away the reviewer's answers.
     if session.pack_name == "tech" and not record_id:
         return None
 
-    if record_id is None:
-        return _offer_pending_reviews(session, list_pending_reviews(session.context_id))
+    # Check if the user is replying to an active pending-review picker list
+    if session.pending_review_choices and not record_id:
+        lowered = user_text.strip().lower()
+        if any(
+            cancel_word in lowered
+            for cancel_word in (
+                "cancel",
+                "never mind",
+                "nevermind",
+                "stop",
+                "new intake",
+                "business intake",
+            )
+        ):
+            session.pending_review_choices = []
+            store.save(session)
+            return None
 
+        matched_id = resolve_pending_review_choice(
+            user_text, session.pending_review_choices
+        )
+        if matched_id:
+            record_id = matched_id
+            wants = True
+        elif not wants:
+            first_choice = session.pending_review_choices[0]
+            return TurnOutput(
+                reply_text=(
+                    f"I couldn't match `{user_text.strip()}` to one of the pending opportunities above.\n\n"
+                    f"Please reply with the **number** (1–{len(session.pending_review_choices)}), "
+                    f"the **initiative name** (e.g. `{first_choice['initiativeName']}`), or the "
+                    f"**record ID** (`{first_choice['recordId']}`) — or say `cancel` to start a new business intake."
+                ),
+                a2ui_messages=[],
+                session=session,
+            )
+
+    if not wants:
+        return None
+
+    if record_id is None:
+        pending, reachable = list_pending_reviews(session.context_id)
+        if reachable and pending:
+            matched_id = resolve_pending_review_choice(user_text, pending)
+            if matched_id:
+                record_id = matched_id
+
+    if record_id is None:
+        out = _offer_pending_reviews(session, (pending, reachable))
+        store.save(session)
+        return out
+
+    session.pending_review_choices = []
     try:
         tech_session = start_tech_review(store, session.context_id, record_id)
     except HandoverError as exc:
+        store.save(session)
         return TurnOutput(reply_text=str(exc), a2ui_messages=[], session=session)
+
+    tech_session.signin_confirmed = session.signin_confirmed
+    tech_session.signin_prompted = session.signin_prompted
+    tech_session.signin_dismissed = session.signin_dismissed
 
     sid = tech_session.next_surface_id()
     tech_session.rendered_stages.add(tech_session.active_stage)
@@ -808,6 +865,7 @@ def _offer_pending_reviews(
     pending, reachable = pending_and_reachable
 
     if not reachable:
+        session.pending_review_choices = []
         import os as _os  # noqa: PLC0415
         import urllib.parse as _up  # noqa: PLC0415
         from qualify.a2ui.signin import build_signin_card  # noqa: PLC0415
@@ -833,6 +891,7 @@ def _offer_pending_reviews(
         )
 
     if not pending:
+        session.pending_review_choices = []
         return TurnOutput(
             reply_text=(
                 "Nothing is waiting for a technical review — every qualified "
@@ -842,6 +901,15 @@ def _offer_pending_reviews(
             a2ui_messages=[],
             session=session,
         )
+
+    session.pending_review_choices = [
+        {
+            "recordId": item["recordId"],
+            "initiativeName": item.get("initiativeName") or item.get("name") or "",
+        }
+        for item in pending
+        if item.get("recordId")
+    ]
 
     noun = "opportunity has" if len(pending) == 1 else "opportunities have"
     lines = [
@@ -856,7 +924,7 @@ def _offer_pending_reviews(
         lines.append(f"{i}. **{name}** (`{rec_id}`){link}")
 
     lines.append(
-        f"\nTell me which one, or say `technical review {pending[0]['recordId']}`."
+        f"\nTell me which one (by name, number, or ID), or say `technical review {pending[0]['recordId']}`."
     )
 
     return TurnOutput(

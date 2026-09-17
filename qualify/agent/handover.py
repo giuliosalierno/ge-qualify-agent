@@ -91,6 +91,139 @@ def parse_tech_review_intent(user_text: str | None) -> tuple[bool, str | None]:
     return True, match.group(0).upper() if match else None
 
 
+_CHOICE_PREFIXES = (
+    "let's start a tech review for",
+    "lets start a tech review for",
+    "let's start a technical review for",
+    "lets start a technical review for",
+    "start a technical review for",
+    "start a tech review for",
+    "start technical review for",
+    "start tech review for",
+    "let's start with",
+    "lets start with",
+    "start with",
+    "let's review",
+    "lets review",
+    "technical review for",
+    "technical review",
+    "tech review for",
+    "tech review",
+    "architecture review for",
+    "architecture review",
+    "start phase 2 for",
+    "start phase 2",
+    "phase 2 review for",
+    "phase 2 review",
+    "let's do",
+    "lets do",
+    "review",
+    "open",
+    "select",
+    "choose",
+    "option",
+    "number",
+    "num",
+    "for",
+    "the",
+)
+
+_ORDINAL_WORDS = {
+    "first": 1,
+    "1st": 1,
+    "second": 2,
+    "2nd": 2,
+    "third": 3,
+    "3rd": 3,
+    "fourth": 4,
+    "4th": 4,
+    "fifth": 5,
+    "5th": 5,
+}
+
+
+def resolve_pending_review_choice(
+    user_text: str | None, choices: list[dict]
+) -> str | None:
+    """Resolves a user's selection against a list of pending review opportunities.
+
+    Supports:
+    - Explicit record ID: `UC-2026-0CD0BC` or `let's do UC-2026-0CD0BC`
+    - 1-based index/number: `1`, `#1`, `option 1`, `the first one`
+    - Initiative name/title: `AAA`, `let's start with AAA`, `AP Invoice Exception Assistant`
+    """
+    if not user_text or not choices:
+        return None
+
+    text = user_text.strip()
+    if not text:
+        return None
+
+    # 1. Explicit UC-XXXX-XXXXXX record ID anywhere in the message
+    id_match = RECORD_ID_RE.search(text)
+    if id_match:
+        return id_match.group(0).upper()
+
+    lowered = text.lower().strip(" .!?'\"")
+
+    # 2. Numeric index (e.g. "1", "#1", "option 1", "number 2")
+    num_match = re.fullmatch(r"(?:option|number|num|#)?\s*(\d+)(?:\s*one)?", lowered)
+    if num_match:
+        idx = int(num_match.group(1))
+        if 1 <= idx <= len(choices):
+            return choices[idx - 1].get("recordId")
+
+    # Ordinal words (e.g. "first", "the first one")
+    for word, idx in _ORDINAL_WORDS.items():
+        if re.fullmatch(rf"(?:the\s+)?{word}(?:\s+one)?", lowered):
+            if 1 <= idx <= len(choices):
+                return choices[idx - 1].get("recordId")
+
+    # 3. Clean conversational prefixes to isolate the initiative title
+    cleaned = lowered
+    changed = True
+    while changed:
+        changed = False
+        for prefix in _CHOICE_PREFIXES:
+            if cleaned.startswith(prefix + " "):
+                cleaned = cleaned[len(prefix) :].strip(" .!?'\"-")
+                changed = True
+            elif cleaned == prefix:
+                cleaned = ""
+                changed = True
+
+    if not cleaned:
+        return None
+
+    # 3a. Exact case-insensitive title match against cleaned text or full text
+    for item in choices:
+        name = (item.get("initiativeName") or item.get("name") or "").strip()
+        if not name:
+            continue
+        if name.lower() == cleaned or name.lower() == lowered:
+            return item.get("recordId")
+
+    # 3b. Substring match (sort by name length descending so specific multi-word
+    # names like "AP Invoice Exception Assistant" match before short names like "a")
+    sorted_choices = sorted(
+        choices,
+        key=lambda c: len((c.get("initiativeName") or c.get("name") or "").strip()),
+        reverse=True,
+    )
+    for item in sorted_choices:
+        name = (item.get("initiativeName") or item.get("name") or "").strip()
+        if not name:
+            continue
+        name_low = name.lower()
+        if len(name_low) >= 2 and re.search(rf"\b{re.escape(name_low)}\b", lowered):
+            return item.get("recordId")
+        if len(cleaned) >= 3 and cleaned in name_low:
+            return item.get("recordId")
+
+    return None
+
+
+
 def load_review_record(
     store: SessionStore, record_id: str, context_id: str | None = None
 ) -> UseCaseRecord | None:

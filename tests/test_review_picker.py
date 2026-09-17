@@ -82,11 +82,14 @@ def _opportunity(
     *,
     brief: bool = True,
     dossier: bool = False,
+    department: str | None = None,
 ) -> Path:
     """Writes one opportunity folder exactly as `sync_opportunity` would."""
     folder = root / f"{record_id} - {name}"
     folder.mkdir(parents=True, exist_ok=True)
-    record = UseCaseRecord(meta=Meta(record_id=record_id, initiative_name=name))
+    record = UseCaseRecord(
+        meta=Meta(record_id=record_id, initiative_name=name, department_bu=department)
+    )
     (folder / "record.json").write_text(
         record.model_dump_json(indent=2), encoding="utf-8"
     )
@@ -473,4 +476,70 @@ def test_unreachable_sharepoint_emits_signin_card_when_enabled(
     assert "couldn't reach sharepoint" in out.reply_text.lower()
     assert "nothing is waiting" not in out.reply_text.lower()
     assert len(out.a2ui_messages) > 0
+
+
+def test_replying_with_initiative_name_starts_the_technical_review(
+    sharepoint_root: Path, tmp_path: Path
+) -> None:
+    """Reproduces the exact user flow: 'technical review' -> 'let's start with AAA'."""
+    _opportunity(sharepoint_root, "UC-2026-0CD0BC", "AAA", department="Finance")
+    _opportunity(sharepoint_root, "UC-2026-1694D8", "EEEE")
+    store = LocalRecordStore(tmp_path / "store")
+
+    # Turn 1: User asks to start a technical review
+    out1 = execute_turn(
+        store, TurnInput(context_id="ctx-pick-name", user_text="technical review")
+    )
+    assert "AAA" in out1.reply_text
+    assert out1.session.pack_name == "business"
+    assert len(out1.session.pending_review_choices) == 2
+
+    # Turn 2: User replies with conversational initiative name ("let's start with AAA")
+    out2 = execute_turn(
+        store,
+        TurnInput(context_id="ctx-pick-name", user_text="let's start with AAA"),
+    )
+    assert out2.session.pack_name == "tech"
+    assert out2.session.record.meta.record_id == "UC-2026-0CD0BC"
+    assert out2.session.record.meta.initiative_name == "AAA"
+    assert out2.session.record.meta.department_bu == "Finance"
+    assert "Technical Architecture Review" in out2.reply_text
+    assert len(out2.a2ui_messages) > 0
+
+
+def test_replying_with_list_number_starts_the_technical_review(
+    sharepoint_root: Path, tmp_path: Path
+) -> None:
+    """Selecting '2' or 'option 2' from the numbered list opens that opportunity."""
+    _opportunity(sharepoint_root, "UC-2026-0CD0BC", "AAA")
+    _opportunity(sharepoint_root, "UC-2026-1694D8", "EEEE")
+    store = LocalRecordStore(tmp_path / "store")
+
+    execute_turn(
+        store, TurnInput(context_id="ctx-pick-num", user_text="technical review")
+    )
+    out2 = execute_turn(
+        store, TurnInput(context_id="ctx-pick-num", user_text="option 2")
+    )
+    assert out2.session.pack_name == "tech"
+    assert out2.session.record.meta.record_id == "UC-2026-1694D8"
+    assert out2.session.record.meta.initiative_name == "EEEE"
+
+
+def test_inline_initiative_name_starts_technical_review_in_one_turn(
+    sharepoint_root: Path, tmp_path: Path
+) -> None:
+    """Saying 'technical review AAA' or 'start tech review for AAA' opens it immediately."""
+    _opportunity(sharepoint_root, "UC-2026-0CD0BC", "AAA", department="Legal")
+    store = LocalRecordStore(tmp_path / "store")
+
+    out = execute_turn(
+        store,
+        TurnInput(context_id="ctx-inline", user_text="let's start a tech review for AAA"),
+    )
+    assert out.session.pack_name == "tech"
+    assert out.session.record.meta.record_id == "UC-2026-0CD0BC"
+    assert out.session.record.meta.department_bu == "Legal"
+    assert "Technical Architecture Review" in out.reply_text
+
 

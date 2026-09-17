@@ -47,6 +47,10 @@ def _session_to_dict(session: Session) -> dict[str, Any]:
         "surface_seq": session.surface_seq,
         "current_surface_id": session.current_surface_id,
         "stage_surface_ids": {str(k): v for k, v in session.stage_surface_ids.items()},
+        "signin_prompted": session.signin_prompted,
+        "signin_dismissed": session.signin_dismissed,
+        "signin_confirmed": session.signin_confirmed,
+        "pending_review_choices": session.pending_review_choices,
         "created_at": session.created_at.isoformat(),
         "updated_at": session.updated_at.isoformat(),
     }
@@ -66,6 +70,10 @@ def _session_from_dict(data: dict[str, Any]) -> Session:
         stage_surface_ids={
             int(k): str(v) for k, v in data.get("stage_surface_ids", {}).items()
         },
+        signin_prompted=bool(data.get("signin_prompted", False)),
+        signin_dismissed=bool(data.get("signin_dismissed", False)),
+        signin_confirmed=bool(data.get("signin_confirmed", False)),
+        pending_review_choices=list(data.get("pending_review_choices", [])),
         created_at=datetime.fromisoformat(data["created_at"]),
         updated_at=datetime.fromisoformat(data["updated_at"]),
     )

@@ -78,6 +78,9 @@ class Session:
     #: after a token lands announces it. This flag stops every turn after that
     #: repeating the news.
     signin_confirmed: bool = False
+    #: Pending opportunities offered to the reviewer when they ask to start a
+    #: technical review without specifying a record ID.
+    pending_review_choices: list[dict[str, str]] = field(default_factory=list)
     created_at: datetime = field(default_factory=_now)
     updated_at: datetime = field(default_factory=_now)
 
