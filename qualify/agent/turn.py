@@ -172,11 +172,7 @@ def _consume_signin_banner(session: Session) -> str | None:
     # The card has done its job; do not offer it again.
     session.signin_prompted = True
 
-    return (
-        "✅ **Microsoft SharePoint connected.** You're signed in as yourself, so "
-        "this qualification will save to your own SharePoint site.\n\n"
-        "Nothing has been saved yet — I'll write it when we finish."
-    )
+    return "✅ **Microsoft SharePoint connected.**"
 
 
 def _run_turn(

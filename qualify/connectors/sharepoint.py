@@ -212,11 +212,15 @@ def _gcs_token_blob(safe_k: str) -> Any | None:
         return None
 
 
+def _tokens_dir() -> Path:
+    return Path(os.environ.get("SHAREPOINT_TOKENS_DIR", ".data/sharepoint_tokens"))
+
+
 def _load_persisted_token_dict(key: str) -> dict[str, Any]:
     """Reads token JSON from local disk or GCS bucket."""
     safe_k = re.sub(r"[^a-zA-Z0-9_-]", "_", key)
     try:
-        token_file = Path(f".data/sharepoint_tokens/{safe_k}.json")
+        token_file = _tokens_dir() / f"{safe_k}.json"
         if token_file.exists():
             return json.loads(token_file.read_text(encoding="utf-8"))
     except Exception:
@@ -229,7 +233,7 @@ def _load_persisted_token_dict(key: str) -> dict[str, Any]:
                 data = json.loads(blob.download_as_text(encoding="utf-8"))
                 # Mirror to local disk for fast subsequent reads in this container
                 try:
-                    token_dir = Path(".data/sharepoint_tokens")
+                    token_dir = _tokens_dir()
                     token_dir.mkdir(parents=True, exist_ok=True)
                     (token_dir / f"{safe_k}.json").write_text(
                         json.dumps(data, indent=2), encoding="utf-8"
@@ -372,7 +376,7 @@ def save_delegated_refresh_token(
     )
 
     try:
-        token_dir = Path(".data/sharepoint_tokens")
+        token_dir = _tokens_dir()
         token_dir.mkdir(parents=True, exist_ok=True)
         for k in keys:
             safe_k = re.sub(r"[^a-zA-Z0-9_-]", "_", k)
@@ -1085,11 +1089,10 @@ class SharePointConnector:
         `None` rather than `[]` so the caller can tell "Graph said there are
         none" from "Graph did not answer" and fall back deliberately.
 
-        `$expand=children` folds each folder's file list into the single
-        listing call. Graph does not guarantee it on every drive, so a folder
-        that comes back without one is fetched individually — bounded by
-        `limit`, because an unbounded fan-out inside a turn is how a chat
-        message times out.
+        SharePoint Online rejects `$expand=children` on a `/children` collection
+        endpoint with HTTP 400 (`notSupported`), so we list the folders first
+        and fetch each folder's filenames individually — bounded by `limit` so
+        a chat turn stays fast.
         """
         try:
             site_id = self.resolve_site_id(headers)
@@ -1097,7 +1100,7 @@ class SharePointConnector:
             parent_folder = sanitize_path_segment(self.folder_path)
             endpoint = (
                 f"{GRAPH_BASE_URL}/drives/{urllib.parse.quote(drive_id)}"
-                f"/root:/{urllib.parse.quote(parent_folder)}:/children?$expand=children"
+                f"/root:/{urllib.parse.quote(parent_folder)}:/children"
             )
             with httpx.Client(timeout=10.0) as client:
                 resp = client.get(endpoint, headers=headers)
@@ -1149,7 +1152,7 @@ class SharePointConnector:
         """Lists the filenames directly inside one opportunity folder."""
         endpoint = (
             f"{GRAPH_BASE_URL}/drives/{urllib.parse.quote(drive_id)}"
-            f"/root:/{urllib.parse.quote(parent_folder)}/{urllib.parse.quote(folder_name)}:/children"
+            f"/root:/{urllib.parse.quote(parent_folder)}/{urllib.parse.quote(folder_name)}:/children?$select=name"
         )
         try:
             resp = client.get(endpoint, headers=headers)
