@@ -729,6 +729,7 @@ def _try_start_tech_review(
     from qualify.agent.handover import (  # noqa: PLC0415
         HandoverError,
         baseline_summary,
+        list_pending_reviews,
         parse_tech_review_intent,
         start_tech_review,
     )
@@ -743,16 +744,7 @@ def _try_start_tech_review(
         return None
 
     if record_id is None:
-        return TurnOutput(
-            reply_text=(
-                "Happy to start a technical review. Which initiative?\n\n"
-                "Give me the record id — it looks like `UC-2026-A1B2C3` and "
-                "appears at the top of the Business Value Brief and in the "
-                "SharePoint folder name."
-            ),
-            a2ui_messages=[],
-            session=session,
-        )
+        return _offer_pending_reviews(session, list_pending_reviews(session.context_id))
 
     try:
         tech_session = start_tech_review(store, session.context_id, record_id)
@@ -789,6 +781,78 @@ def _try_start_tech_review(
         reply_text=reply_text,
         a2ui_messages=a2ui_messages,
         session=tech_session,
+    )
+
+
+#: Closing line on every pending-review reply.
+#:
+#: Repeated deliberately in all three branches: whatever else the reply says,
+#: a reviewer who already knows their id must always see how to use it. It also
+#: keeps the reply useful when the listing is empty for a reason we got wrong.
+_ID_FALLBACK_HINT = (
+    "You can also give me the record id directly — it looks like "
+    "`UC-2026-A1B2C3` and appears at the top of the Business Value Brief."
+)
+
+
+def _offer_pending_reviews(
+    session: Session, pending_and_reachable: tuple[list[dict], bool]
+) -> TurnOutput:
+    """Answers "which initiative?" by listing what still needs reviewing.
+
+    Three outcomes, kept apart on purpose:
+
+    - **SharePoint unreachable.** Say so. Silently showing an empty list would
+      tell a reviewer there is no work when the truth is we could not look,
+      and "no work" is a conclusion they would act on.
+    - **Nothing pending.** Every opportunity already has a dossier. Worth
+      stating plainly, because it is a real and pleasant answer.
+    - **Some pending.** List them with their ids.
+    """
+    pending, reachable = pending_and_reachable
+
+    if not reachable:
+        return TurnOutput(
+            reply_text=(
+                "Happy to start a technical review — but I couldn't reach "
+                "SharePoint to see which opportunities are waiting. You may "
+                "need to sign in first.\n\n" + _ID_FALLBACK_HINT
+            ),
+            a2ui_messages=[],
+            session=session,
+        )
+
+    if not pending:
+        return TurnOutput(
+            reply_text=(
+                "Nothing is waiting for a technical review — every qualified "
+                "opportunity in SharePoint already has a Technical "
+                "Architecture Dossier.\n\n" + _ID_FALLBACK_HINT
+            ),
+            a2ui_messages=[],
+            session=session,
+        )
+
+    noun = "opportunity has" if len(pending) == 1 else "opportunities have"
+    lines = [
+        f"{len(pending)} {noun} a Business Value Brief but no Technical "
+        f"Architecture Dossier yet:\n"
+    ]
+    for i, item in enumerate(pending, start=1):
+        name = item.get("initiativeName") or item.get("name") or "Untitled"
+        rec_id = item["recordId"]
+        url = item.get("webUrl")
+        link = f" — [Open in SharePoint]({url})" if url else ""
+        lines.append(f"{i}. **{name}** (`{rec_id}`){link}")
+
+    lines.append(
+        f"\nTell me which one, or say `technical review {pending[0]['recordId']}`."
+    )
+
+    return TurnOutput(
+        reply_text="\n".join(lines),
+        a2ui_messages=[],
+        session=session,
     )
 
 
@@ -947,19 +1011,37 @@ def _try_load_from_sharepoint(user_text: str | None, session: Session) -> TurnOu
     # Check if user wants to list / search all SharePoint opportunities
     if any(k in text_lower for k in ("list sharepoint", "search sharepoint", "show sharepoint", "sharepoint opportunities")):
         connector = get_sharepoint_connector()
-        items = connector.search_opportunities("")
+        # `list_opportunities`, not `search_opportunities` — the latter never
+        # existed, so this command raised AttributeError into the executor's
+        # guard from the day it was written. `tests/test_turn.py` now calls it.
+        items = connector.list_opportunities(context_id=session.context_id)
         if not items:
             return TurnOutput(
-                reply_text=" Connected to SharePoint Online (`https://zd8vn.sharepoint.com/`), but no qualification opportunities were found yet. Complete Stage 4 and click **Submit** to create your first opportunity!",
+                reply_text=(
+                    "Connected to SharePoint, but there are no qualification "
+                    "opportunities yet. Finish a business intake and save it "
+                    "to create the first one."
+                ),
                 a2ui_messages=[],
                 session=session,
             )
-        lines = ["### 📂 Qualification Opportunities in SharePoint Online\n"]
+        lines = ["### Qualification opportunities in SharePoint\n"]
         for item in items:
-            rec_id = item.get("recordId") or item.get("Title") or "Unknown ID"
+            rec_id = item.get("recordId") or "unknown id"
             name = item.get("initiativeName") or item.get("name") or rec_id
-            url = item.get("webUrl") or "https://zd8vn.sharepoint.com/"
-            lines.append(f"- **{name}** (`{rec_id}`) — [Open in SharePoint]({url}) *(Type `load {rec_id} from sharepoint` to open)*")
+            url = item.get("webUrl")
+            link = f" — [Open in SharePoint]({url})" if url else ""
+            if item.get("hasDossier"):
+                state = "technically reviewed"
+            elif item.get("hasBrief"):
+                state = "awaiting technical review"
+            else:
+                state = "no brief saved yet"
+            lines.append(f"- **{name}** (`{rec_id}`) · {state}{link}")
+        lines.append(
+            "\nSay `technical review <id>` to review one, or "
+            "`load <id> from sharepoint` to open it."
+        )
         return TurnOutput(
             reply_text="\n".join(lines),
             a2ui_messages=[],

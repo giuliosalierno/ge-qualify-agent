@@ -71,6 +71,49 @@ def sanitize_path_segment(segment: str) -> str:
     return cleaned.strip(" .") or "unnamed"
 
 
+#: Matches a record id occupying a whole folder-name segment.
+#:
+#: Deliberately a separate pattern from `handover.RECORD_ID_RE`, which searches
+#: inside free chat text and therefore anchors on word boundaries. This one
+#: full-matches a segment already split off a folder name. Keeping them apart
+#: means neither has to be loosened to serve the other, and the connector does
+#: not import from the agent package to get it.
+_FOLDER_RECORD_ID_RE = re.compile(r"UC-\d{4}-[A-Z0-9]+", re.IGNORECASE)
+
+
+def split_opportunity_folder_name(folder_name: str) -> tuple[str, str]:
+    """Splits `UC-2026-A1B2C3 - Invoice Triage` into its id and its name.
+
+    `sync_opportunity` is the only writer of these folders and always uses
+    `{record_id} - {initiative_name}`, so this reverses a known format rather
+    than guessing at one. The split takes the *first* separator only, leaving
+    an initiative whose own name contains " - " intact.
+
+    A folder that does not follow the convention — created by hand, or renamed
+    — yields an empty id and the whole string as the name. It can still be
+    listed and linked; it simply cannot be offered as a review target, which
+    is the honest outcome when we do not know its record id.
+    """
+    parts = folder_name.split(" - ", 1)
+    candidate = parts[0].strip()
+    if _FOLDER_RECORD_ID_RE.fullmatch(candidate):
+        return candidate.upper(), (parts[1].strip() if len(parts) > 1 else "")
+    return "", folder_name.strip()
+
+
+def _expanded_child_filenames(item: dict[str, Any]) -> set[str] | None:
+    """Filenames from a Graph `$expand=children` payload, or `None` if absent.
+
+    The distinction matters: an empty folder and a folder Graph declined to
+    expand both look like "no files", and treating the second as the first
+    would report every opportunity as missing its brief.
+    """
+    children = item.get("children")
+    if not isinstance(children, list):
+        return None
+    return {c.get("name", "") for c in children if isinstance(c, dict)}
+
+
 def is_microsoft_graph_token(token: str) -> bool:
     """Returns True if the token is a Microsoft Entra / Graph token (and not a Google Cloud OIDC IAM token).
 
@@ -928,42 +971,145 @@ class SharePointConnector:
     # Read Operations: Search & Load Opportunity into Session
     # -----------------------------------------------------------------------
 
-    def list_opportunities(self, query: str = "", delegated_token: str | None = None) -> list[dict[str, Any]]:
-        """Lists or searches qualification opportunities stored in SharePoint."""
-        headers, auth_mode = self.get_graph_headers(delegated_token)
+    def list_opportunities(
+        self,
+        query: str = "",
+        delegated_token: str | None = None,
+        *,
+        context_id: str | None = None,
+        pending_technical_review: bool = False,
+        limit: int = 25,
+    ) -> list[dict[str, Any]]:
+        """Lists or searches qualification opportunities stored in SharePoint.
+
+        Every entry carries a parsed `recordId` and `initiativeName` alongside
+        the raw folder name. `sync_opportunity` is the only writer of these
+        folders and always names them `{record_id} - {initiative_name}`, so the
+        identity is already on the listing — re-deriving it at each call site
+        is how two call sites come to disagree.
+
+        `pending_technical_review` keeps only the opportunities that hold a
+        business brief and no dossier: the ones a reviewer still has work to do
+        on. That asks the folder what is in it rather than consulting a status
+        column, so the answer cannot drift from what a human sees in
+        SharePoint.
+        """
+        headers, auth_mode = self.get_graph_headers(delegated_token, context_id=context_id)
         q_norm = query.strip().lower()
 
-        if auth_mode == "mock":
-            return self._list_mock_opportunities(q_norm)
+        entries: list[dict[str, Any]] | None = None
+        if auth_mode != "mock":
+            entries = self._list_graph_opportunities(headers, q_norm, limit)
+        if entries is None:
+            entries = self._list_mock_opportunities(q_norm)
 
+        if pending_technical_review:
+            entries = [e for e in entries if e["hasBrief"] and not e["hasDossier"]]
+        return entries[:limit]
+
+    def _list_graph_opportunities(
+        self, headers: dict[str, str], q_norm: str, limit: int
+    ) -> list[dict[str, Any]] | None:
+        """Lists opportunity folders over Microsoft Graph, or `None` on failure.
+
+        `None` rather than `[]` so the caller can tell "Graph said there are
+        none" from "Graph did not answer" and fall back deliberately.
+
+        `$expand=children` folds each folder's file list into the single
+        listing call. Graph does not guarantee it on every drive, so a folder
+        that comes back without one is fetched individually — bounded by
+        `limit`, because an unbounded fan-out inside a turn is how a chat
+        message times out.
+        """
         try:
             site_id = self.resolve_site_id(headers)
             drive_id = self.resolve_drive_id(headers, site_id=site_id)
             parent_folder = sanitize_path_segment(self.folder_path)
             endpoint = (
                 f"{GRAPH_BASE_URL}/drives/{urllib.parse.quote(drive_id)}"
-                f"/root:/{urllib.parse.quote(parent_folder)}:/children"
+                f"/root:/{urllib.parse.quote(parent_folder)}:/children?$expand=children"
             )
-            with httpx.Client(timeout=8.0) as client:
+            with httpx.Client(timeout=10.0) as client:
                 resp = client.get(endpoint, headers=headers)
                 if resp.status_code != 200:
-                    return self._list_mock_opportunities(q_norm)
-                children = resp.json().get("value", [])
-                results = []
-                for item in children:
+                    logger.warning(
+                        "SharePoint opportunity listing returned %s; using the local mock.",
+                        resp.status_code,
+                    )
+                    return None
+
+                results: list[dict[str, Any]] = []
+                for item in resp.json().get("value", []):
                     name = item.get("name", "")
-                    if not q_norm or q_norm in name.lower():
-                        results.append(
-                            {
-                                "id": item.get("id"),
-                                "name": name,
-                                "webUrl": item.get("webUrl"),
-                                "lastModifiedDateTime": item.get("lastModifiedDateTime"),
-                            }
+                    if not name or "folder" not in item:
+                        continue
+                    if q_norm and q_norm not in name.lower():
+                        continue
+
+                    filenames = _expanded_child_filenames(item)
+                    if filenames is None and len(results) < limit:
+                        filenames = self._fetch_folder_filenames(
+                            client, headers, drive_id, parent_folder, name
                         )
+
+                    results.append(
+                        self._opportunity_entry(
+                            folder_name=name,
+                            web_url=item.get("webUrl"),
+                            modified=item.get("lastModifiedDateTime"),
+                            filenames=filenames or set(),
+                            item_id=item.get("id"),
+                        )
+                    )
                 return results
+        except Exception as exc:
+            logger.warning(
+                "SharePoint opportunity listing failed (%s); using the local mock.", exc
+            )
+            return None
+
+    def _fetch_folder_filenames(
+        self,
+        client: httpx.Client,
+        headers: dict[str, str],
+        drive_id: str,
+        parent_folder: str,
+        folder_name: str,
+    ) -> set[str]:
+        """Lists the filenames directly inside one opportunity folder."""
+        endpoint = (
+            f"{GRAPH_BASE_URL}/drives/{urllib.parse.quote(drive_id)}"
+            f"/root:/{urllib.parse.quote(parent_folder)}/{urllib.parse.quote(folder_name)}:/children"
+        )
+        try:
+            resp = client.get(endpoint, headers=headers)
+            if resp.status_code != 200:
+                return set()
+            return {c.get("name", "") for c in resp.json().get("value", [])}
         except Exception:
-            return self._list_mock_opportunities(q_norm)
+            return set()
+
+    def _opportunity_entry(
+        self,
+        *,
+        folder_name: str,
+        web_url: str | None,
+        filenames: set[str],
+        modified: str | None = None,
+        item_id: str | None = None,
+    ) -> dict[str, Any]:
+        """One listing row, with identity and deliverable state resolved."""
+        record_id, initiative_name = split_opportunity_folder_name(folder_name)
+        return {
+            "id": item_id or folder_name,
+            "name": folder_name,
+            "recordId": record_id,
+            "initiativeName": initiative_name or folder_name,
+            "webUrl": web_url,
+            "lastModifiedDateTime": modified,
+            "hasBrief": deliverable_filename("business") in filenames,
+            "hasDossier": deliverable_filename("tech") in filenames,
+        }
 
     def _list_mock_opportunities(self, q_norm: str) -> list[dict[str, Any]]:
         """Lists opportunities from the local SharePoint mock directory."""
@@ -978,15 +1124,17 @@ class SharePointConnector:
 
         results = []
         for child in sorted(root_dir.iterdir()):
-            if child.is_dir():
-                if not q_norm or q_norm in child.name.lower():
-                    results.append(
-                        {
-                            "id": child.name,
-                            "name": child.name,
-                            "webUrl": f"https://sharepoint.mock/sites/AI-CoE/{urllib.parse.quote(child.name)}",
-                        }
-                    )
+            if not child.is_dir():
+                continue
+            if q_norm and q_norm not in child.name.lower():
+                continue
+            results.append(
+                self._opportunity_entry(
+                    folder_name=child.name,
+                    web_url=f"https://sharepoint.mock/sites/AI-CoE/{urllib.parse.quote(child.name)}",
+                    filenames={f.name for f in child.iterdir() if f.is_file()},
+                )
+            )
         return results
 
     def load_opportunity(
