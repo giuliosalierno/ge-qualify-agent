@@ -21,8 +21,8 @@
             "f-uc-proposed-network-security-lead",
             "f-uc-proposed-domain-sme",
             "f-uc-technical-landing-zone-status",
-            "continue-button",
-            "skip-button"
+            "continue-button-readiness",
+            "skip-button-readiness"
           ]
         },
         {
@@ -89,14 +89,14 @@
           "placeholder": "Choose one"
         },
         {
-          "id": "continue-label",
+          "id": "continue-label-readiness",
           "component": "Text",
           "text": "Submit"
         },
         {
-          "id": "continue-button",
+          "id": "continue-button-readiness",
           "component": "Button",
-          "child": "continue-label",
+          "child": "continue-label-readiness",
           "variant": "primary",
           "action": {
             "event": {
@@ -113,14 +113,14 @@
           }
         },
         {
-          "id": "skip-label",
+          "id": "skip-label-readiness",
           "component": "Text",
           "text": "Skip for now"
         },
         {
-          "id": "skip-button",
+          "id": "skip-button-readiness",
           "component": "Button",
-          "child": "skip-label",
+          "child": "skip-label-readiness",
           "variant": "default",
           "action": {
             "event": {

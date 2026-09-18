@@ -23,8 +23,8 @@
             "f-uc-technical-network-firewall-proxy-status",
             "f-uc-technical-network-transit-blocker-status-label",
             "f-uc-technical-network-transit-blocker-status",
-            "continue-button",
-            "skip-button"
+            "continue-button-network",
+            "skip-button-network"
           ]
         },
         {
@@ -144,14 +144,14 @@
           }
         },
         {
-          "id": "continue-label",
+          "id": "continue-label-network",
           "component": "Text",
           "text": "Continue"
         },
         {
-          "id": "continue-button",
+          "id": "continue-button-network",
           "component": "Button",
-          "child": "continue-label",
+          "child": "continue-label-network",
           "variant": "primary",
           "action": {
             "event": {
@@ -168,14 +168,14 @@
           }
         },
         {
-          "id": "skip-label",
+          "id": "skip-label-network",
           "component": "Text",
           "text": "Skip for now"
         },
         {
-          "id": "skip-button",
+          "id": "skip-button-network",
           "component": "Button",
-          "child": "skip-label",
+          "child": "skip-label-network",
           "variant": "default",
           "action": {
             "event": {

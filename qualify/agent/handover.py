@@ -57,6 +57,16 @@ _TRIGGERS = (
     "architecture review",
     "start phase 2",
     "phase 2 review",
+    "pending documents to review",
+    "pending opportunities to review",
+    "documents to review",
+    "opportunities to review",
+    "pending review",
+    "pending reviews",
+    "pending opportunities",
+    "show me pending",
+    "list pending",
+    "what is pending",
 )
 
 

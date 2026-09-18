@@ -26,8 +26,8 @@
             "f-uc-technical-security-residency-requirements",
             "f-uc-technical-security-cloud-policy-status-label",
             "f-uc-technical-security-cloud-policy-status",
-            "continue-button",
-            "skip-button"
+            "continue-button-security",
+            "skip-button-security"
           ]
         },
         {
@@ -247,14 +247,14 @@
           }
         },
         {
-          "id": "continue-label",
+          "id": "continue-label-security",
           "component": "Text",
           "text": "Continue"
         },
         {
-          "id": "continue-button",
+          "id": "continue-button-security",
           "component": "Button",
-          "child": "continue-label",
+          "child": "continue-label-security",
           "variant": "primary",
           "action": {
             "event": {
@@ -271,14 +271,14 @@
           }
         },
         {
-          "id": "skip-label",
+          "id": "skip-label-security",
           "component": "Text",
           "text": "Skip for now"
         },
         {
-          "id": "skip-button",
+          "id": "skip-button-security",
           "component": "Button",
-          "child": "skip-label",
+          "child": "skip-label-security",
           "variant": "default",
           "action": {
             "event": {

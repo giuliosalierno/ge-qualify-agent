@@ -24,8 +24,8 @@
             "f-uc-technical-grounding-latency-sla",
             "f-uc-technical-grounding-model-profile-label",
             "f-uc-technical-grounding-model-profile",
-            "continue-button",
-            "skip-button"
+            "continue-button-grounding",
+            "skip-button-grounding"
           ]
         },
         {
@@ -155,14 +155,14 @@
           }
         },
         {
-          "id": "continue-label",
+          "id": "continue-label-grounding",
           "component": "Text",
           "text": "Continue"
         },
         {
-          "id": "continue-button",
+          "id": "continue-button-grounding",
           "component": "Button",
-          "child": "continue-label",
+          "child": "continue-label-grounding",
           "variant": "primary",
           "action": {
             "event": {
@@ -179,14 +179,14 @@
           }
         },
         {
-          "id": "skip-label",
+          "id": "skip-label-grounding",
           "component": "Text",
           "text": "Skip for now"
         },
         {
-          "id": "skip-button",
+          "id": "skip-button-grounding",
           "component": "Button",
-          "child": "skip-label",
+          "child": "skip-label-grounding",
           "variant": "default",
           "action": {
             "event": {

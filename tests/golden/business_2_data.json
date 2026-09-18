@@ -23,8 +23,8 @@
             "f-uc-technical-security-data-classification-label",
             "f-uc-technical-security-data-classification",
             "f-uc-technical-grounding-acl-preservation-required",
-            "continue-button",
-            "skip-button"
+            "continue-button-data",
+            "skip-button-data"
           ]
         },
         {
@@ -165,14 +165,14 @@
           }
         },
         {
-          "id": "continue-label",
+          "id": "continue-label-data",
           "component": "Text",
           "text": "Continue"
         },
         {
-          "id": "continue-button",
+          "id": "continue-button-data",
           "component": "Button",
-          "child": "continue-label",
+          "child": "continue-label-data",
           "variant": "primary",
           "action": {
             "event": {
@@ -189,14 +189,14 @@
           }
         },
         {
-          "id": "skip-label",
+          "id": "skip-label-data",
           "component": "Text",
           "text": "Skip for now"
         },
         {
-          "id": "skip-button",
+          "id": "skip-button-data",
           "component": "Button",
-          "child": "skip-label",
+          "child": "skip-label-data",
           "variant": "default",
           "action": {
             "event": {

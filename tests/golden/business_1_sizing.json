@@ -26,8 +26,8 @@
             "f-ui-summary-hours-line",
             "f-ui-summary-hours-basis-label",
             "f-ui-summary-hours-basis",
-            "continue-button",
-            "skip-button"
+            "continue-button-sizing",
+            "skip-button-sizing"
           ]
         },
         {
@@ -113,14 +113,14 @@
           "variant": "caption"
         },
         {
-          "id": "continue-label",
+          "id": "continue-label-sizing",
           "component": "Text",
           "text": "Continue"
         },
         {
-          "id": "continue-button",
+          "id": "continue-button-sizing",
           "component": "Button",
-          "child": "continue-label",
+          "child": "continue-label-sizing",
           "variant": "primary",
           "action": {
             "event": {
@@ -137,14 +137,14 @@
           }
         },
         {
-          "id": "skip-label",
+          "id": "skip-label-sizing",
           "component": "Text",
           "text": "Skip for now"
         },
         {
-          "id": "skip-button",
+          "id": "skip-button-sizing",
           "component": "Button",
-          "child": "skip-label",
+          "child": "skip-label-sizing",
           "variant": "default",
           "action": {
             "event": {

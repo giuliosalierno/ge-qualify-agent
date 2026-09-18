@@ -24,7 +24,7 @@
             "f-uc-business-user-count",
             "f-uc-meta-department-bu",
             "f-uc-business-user-stories",
-            "continue-button"
+            "continue-button-needs"
           ]
         },
         {
@@ -100,14 +100,14 @@
           "variant": "longText"
         },
         {
-          "id": "continue-label",
+          "id": "continue-label-needs",
           "component": "Text",
           "text": "Continue"
         },
         {
-          "id": "continue-button",
+          "id": "continue-button-needs",
           "component": "Button",
-          "child": "continue-label",
+          "child": "continue-label-needs",
           "variant": "primary",
           "action": {
             "event": {

@@ -22,7 +22,7 @@
             "f-uc-proposed-tech-owner",
             "f-ui-systems-table-label",
             "f-ui-systems-table",
-            "continue-button"
+            "continue-button-systems"
           ]
         },
         {
@@ -94,14 +94,14 @@
           "variant": "body"
         },
         {
-          "id": "continue-label",
+          "id": "continue-label-systems",
           "component": "Text",
           "text": "Continue"
         },
         {
-          "id": "continue-button",
+          "id": "continue-button-systems",
           "component": "Button",
-          "child": "continue-label",
+          "child": "continue-label-systems",
           "variant": "primary",
           "action": {
             "event": {

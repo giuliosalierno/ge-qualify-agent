@@ -257,6 +257,51 @@ def _run_turn(
         store.save(session)
         return signin_output
 
+    # If the current qualification/review is already complete (all stages committed/skipped),
+    # handle "start a new qualification" by resetting the session, or guide the user
+    # instead of pretending they are still mid-form on Stage 4.
+    if session.is_complete:
+        lowered_msg = (turn_input.user_text or "").strip().lower()
+        if any(
+            kw in lowered_msg
+            for kw in (
+                "new qualification",
+                "new use case",
+                "qualify another",
+                "start another",
+                "start business intake",
+                "qualify a new",
+            )
+        ):
+            from qualify.sinks.session import new_session  # noqa: PLC0415
+
+            fresh = new_session(session.context_id, "business")
+            fresh.welcome_shown = True
+            fresh.signin_prompted = session.signin_prompted
+            fresh.signin_dismissed = session.signin_dismissed
+            fresh.signin_confirmed = session.signin_confirmed
+            session = fresh
+        else:
+            rec_id = session.record.meta.record_id
+            init_name = session.record.business.initiative_name or "this initiative"
+            deliverable_name = (
+                "Technical Architecture Dossier"
+                if session.pack_name == "tech"
+                else "Business Value Brief"
+            )
+            return TurnOutput(
+                reply_text=(
+                    f"The **{deliverable_name}** for **{init_name}** (`{rec_id}`) is already complete.\n\n"
+                    "Here is what you can do next:\n"
+                    "- **Update or fill skipped stages**: Click any **Reopen Stage** / **Fill Skipped Stage** button on the summary card above.\n"
+                    "- **Technical Architecture Review (Phase 2)**: Type **`technical review`** (or **`show pending documents to review`**) to evaluate a qualified opportunity.\n"
+                    "- **CoE Portfolio Prioritization**: Type **`portfolio review`** to score and rank all SharePoint opportunities.\n"
+                    "- **Start a New Qualification**: Type **`start a new qualification`** to begin a new business intake."
+                ),
+                a2ui_messages=[],
+                session=session,
+            )
+
     a2ui_messages: list[dict[str, Any]] = []
     drafts: list[FieldDraft] = []
     stage = session.pack.stages[session.active_stage]

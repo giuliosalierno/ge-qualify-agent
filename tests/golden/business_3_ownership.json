@@ -23,8 +23,8 @@
             "f-uc-proposed-executive-sponsor",
             "f-uc-proposed-domain-sme",
             "f-uc-proposed-adoption-kpi",
-            "continue-button",
-            "skip-button"
+            "continue-button-ownership",
+            "skip-button-ownership"
           ]
         },
         {
@@ -91,14 +91,14 @@
           "variant": "longText"
         },
         {
-          "id": "continue-label",
+          "id": "continue-label-ownership",
           "component": "Text",
           "text": "Submit"
         },
         {
-          "id": "continue-button",
+          "id": "continue-button-ownership",
           "component": "Button",
-          "child": "continue-label",
+          "child": "continue-label-ownership",
           "variant": "primary",
           "action": {
             "event": {
@@ -115,14 +115,14 @@
           }
         },
         {
-          "id": "skip-label",
+          "id": "skip-label-ownership",
           "component": "Text",
           "text": "Skip for now"
         },
         {
-          "id": "skip-button",
+          "id": "skip-button-ownership",
           "component": "Button",
-          "child": "skip-label",
+          "child": "skip-label-ownership",
           "variant": "default",
           "action": {
             "event": {

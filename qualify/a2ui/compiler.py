@@ -403,9 +403,9 @@ def build_stage_components(
             nodes.append(node)
             children.append(node["id"])
 
-    children.append(_CONTINUE_ID)
+    children.append(f"{_CONTINUE_ID}-{stage.id}")
     if stage_idx > 0:
-        children.append(_SKIP_ID)
+        children.append(f"{_SKIP_ID}-{stage.id}")
 
     root = {"id": ROOT_ID, "component": "Column", "children": children}
 
@@ -418,16 +418,21 @@ def build_continue_button(pack: Pack, stage_idx: int) -> list[dict[str, Any]]:
     is_last = stage_idx == len(pack.stages) - 1
     label = "Submit" if is_last else "Continue"
 
+    continue_id = f"{_CONTINUE_ID}-{stage.id}"
+    continue_label_id = f"{_CONTINUE_LABEL_ID}-{stage.id}"
+    skip_id = f"{_SKIP_ID}-{stage.id}"
+    skip_label_id = f"{_SKIP_LABEL_ID}-{stage.id}"
+
     buttons: list[dict[str, Any]] = [
         {
-            "id": _CONTINUE_LABEL_ID,
+            "id": continue_label_id,
             "component": "Text",
             "text": label,
         },
         {
-            "id": _CONTINUE_ID,
+            "id": continue_id,
             "component": "Button",
-            "child": _CONTINUE_LABEL_ID,
+            "child": continue_label_id,
             "variant": "primary",
             "action": {
                 "event": {
@@ -447,14 +452,14 @@ def build_continue_button(pack: Pack, stage_idx: int) -> list[dict[str, Any]]:
         buttons.extend(
             [
                 {
-                    "id": _SKIP_LABEL_ID,
+                    "id": skip_label_id,
                     "component": "Text",
                     "text": "Skip for now",
                 },
                 {
-                    "id": _SKIP_ID,
+                    "id": skip_id,
                     "component": "Button",
-                    "child": _SKIP_LABEL_ID,
+                    "child": skip_label_id,
                     "variant": "default",
                     "action": {
                         "event": {
