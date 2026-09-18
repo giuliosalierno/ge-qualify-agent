@@ -196,14 +196,38 @@ def test_portfolio_review_chat_turn_and_followup_selection(
     )
     assert report_file.is_file()
 
-    # Follow-up turn: user immediately selects "let's start with AAA" from the portfolio report
+    # Follow-up turn: user selects "let's start with 1" (or "let's start with AAA") from the portfolio report
     out2 = execute_turn(
         store,
-        TurnInput(context_id="ctx-portfolio-1", user_text="let's start with AAA"),
+        TurnInput(context_id="ctx-portfolio-1", user_text="let's start with 1"),
     )
     assert out2.session.pack_name == "tech"
     assert out2.session.record.meta.record_id == "UC-2026-0CD0BC"
     assert "Technical Architecture Review" in out2.reply_text
+
+
+def test_phase1_record_with_overlapping_fields_retains_indicative_feasibility() -> None:
+    """Guards against Phase 1 records with data_sources + classification + owner getting 18% readiness (1/5 feasibility)."""
+    from qualify.schema.use_case_record import Grounding, Proposed
+
+    rec = _make_record(
+        "UC-2026-308D3E",
+        "a",
+        dept="b",
+        users=12,
+        freq=10.0,
+        saved_mins=10.0,  # 1,000 hrs/yr -> Value 3/5
+        level=CapabilityLevel.WORKFLOW_BUILDER_CHAT_AGENT,
+    )
+    rec.technical.data_sources = ["google_drive", "confluence"]
+    rec.technical.grounding = Grounding(acl_preservation_required=True)
+    rec.proposed = Proposed(business_owner="Alice", domain_sme="Bob")
+
+    ev = evaluate_opportunity(rec, has_brief=True, has_dossier=False)
+    assert ev.is_indicative_feasibility is True
+    assert ev.feasibility_score == 4
+    assert ev.business_value_score == 3
+    assert ev.quadrant == "Quick Wins"
 
 
 def test_welcome_banner_and_help_command() -> None:

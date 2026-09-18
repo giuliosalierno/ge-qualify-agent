@@ -166,20 +166,8 @@ def resolve_pending_review_choice(
 
     lowered = text.lower().strip(" .!?'\"")
 
-    # 2. Numeric index (e.g. "1", "#1", "option 1", "number 2")
-    num_match = re.fullmatch(r"(?:option|number|num|#)?\s*(\d+)(?:\s*one)?", lowered)
-    if num_match:
-        idx = int(num_match.group(1))
-        if 1 <= idx <= len(choices):
-            return choices[idx - 1].get("recordId")
-
-    # Ordinal words (e.g. "first", "the first one")
-    for word, idx in _ORDINAL_WORDS.items():
-        if re.fullmatch(rf"(?:the\s+)?{word}(?:\s+one)?", lowered):
-            if 1 <= idx <= len(choices):
-                return choices[idx - 1].get("recordId")
-
-    # 3. Clean conversational prefixes to isolate the initiative title
+    # 2. Strip conversational prefixes first so both numeric/ordinal ("let's start with 1",
+    # "let's do the first one") and title ("let's start with AAA") inputs are normalized.
     cleaned = lowered
     changed = True
     while changed:
@@ -191,6 +179,24 @@ def resolve_pending_review_choice(
             elif cleaned == prefix:
                 cleaned = ""
                 changed = True
+
+    for candidate in (lowered, cleaned):
+        if not candidate:
+            continue
+        # Numeric index (e.g. "1", "#1", "option 1", "number 2", "rank 1")
+        num_match = re.fullmatch(
+            r"(?:option|number|num|rank|item|#)?\s*(\d+)(?:\s*one)?", candidate
+        )
+        if num_match:
+            idx = int(num_match.group(1))
+            if 1 <= idx <= len(choices):
+                return choices[idx - 1].get("recordId")
+
+        # Ordinal words (e.g. "first", "the first one", "let's start with the first one")
+        for word, idx in _ORDINAL_WORDS.items():
+            if re.fullmatch(rf"(?:the\s+)?{word}(?:\s+one)?", candidate):
+                if 1 <= idx <= len(choices):
+                    return choices[idx - 1].get("recordId")
 
     if not cleaned:
         return None

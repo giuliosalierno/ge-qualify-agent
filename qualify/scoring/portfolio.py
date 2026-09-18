@@ -132,9 +132,34 @@ def _score_business_value(record: UseCaseRecord) -> tuple[int, float, str]:
 
 
 def _has_technical_review_data(record: UseCaseRecord, tech_score: TechnicalScore, has_dossier: bool) -> bool:
-    """Returns True if Phase 2 (Technical Architecture Review) subcriteria have been populated."""
-    answered_count = sum(1 for s in tech_score.subscores if s.answered)
-    return answered_count >= 5
+    """Returns True only if Phase 2 (Technical Architecture Review) fields have actually been populated.
+
+    Phase 1 (Business Intake) populates up to 5 overlapping fields (`data_sources`,
+    `data_classification`, `acl_preservation_required`, `business_owner`, etc.).
+    Counting those as a completed Phase 2 review would falsely assign an 18%
+    readiness score (1/5 feasibility) to Phase 1 opportunities that have not yet
+    completed the Phase 2 Technical Architecture Review.
+    """
+    t = record.technical
+    phase2_signals = [
+        bool(t.systems),
+        t.data_freshness is not None,
+        bool(t.network.hosting_environments),
+        t.network.transit_path is not None,
+        t.network.firewall_proxy_status is not None,
+        t.network.transit_blocker_status is not None,
+        t.security.user_authentication is not None,
+        t.security.service_authentication is not None,
+        t.security.iam_least_privilege is not None,
+        t.security.cloud_policy_status is not None,
+        t.grounding.model_profile is not None,
+        t.grounding.citation_policy is not None,
+        t.grounding.query_volume is not None,
+        t.landing_zone_status is not None,
+        bool(record.proposed.tech_owner),
+        bool(record.proposed.network_security_lead),
+    ]
+    return sum(1 for sig in phase2_signals if sig) >= 2
 
 
 def _score_feasibility(
