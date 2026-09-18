@@ -79,6 +79,8 @@ else
     --role=roles/storage.objectAdmin >/dev/null
 fi
 
+INGRESS_MODE="${INGRESS_MODE:-internal-and-cloud-load-balancing}"
+
 # Initial deployment from source (builds Dockerfile)
 gcloud run deploy "$SERVICE_NAME" \
   --source "$SCRIPT_DIR" \
@@ -87,6 +89,7 @@ gcloud run deploy "$SERVICE_NAME" \
   --memory "$MEMORY" \
   --min-instances 1 \
   --max-instances "$MAX_INSTANCES" \
+  --ingress "$INGRESS_MODE" \
   --clear-base-image \
   --allow-unauthenticated \
   --set-env-vars="GOOGLE_CLOUD_PROJECT=${PROJECT_ID},GOOGLE_CLOUD_LOCATION=${GENAI_LOCATION},GOOGLE_GENAI_USE_VERTEXAI=TRUE,MODEL=${MODEL_NAME},MS_GRAPH_TENANT_ID=${MS_GRAPH_TENANT_ID:-},MS_GRAPH_CLIENT_ID=${MS_GRAPH_CLIENT_ID:-},MS_GRAPH_CLIENT_SECRET=${MS_GRAPH_CLIENT_SECRET:-},MS_GRAPH_REFRESH_TOKEN=${MS_GRAPH_REFRESH_TOKEN:-},SHAREPOINT_INSTANCE_URL=${SHAREPOINT_INSTANCE_URL:-},WEB_OAUTH_CALLBACK=${WEB_OAUTH_CALLBACK},QUALIFY_GCS_BUCKET=${QUALIFY_GCS_BUCKET}"
@@ -96,14 +99,22 @@ SERVICE_URL=$(gcloud run services describe "$SERVICE_NAME" \
   --region="$REGION" \
   --format='value(status.url)')
 
-echo "Service deployed at: $SERVICE_URL"
+# Prefer the Global Load Balancer nip.io domain if provisioned
+LB_IP=$(gcloud compute addresses describe "${SERVICE_NAME}-ip" --global --project="$PROJECT_ID" --format="value(address)" 2>/dev/null || true)
+if [ -n "$LB_IP" ]; then
+  PUBLIC_URL="https://${LB_IP}.nip.io"
+else
+  PUBLIC_URL="$SERVICE_URL"
+fi
 
-# Second pass: set AGENT_URL so the agent card advertises its public endpoint
-echo "Updating AGENT_URL=$SERVICE_URL ..."
+echo "Service deployed at: $SERVICE_URL (LB URL: $PUBLIC_URL)"
+
+# Second pass: set AGENT_URL so the agent card and OAuth links advertise the Load Balancer endpoint
+echo "Updating AGENT_URL=$PUBLIC_URL ..."
 gcloud run services update "$SERVICE_NAME" \
   --project="$PROJECT_ID" \
   --region="$REGION" \
-  --update-env-vars=AGENT_URL="$SERVICE_URL"
+  --update-env-vars=AGENT_URL="$PUBLIC_URL"
 
 # Grant roles/run.invoker to the Discovery Engine service agent
 GE_SA="service-${PROJECT_NUMBER}@gcp-sa-discoveryengine.iam.gserviceaccount.com"
@@ -116,6 +127,7 @@ gcloud run services add-iam-policy-binding "$SERVICE_NAME" \
 
 echo "============================================================"
 echo "Deployment & IAM Setup Complete!"
-echo "Service URL: $SERVICE_URL"
-echo "Agent Card:  ${SERVICE_URL}/.well-known/agent-card.json"
+echo "Cloud Run URL:     $SERVICE_URL (Ingress: $INGRESS_MODE)"
+echo "Load Balancer URL: $PUBLIC_URL"
+echo "Agent Card:        ${PUBLIC_URL}/.well-known/agent-card.json"
 echo "============================================================"
