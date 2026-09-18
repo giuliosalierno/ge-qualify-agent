@@ -869,12 +869,17 @@ def _try_portfolio_review(
     if report_url:
         connector.sync_portfolio_report(final_md, context_id=session.context_id)
 
-    # Populate pending_review_choices with pending Gate 2 opportunities so the user
-    # can immediately reply e.g. "let's start with AAA" right after the portfolio table.
+    # Populate pending_review_choices in exact Ranked Portfolio Matrix order (1..N)
+    # so the user can reply with any Rank number (1..N), initiative name (e.g. "AAA"), or Record ID.
     session.pending_review_choices = [
-        meta
-        for _, meta in items
-        if meta.get("hasBrief") and not meta.get("hasDossier")
+        {
+            "recordId": ev.record_id,
+            "initiativeName": ev.initiative_name,
+            "webUrl": ev.folder_url,
+            "hasBrief": ev.has_brief,
+            "hasDossier": ev.has_dossier,
+        }
+        for ev in summary.evaluations
     ]
 
     return TurnOutput(
