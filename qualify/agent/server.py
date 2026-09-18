@@ -94,9 +94,13 @@ def build_app():
     server = A2AStarletteApplication(agent_card=agent_card, http_handler=handler)
     app = server.build()
 
-    # Mount SharePoint MCP & OAuth 2.0 endpoints on the same server
+    from qualify.web import handle_web_ui, handle_whoami
+
+    # Mount Web UI (GET /), IAP identity (/api/me), and SharePoint MCP & OAuth 2.0 endpoints
+    app.routes.insert(0, Route("/", handle_web_ui, methods=["GET"]))
     app.routes.extend(
         [
+            Route("/api/me", handle_whoami, methods=["GET"]),
             Route("/mcp", handle_mcp_request, methods=["POST", "GET", "OPTIONS"]),
             Route("/auth", handle_oauth_auth, methods=["GET", "POST"]),
             Route("/auth/status", handle_oauth_status, methods=["GET"]),
