@@ -44,6 +44,9 @@ payload = {
     ),
     "a2aAgentDefinition": {
         "jsonAgentCard": card_text
+    },
+    "sharingConfig": {
+        "scope": "ALL_USERS"
     }
 }
 print(json.dumps(payload, indent=2))

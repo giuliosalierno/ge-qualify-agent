@@ -62,12 +62,15 @@ payload = {
             "projects/$PROJECT_NUMBER/locations/global/authorizations/$AUTH_ID"
         ]
     },
+    "sharingConfig": {
+        "scope": "ALL_USERS"
+    },
 }
 print(json.dumps(payload, indent=2))
 PY
 
 AGENT="https://discoveryengine.googleapis.com/v1alpha/projects/${PROJECT_ID}/locations/global/collections/default_collection/engines/${ENGINE_ID}/assistants/default_assistant/agents/${AGENT_ID}"
-UPDATE_MASK="displayName,description,a2aAgentDefinition,authorizationConfig"
+UPDATE_MASK="displayName,description,a2aAgentDefinition,authorizationConfig,sharingConfig"
 
 echo "Patching Gemini Enterprise agent ${AGENT_ID} (updateMask=${UPDATE_MASK}) ..."
 curl -s -w "\nHTTP_STATUS:%{http_code}\n" -X PATCH "${AGENT}?updateMask=${UPDATE_MASK}" \
