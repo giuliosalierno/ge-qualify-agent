@@ -426,12 +426,44 @@ def baseline_summary(session: Session) -> str:
         lines.append(
             f"- **Indicative delivery tier:** **{tier.label}** — *{cap_label}*"
         )
-        if record.technical.capability_rationale:
-            lines.append(
-                f"- **Architecture Grounding:** {record.technical.capability_rationale}"
-            )
+        lines.append(
+            f"- **Architect Review Focus:** {_architect_review_focus(record)}"
+        )
 
     return "\n".join(lines)
+
+
+def _architect_review_focus(record: UseCaseRecord) -> str:
+    """One-line architectural focus for the Solution Architect in Phase 2."""
+    from qualify.schema.capability import CapabilityLevel  # noqa: PLC0415
+
+    lvl = record.technical.capability_level
+    sources = format_source_names(
+        record.technical.data_sources, record.technical.other_data_sources
+    ) or "the target repositories"
+
+    if lvl in (
+        CapabilityLevel.WORKFLOW_AGENT_WITH_CUSTOM_MCP,
+        CapabilityLevel.HIGH_CODE_AGENT,
+    ):
+        return (
+            f"Delegated to **Pro-Code ({lvl.label})** — verify API schemas, "
+            f"Workload Identity / OAuth 2.0 auth, VPC network transit, and "
+            f"whether to deploy on **Vertex AI Agent Runtime (ADK)** or **Cloud Run (A2A/MCP)** for {sources}."
+        )
+    if lvl in (
+        CapabilityLevel.WORKFLOW_BUILDER_CHAT_AGENT,
+        CapabilityLevel.WORKFLOW_BUILDER_WORKFLOW_AGENT,
+    ):
+        return (
+            f"Scoped for **Low-Code ({lvl.label})** over {sources} — confirm whether "
+            f"native Gemini Enterprise connectors cover all required queries/actions "
+            f"(read-only vs. write) and preserve document-level ACLs, or if custom APIs require **Pro-Code (Level 5/6)**."
+        )
+    return (
+        "Scoped for **No-Code (Gemini Enterprise Assistant / Custom Skill)** — "
+        "confirm no live backend system connectors or automated writes are required."
+    )
 
 
 def list_pending_reviews(

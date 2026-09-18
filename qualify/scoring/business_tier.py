@@ -207,10 +207,20 @@ def _assess_gcp_grounding_signals(record: UseCaseRecord) -> dict[str, object]:
     }
 
 
-def classify_capability(record: UseCaseRecord) -> None:
+def classify_capability(record: UseCaseRecord, *, force_refresh: bool = False) -> None:
     """Assigns `capability_level` and GCP-grounded `capability_rationale` without overcommitting."""
     tech = record.technical
-    if tech.capability_level is not None and tech.capability_rationale:
+    is_legacy_rationale = bool(
+        tech.capability_rationale
+        and "GCP Reference" not in tech.capability_rationale
+        and "Proposed Solution" not in tech.capability_rationale
+    )
+    if (
+        not force_refresh
+        and not is_legacy_rationale
+        and tech.capability_level is not None
+        and tech.capability_rationale
+    ):
         return
 
     signals = _assess_gcp_grounding_signals(record)
@@ -225,7 +235,7 @@ def classify_capability(record: UseCaseRecord) -> None:
     delegation_reasons = list(signals["delegation_reasons"])  # type: ignore[arg-type]
     problem = str(signals["problem"])
 
-    if tech.capability_level is None:
+    if tech.capability_level is None or force_refresh or is_legacy_rationale:
         # 1. Hard Pro-Code ADK (Level 6) triggers
         if (
             classification == "restricted"
@@ -256,7 +266,7 @@ def classify_capability(record: UseCaseRecord) -> None:
             tech.capability_level = CapabilityLevel.DEFAULT_ASSISTANT
 
     level = tech.capability_level
-    if not tech.capability_rationale:
+    if not tech.capability_rationale or force_refresh or is_legacy_rationale:
         tech.capability_rationale = _build_guidance(
             level,
             named_sources,
@@ -264,6 +274,33 @@ def classify_capability(record: UseCaseRecord) -> None:
             delegation_reasons=delegation_reasons,
             record_id=record.meta.record_id,
         )
+
+
+_PRETTY_SOURCE_MAP: dict[str, str] = {
+    "google_drive": "Google Drive / Docs",
+    "gmail_calendar": "Gmail & Google Calendar",
+    "sharepoint": "Microsoft SharePoint",
+    "sharepoint_onedrive": "Microsoft SharePoint / OneDrive",
+    "confluence": "Atlassian Confluence",
+    "jira": "Atlassian Jira",
+    "salesforce": "Salesforce CRM",
+    "servicenow": "ServiceNow",
+    "bigquery": "Google BigQuery",
+    "cloud_sql": "Google Cloud SQL / AlloyDB",
+    "sap_erp": "SAP ERP",
+    "workday": "Workday",
+    "zendesk": "Zendesk",
+    "slack_teams": "Slack / Microsoft Teams",
+    "public_web": "Public Web Grounding",
+}
+
+
+def _pretty_sources(sources: list[str]) -> str:
+    if not sources:
+        return "user-provided documents / general knowledge"
+    return ", ".join(
+        _PRETTY_SOURCE_MAP.get(s, s.replace("_", " ").title()) for s in sources
+    )
 
 
 def _build_guidance(
@@ -274,7 +311,7 @@ def _build_guidance(
     delegation_reasons: list[str] | None = None,
     record_id: str = "UC-XXXX",
 ) -> str:
-    src_display = ", ".join(sources) if sources else "user-provided documents / general knowledge"
+    src_display = _pretty_sources(sources)
     reasons = delegation_reasons or []
 
     if level == CapabilityLevel.DEFAULT_ASSISTANT:
