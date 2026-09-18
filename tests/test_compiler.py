@@ -129,7 +129,7 @@ def test_patch_is_standalone():
 def test_continue_button_sends_the_whole_record():
     """sendDataModel is a no-op in GE, so the action context must carry it."""
     components = compiler.build_stage_components(PACKS["business"], 0)
-    button = next(c for c in components if c["id"] == compiler._CONTINUE_ID)
+    button = next(c for c in components if c["id"].startswith(compiler._CONTINUE_ID))
     context = button["action"]["event"]["context"]
 
     assert button["action"]["event"]["name"] == compiler.COMMIT_STAGE
@@ -142,13 +142,13 @@ def test_last_stage_button_says_submit():
     pack = PACKS["business"]
     last = len(pack.stages) - 1
     components = compiler.build_stage_components(pack, last)
-    label = next(c for c in components if c["id"] == compiler._CONTINUE_LABEL_ID)
+    label = next(c for c in components if c["id"].startswith(compiler._CONTINUE_LABEL_ID))
     assert label["text"] == "Submit"
 
 
 def test_earlier_stage_buttons_say_continue():
     components = compiler.build_stage_components(PACKS["business"], 0)
-    label = next(c for c in components if c["id"] == compiler._CONTINUE_LABEL_ID)
+    label = next(c for c in components if c["id"].startswith(compiler._CONTINUE_LABEL_ID))
     assert label["text"] == "Continue"
 
 
