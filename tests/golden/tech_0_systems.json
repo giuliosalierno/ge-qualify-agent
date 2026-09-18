@@ -18,12 +18,6 @@
             "stage-title",
             "stage-caption",
             "stage-rule",
-            "f-uc-meta-initiative-name-label",
-            "f-uc-meta-initiative-name",
-            "f-uc-business-problem-description-label",
-            "f-uc-business-problem-description",
-            "f-uc-technical-capability-level-label",
-            "f-uc-technical-capability-level",
             "f-uc-technical-data-freshness",
             "f-uc-proposed-tech-owner",
             "f-ui-systems-table-label",
@@ -50,48 +44,6 @@
           "component": "Divider"
         },
         {
-          "id": "f-uc-meta-initiative-name-label",
-          "component": "Text",
-          "text": "Initiative (from business intake)",
-          "variant": "caption"
-        },
-        {
-          "id": "f-uc-meta-initiative-name",
-          "component": "Text",
-          "text": {
-            "path": "/uc/meta/initiative_name"
-          },
-          "variant": "body"
-        },
-        {
-          "id": "f-uc-business-problem-description-label",
-          "component": "Text",
-          "text": "Problem statement (from business intake)",
-          "variant": "caption"
-        },
-        {
-          "id": "f-uc-business-problem-description",
-          "component": "Text",
-          "text": {
-            "path": "/uc/business/problem_description"
-          },
-          "variant": "body"
-        },
-        {
-          "id": "f-uc-technical-capability-level-label",
-          "component": "Text",
-          "text": "Indicative delivery tier (from business intake)",
-          "variant": "caption"
-        },
-        {
-          "id": "f-uc-technical-capability-level",
-          "component": "Text",
-          "text": {
-            "path": "/uc/technical/capability_level"
-          },
-          "variant": "body"
-        },
-        {
           "id": "f-uc-technical-data-freshness",
           "component": "MaterialSelect",
           "options": [
@@ -115,13 +67,13 @@
           "value": {
             "path": "/uc/technical/data_freshness"
           },
-          "label": "Data freshness and sync * — Subcriterion 1.4.",
+          "label": "Data freshness and sync * — Both refresh frequency and sync mechanism are required.",
           "placeholder": "Choose one"
         },
         {
           "id": "f-uc-proposed-tech-owner",
           "component": "TextField",
-          "label": "Lead DBA or data custodian * — A named person, not a team queue. Subcriterion 1.5.",
+          "label": "Lead DBA or data custodian * — Named individual (not a generic team queue).",
           "value": {
             "path": "/uc/proposed/tech_owner"
           },
@@ -268,6 +220,9 @@
           "summary": {
             "hours_line": "Fill in the three numbers above to see the estimate.",
             "hours_basis": ""
+          },
+          "systems": {
+            "table": "No systems recorded yet. Name the backends this needs and I'll build the matrix."
           }
         }
       }

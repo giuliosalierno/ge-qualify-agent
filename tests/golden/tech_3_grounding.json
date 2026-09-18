@@ -49,7 +49,7 @@
         {
           "id": "f-uc-technical-grounding-acl-preservation-required",
           "component": "CheckBox",
-          "label": "Document-level ACLs must be preserved — Subcriterion 4.1.",
+          "label": "Document-level ACLs must be preserved — Enforce source-system user permissions at query time.",
           "value": {
             "path": "/uc/technical/grounding/acl_preservation_required"
           }
@@ -74,7 +74,7 @@
           "value": {
             "path": "/uc/technical/grounding/citation_policy"
           },
-          "label": "Citation and provenance — Subcriterion 4.2.",
+          "label": "Citation and provenance — Whether responses must include inline source attributions.",
           "placeholder": "Choose one"
         },
         {
@@ -97,7 +97,7 @@
           "value": {
             "path": "/uc/technical/grounding/query_volume"
           },
-          "label": "Expected query volume — Subcriterion 4.3.",
+          "label": "Expected query volume — Peak concurrency and expected QPS profile.",
           "placeholder": "Choose one"
         },
         {
@@ -126,7 +126,7 @@
         {
           "id": "f-uc-technical-grounding-model-profile-label",
           "component": "Text",
-          "text": "Model profile * — Subcriterion 4.4.",
+          "text": "Model profile * — Target Gemini model tier for this workload.",
           "variant": "caption"
         },
         {
@@ -305,6 +305,9 @@
           "summary": {
             "hours_line": "Fill in the three numbers above to see the estimate.",
             "hours_basis": ""
+          },
+          "systems": {
+            "table": "No systems recorded yet. Name the backends this needs and I'll build the matrix."
           }
         }
       }

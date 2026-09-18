@@ -125,10 +125,8 @@ option_sets:
 
 stages:
   # -- 1 --------------------------------------------------------------------
-  # Opens with the Phase 1 baseline, locked. The SKILL's Turn 1 both ingests
-  # the brief and asks the stage 1 questions, so the two live in one stage
-  # rather than costing the reviewer an extra Continue click to read facts
-  # they cannot change.
+  # Phase 1 baseline is presented as a structured Opportunity Summary above the
+  # card so the Stage 1 surface focuses cleanly on the architect's inputs.
   - id: systems
     label: Systems and data landscape
     chat_questions:
@@ -137,33 +135,18 @@ stages:
       - Are schemas, data dictionaries or API specs documented, or are these undocumented legacy tables?
       - How fresh does the data need to be, and what syncs it?
     fields:
-      - path: /uc/meta/initiative_name
-        label: Initiative (from business intake)
-        component: Text
-        variant: body
-        readonly: true
-      - path: /uc/business/problem_description
-        label: Problem statement (from business intake)
-        component: Text
-        variant: body
-        readonly: true
-      - path: /uc/technical/capability_level
-        label: Indicative delivery tier (from business intake)
-        component: Text
-        variant: body
-        readonly: true
       - path: /uc/technical/data_freshness
         label: Data freshness and sync
         component: MaterialSelect
         options_ref: data_freshness
         required: true
-        help: Subcriterion 1.4.
+        help: Both refresh frequency and sync mechanism are required.
       - path: /uc/proposed/tech_owner
         label: Lead DBA or data custodian
         component: TextField
         variant: shortText
         required: true
-        help: A named person, not a team queue. Subcriterion 1.5.
+        help: Named individual (not a generic team queue).
       # The Systems & Data matrix is a list of objects. No verified component
       # can edit repeating rows and the field extractor cannot see them, so it
       # is built from the conversation and shown back here, locked, for the
@@ -191,24 +174,24 @@ stages:
         component: TextField
         variant: longText
         required: true
-        help: Cloud regions or on-premises data centres. Subcriterion 2.1.
+        help: Cloud regions, VPCs, or on-premises data centres.
       - path: /uc/technical/network/transit_path
         label: Transit path to Google Cloud
         component: MaterialSelect
         options_ref: transit_path
         required: true
-        help: Subcriterion 2.2.
+        help: Network interconnect, VPN, or Private Service Connect path.
       - path: /uc/technical/network/firewall_proxy_status
         label: Egress proxy and firewall status
         component: MaterialSelect
         options_ref: firewall_status
-        help: Subcriterion 2.3.
+        help: Whether TLS inspection or proxy ports are cleared.
       - path: /uc/technical/network/transit_blocker_status
         label: Transit approval
         component: MaterialRadioButton
         options_ref: transit_blocker
         required: true
-        help: An airgapped system is a critical blocker. Subcriterion 2.4.
+        help: An airgapped system without cloud transit is a hard blocker.
     exit_criteria:
       - Hosting topology is mapped.
       - A transit path is named, or its absence is recorded as a blocker.
@@ -227,24 +210,24 @@ stages:
         component: MaterialSelect
         options_ref: identity_provider
         required: true
-        help: Subcriterion 3.1.
+        help: Enterprise SSO / Identity Provider for end-user login.
       - path: /uc/technical/security/service_authentication
         label: Service authentication
         component: MaterialSelect
         options_ref: service_auth
         required: true
-        help: Subcriterion 3.2.
+        help: Machine-to-machine authentication and credential rotation.
       - path: /uc/technical/security/iam_least_privilege
         label: IAM scope requested
         component: MaterialSelect
         options_ref: iam_scope
-        help: Subcriterion 3.3.
+        help: Minimum required access scope for connectors and agents.
       - path: /uc/technical/security/data_classification
         label: Data classification
         component: MaterialRadioButton
         options_ref: data_classification
         required: true
-        help: Subcriterion 3.4.
+        help: Highest sensitivity tier of data accessed by this workflow.
       - path: /uc/technical/security/residency_requirements
         label: Data residency
         component: MaterialSelect
@@ -254,7 +237,7 @@ stages:
         component: MaterialRadioButton
         options_ref: cloud_policy
         required: true
-        help: A corporate ban is a critical blocker. Subcriterion 3.5.
+        help: A corporate ban on cloud processing is a hard blocker.
     exit_criteria:
       - User and service authentication are both named.
       - Data classification is recorded.
@@ -272,17 +255,17 @@ stages:
       - path: /uc/technical/grounding/acl_preservation_required
         label: Document-level ACLs must be preserved
         component: CheckBox
-        help: Subcriterion 4.1.
+        help: Enforce source-system user permissions at query time.
       - path: /uc/technical/grounding/citation_policy
         label: Citation and provenance
         component: MaterialSelect
         options_ref: citation_policy
-        help: Subcriterion 4.2.
+        help: Whether responses must include inline source attributions.
       - path: /uc/technical/grounding/query_volume
         label: Expected query volume
         component: MaterialSelect
         options_ref: query_volume
-        help: Subcriterion 4.3.
+        help: Peak concurrency and expected QPS profile.
       - path: /uc/technical/grounding/latency_sla
         label: Latency target
         component: MaterialSelect
@@ -292,7 +275,7 @@ stages:
         component: MaterialButtonToggle
         options_ref: model_profile
         required: true
-        help: Subcriterion 4.4.
+        help: Target Gemini model tier for this workload.
     exit_criteria:
       - The ACL requirement is explicit either way.
       - A model profile is chosen, with a workload reason.
@@ -312,18 +295,18 @@ stages:
         component: TextField
         variant: shortText
         required: true
-        help: Subcriterion 5.1.
+        help: Named cloud network or security architect.
       - path: /uc/proposed/domain_sme
         label: Domain validation SME
         component: TextField
         variant: shortText
-        help: Subcriterion 5.2.
+        help: Subject-matter expert for UAT and ground-truth evaluation.
       - path: /uc/technical/landing_zone_status
         label: GCP landing zone
         component: MaterialSelect
         options_ref: landing_zone
         required: true
-        help: Subcriterion 5.3.
+        help: Google Cloud project, VPC, and IAM provisioning status.
     exit_criteria:
       - A named technical lead and a named security lead exist.
       - Landing zone status is known.

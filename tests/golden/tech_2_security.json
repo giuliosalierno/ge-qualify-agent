@@ -84,7 +84,7 @@
           "value": {
             "path": "/uc/technical/security/user_authentication"
           },
-          "label": "End-user identity provider * — Subcriterion 3.1.",
+          "label": "End-user identity provider * — Enterprise SSO / Identity Provider for end-user login.",
           "placeholder": "Choose one"
         },
         {
@@ -115,7 +115,7 @@
           "value": {
             "path": "/uc/technical/security/service_authentication"
           },
-          "label": "Service authentication * — Subcriterion 3.2.",
+          "label": "Service authentication * — Machine-to-machine authentication and credential rotation.",
           "placeholder": "Choose one"
         },
         {
@@ -142,13 +142,13 @@
           "value": {
             "path": "/uc/technical/security/iam_least_privilege"
           },
-          "label": "IAM scope requested — Subcriterion 3.3.",
+          "label": "IAM scope requested — Minimum required access scope for connectors and agents.",
           "placeholder": "Choose one"
         },
         {
           "id": "f-uc-technical-security-data-classification-label",
           "component": "Text",
-          "text": "Data classification * — Subcriterion 3.4.",
+          "text": "Data classification * — Highest sensitivity tier of data accessed by this workflow.",
           "variant": "caption"
         },
         {
@@ -218,7 +218,7 @@
         {
           "id": "f-uc-technical-security-cloud-policy-status-label",
           "component": "Text",
-          "text": "Cloud processing policy * — A corporate ban is a critical blocker. Subcriterion 3.5.",
+          "text": "Cloud processing policy * — A corporate ban on cloud processing is a hard blocker.",
           "variant": "caption"
         },
         {
@@ -397,6 +397,9 @@
           "summary": {
             "hours_line": "Fill in the three numbers above to see the estimate.",
             "hours_basis": ""
+          },
+          "systems": {
+            "table": "No systems recorded yet. Name the backends this needs and I'll build the matrix."
           }
         }
       }

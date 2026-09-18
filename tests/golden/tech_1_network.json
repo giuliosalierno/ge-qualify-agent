@@ -48,7 +48,7 @@
         {
           "id": "f-uc-technical-network-hosting-environments",
           "component": "TextField",
-          "label": "Hosting environments * — Cloud regions or on-premises data centres. Subcriterion 2.1.",
+          "label": "Hosting environments * — Cloud regions, VPCs, or on-premises data centres.",
           "value": {
             "path": "/uc/technical/network/hosting_environments"
           },
@@ -82,7 +82,7 @@
           "value": {
             "path": "/uc/technical/network/transit_path"
           },
-          "label": "Transit path to Google Cloud * — Subcriterion 2.2.",
+          "label": "Transit path to Google Cloud * — Network interconnect, VPN, or Private Service Connect path.",
           "placeholder": "Choose one"
         },
         {
@@ -109,13 +109,13 @@
           "value": {
             "path": "/uc/technical/network/firewall_proxy_status"
           },
-          "label": "Egress proxy and firewall status — Subcriterion 2.3.",
+          "label": "Egress proxy and firewall status — Whether TLS inspection or proxy ports are cleared.",
           "placeholder": "Choose one"
         },
         {
           "id": "f-uc-technical-network-transit-blocker-status-label",
           "component": "Text",
-          "text": "Transit approval * — An airgapped system is a critical blocker. Subcriterion 2.4.",
+          "text": "Transit approval * — An airgapped system without cloud transit is a hard blocker.",
           "variant": "caption"
         },
         {
@@ -294,6 +294,9 @@
           "summary": {
             "hours_line": "Fill in the three numbers above to see the estimate.",
             "hours_basis": ""
+          },
+          "systems": {
+            "table": "No systems recorded yet. Name the backends this needs and I'll build the matrix."
           }
         }
       }

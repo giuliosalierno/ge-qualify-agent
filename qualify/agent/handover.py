@@ -288,6 +288,19 @@ def start_tech_review(
         record_id,
     )
 
+    # Populate indicative capability level when Phase 1 recorded inputs (data sources,
+    # user stories, or problem statement) but capability_level was not yet persisted.
+    has_phase1_inputs = bool(
+        record.technical.data_sources
+        or record.technical.other_data_sources
+        or record.business.user_stories
+        or record.business.problem_description
+    )
+    if record.technical.capability_level is None and has_phase1_inputs:
+        from qualify.scoring.business_tier import classify_capability  # noqa: PLC0415
+
+        classify_capability(record)
+
     session = Session(
         context_id=context_id,
         pack_name=TECH_PACK,
@@ -321,28 +334,96 @@ def _not_found_message(store: SessionStore, record_id: str) -> str:
     )
 
 
-def baseline_summary(session: Session) -> str:
-    """A short prose recap of what Phase 1 established.
+_SOURCE_LABELS: dict[str, str] = {
+    "google_drive": "Google Drive / Docs",
+    "gmail_calendar": "Gmail & Google Calendar",
+    "sharepoint": "Microsoft SharePoint",
+    "sharepoint_onedrive": "Microsoft SharePoint / OneDrive",
+    "confluence": "Atlassian Confluence",
+    "jira": "Atlassian Jira",
+    "salesforce": "Salesforce CRM",
+    "servicenow": "ServiceNow",
+    "bigquery": "Google BigQuery",
+    "cloud_sql": "Google Cloud SQL / AlloyDB",
+    "sap_erp": "SAP ERP",
+    "workday": "Workday",
+    "zendesk": "Zendesk",
+    "slack_teams": "Slack / Microsoft Teams",
+    "public_web": "Public Web Grounding",
+}
 
-    Shown on the handover turn so the reviewer can see immediately whether they
-    have the right initiative, before answering five stages of questions about
-    the wrong one.
+
+def format_source_names(sources: list[str], other: str | None = None) -> str:
+    """Formats Phase 1 data source slugs into human-readable display names."""
+    items = [
+        _SOURCE_LABELS.get(s, s.replace("_", " ").title())
+        for s in sources
+        if s != "other"
+    ]
+    if other:
+        items.append(other)
+    return ", ".join(items)
+
+
+def baseline_summary(session: Session) -> str:
+    """A structured Opportunity Brief recapping what Phase 1 established.
+
+    Shown on the handover turn so the Solution Architect immediately understands
+    the business problem, target persona, estimated ROI, systems in scope, and
+    recommended Gemini Enterprise capability tier before starting Stage 1.
     """
     record = session.record
     name = record.meta.initiative_name or "Unnamed initiative"
-    lines = [f"**{name}** (`{record.meta.record_id}`)"]
+    lines = [f"#### 📋 Opportunity Summary — **{name}** (`{record.meta.record_id}`)"]
+
+    if record.business.problem_description:
+        lines.append(f"- **Problem Statement:** {record.business.problem_description}")
+    if record.business.user_stories:
+        lines.append(f"- **Target Workflow / User Stories:** {record.business.user_stories}")
+    if record.business.expected_impacts:
+        lines.append(
+            f"- **Expected Business Impacts:** {', '.join(record.business.expected_impacts)}"
+        )
 
     if record.meta.department_bu:
-        lines.append(f"- Team: {record.meta.department_bu}")
-    if record.business.user_count is not None:
-        lines.append(f"- Affected users: {record.business.user_count}")
-    if record.technical.data_sources:
-        lines.append(
-            f"- Systems named in Phase 1: {', '.join(record.technical.data_sources)}"
+        owner_suffix = (
+            f" (Business Owner: {record.proposed.business_owner})"
+            if record.proposed.business_owner
+            else ""
         )
+        lines.append(f"- **Team:** {record.meta.department_bu}{owner_suffix}")
+
+    if record.business.user_count is not None:
+        persona = f" ({record.business.user_profile})" if record.business.user_profile else ""
+        hours = record.derived.total_annual_team_hours_saved
+        hours_suffix = (
+            f" · **{hours:,.0f} hrs/yr** estimated savings"
+            if hours is not None
+            else ""
+        )
+        lines.append(
+            f"- **Affected users:** {record.business.user_count}{persona}{hours_suffix}"
+        )
+
+    if record.technical.data_sources or record.technical.other_data_sources:
+        pretty_sources = format_source_names(
+            record.technical.data_sources, record.technical.other_data_sources
+        )
+        lines.append(f"- **Systems named in Phase 1:** {pretty_sources}")
+
     if record.technical.capability_level is not None:
+        from qualify.scoring.business_tier import classify_capability  # noqa: PLC0415
+
+        classify_capability(record)
         tier = record.technical.capability_level.delivery_tier
-        lines.append(f"- Indicative delivery tier: {tier.label}")
+        cap_label = record.technical.capability_level.label
+        lines.append(
+            f"- **Indicative delivery tier:** **{tier.label}** — *{cap_label}*"
+        )
+        if record.technical.capability_rationale:
+            lines.append(
+                f"- **Architecture Grounding:** {record.technical.capability_rationale}"
+            )
 
     return "\n".join(lines)
 

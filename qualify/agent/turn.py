@@ -509,9 +509,19 @@ def _handle_action_outcome(
     )
 
 
-def _stage_intro_text(stage: Stage) -> str:
+def _stage_intro_text(
+    stage: Stage,
+    *,
+    stage_index: int | None = None,
+    total_stages: int | None = None,
+) -> str:
     """Default introduction text for a stage when entering it."""
     questions = "\n".join(f"- {q}" for q in stage.chat_questions)
+    if stage_index == 0 and total_stages:
+        return (
+            f"#### 🔍 Stage 1 of {total_stages} — **{stage.label}**\n\n"
+            f"Use the card below or reply in chat to confirm:\n{questions}"
+        )
     return (
         f"Moving on to **{stage.label}**.\n\n"
         f"To qualify this part of the workflow:\n{questions}"
@@ -996,14 +1006,14 @@ def _try_start_tech_review(
 
     stage = tech_session.pack.stages[tech_session.active_stage]
     reply_text = (
-        "### Technical Architecture Review\n\n"
-        "Picking up the business intake:\n\n"
+        "### 🏗️ Technical Architecture Review\n\n"
         f"{baseline_summary(tech_session)}\n\n"
-        "Those answers are locked — they belong to the business owner. "
-        "We'll add the technical layer on top, in five stages: systems, "
-        "network, security and IAM, grounding and models, then operational "
-        "readiness.\n\n"
-        f"{_stage_intro_text(stage)}"
+        "🔒 *The Phase 1 business baseline above is locked. We will now evaluate "
+        "technical feasibility across 5 stages (**1. Systems & Data** → **2. Network** → "
+        "**3. Security & IAM** → **4. Grounding & Models** → **5. Operational Readiness**) "
+        "to produce the **Technical Architecture Dossier**.*\n\n"
+        "---\n"
+        f"{_stage_intro_text(stage, stage_index=tech_session.active_stage, total_stages=len(tech_session.pack.stages))}"
     )
 
     return TurnOutput(

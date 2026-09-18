@@ -46,7 +46,7 @@
         {
           "id": "f-uc-proposed-network-security-lead",
           "component": "TextField",
-          "label": "Network or security lead * — Subcriterion 5.1.",
+          "label": "Network or security lead * — Named cloud network or security architect.",
           "value": {
             "path": "/uc/proposed/network_security_lead"
           },
@@ -55,7 +55,7 @@
         {
           "id": "f-uc-proposed-domain-sme",
           "component": "TextField",
-          "label": "Domain validation SME — Subcriterion 5.2.",
+          "label": "Domain validation SME — Subject-matter expert for UAT and ground-truth evaluation.",
           "value": {
             "path": "/uc/proposed/domain_sme"
           },
@@ -85,7 +85,7 @@
           "value": {
             "path": "/uc/technical/landing_zone_status"
           },
-          "label": "GCP landing zone * — Subcriterion 5.3.",
+          "label": "GCP landing zone * — Google Cloud project, VPC, and IAM provisioning status.",
           "placeholder": "Choose one"
         },
         {
@@ -239,6 +239,9 @@
           "summary": {
             "hours_line": "Fill in the three numbers above to see the estimate.",
             "hours_basis": ""
+          },
+          "systems": {
+            "table": "No systems recorded yet. Name the backends this needs and I'll build the matrix."
           }
         }
       }

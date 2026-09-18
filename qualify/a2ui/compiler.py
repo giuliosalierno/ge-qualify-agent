@@ -113,8 +113,10 @@ def build_ui_state(
     record: UseCaseRecord, pack: Pack, active_stage: int
 ) -> dict[str, Any]:
     """Compiler-owned display state."""
+    from qualify.a2ui.systems_extractor import render_systems_table  # noqa: PLC0415
+
     stage = pack.stages[active_stage]
-    return {
+    state: dict[str, Any] = {
         "stage": {
             "index": active_stage,
             "count": len(pack.stages),
@@ -123,6 +125,9 @@ def build_ui_state(
         },
         "summary": summary_strings(record),
     }
+    if pack.pack == "tech":
+        state["systems"] = {"table": render_systems_table(record)}
+    return state
 
 
 def summary_strings(record: UseCaseRecord) -> dict[str, str]:
