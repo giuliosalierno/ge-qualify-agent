@@ -62,7 +62,7 @@ def render_portfolio_report(
     ]
     if report_url:
         lines.append(
-            f"**SharePoint Artifact:** [Open `{PORTFOLIO_REPORT_FILENAME}` in SharePoint]({report_url})"
+            f"**SharePoint Report:** [Open Portfolio Prioritization Report in SharePoint]({report_url})"
         )
 
     lines.extend(
@@ -76,7 +76,7 @@ def render_portfolio_report(
             f"| **🔵 Strategic Bets** | **{len(by_q['Strategic Bets'])}** | High Business Value (>=3/5) & Custom MCP / High-Code Architecture |",
             f"| **🟡 Departmental Niche** | **{len(by_q['Departmental Niche'])}** | Localized Value (<3/5) & High Self-Service Feasibility (>=4/5) |",
             f"| **⚪ Deprioritized / Blocked** | **{len(by_q['Deprioritized'])}** | Hard technical blockers or low value & low feasibility |",
-            f"| **Pending Gate 2 Tech Review** | **{summary.pending_tech_review_count}** | Have `Business_Value_Brief.md`, awaiting `Technical_Architecture_Dossier.md` |",
+            f"| **Pending Gate 2 Tech Review** | **{summary.pending_tech_review_count}** | Business Value Brief completed; awaiting Technical Architecture Review |",
             f"| **Gate 2 Cleared (>=80% Readiness)** | **{summary.key2_ready_count}** | Passed 22-subcriteria technical review with zero hard blockers |",
             "",
             "## 2. Ranked Portfolio Matrix",

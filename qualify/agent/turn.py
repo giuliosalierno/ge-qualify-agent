@@ -622,11 +622,11 @@ _WELCOME_BANNER = (
     "### 👋 Welcome to the Gemini Enterprise AI Qualification & CoE Agent\n"
     "I support three workflows connected to the shared **Microsoft SharePoint** repository:\n\n"
     "1. **📋 Business Value Intake (Phase 1 — Business Owners)**\n"
-    "   Describe a new use case idea below (or fill in the **Stage 1** card) to size annual hours saved, match the right Gemini Enterprise capability (Levels 1–6), and save a `Business_Value_Brief.md` to SharePoint.\n"
+    "   Describe a new use case idea below (or fill in the **Stage 1** card) to size annual hours saved, match the right Gemini Enterprise capability (Levels 1–6), and save the **Business Value Brief** to SharePoint.\n"
     "2. **🏗️ Technical Architecture Review (Phase 2 — Solution Architects)**\n"
-    "   Type **`technical review`** to list qualified opportunities waiting in SharePoint, pick one by name or ID, and produce a 22-point `Technical_Architecture_Dossier.md`.\n"
+    "   Type **`technical review`** to list qualified opportunities waiting in SharePoint, pick one by name or ID, and generate a 22-point **Technical Architecture Dossier**.\n"
     "3. **📊 CoE Portfolio Prioritization (Activity 3 — CoE Leads)**\n"
-    "   Type **`portfolio review`** to score all SharePoint opportunities on Business Value (1–5) & Feasibility (1–5), segment them into quadrants (*Quick Wins*, *Strategic Bets*, *Departmental Niche*, *Deprioritized*), and publish `Portfolio_Prioritization_Report.md`."
+    "   Type **`portfolio review`** to score all SharePoint opportunities on Business Value (1–5) & Feasibility (1–5), segment them into quadrants (*Quick Wins*, *Strategic Bets*, *Departmental Niche*, *Deprioritized*), and publish the **Portfolio Prioritization Report** to SharePoint."
 )
 
 _HELP_PHRASES = (
@@ -842,9 +842,8 @@ def _try_portfolio_review(
         return TurnOutput(
             reply_text=(
                 "No qualified opportunities were found in SharePoint yet.\n\n"
-                "Complete at least one **Business Value Intake** (Phase 1) so its "
-                "`Business_Value_Brief.md` and `record.json` are saved to SharePoint, "
-                "then run `portfolio review` again."
+                "Complete at least one **Business Value Intake** (Phase 1) and save it "
+                "to the shared SharePoint folder, then run `portfolio review` again."
             ),
             a2ui_messages=[],
             session=session,
@@ -1210,11 +1209,16 @@ def _try_load_from_sharepoint(user_text: str | None, session: Session) -> TurnOu
         )
         if sp_res and sp_res.auth_mode == "delegated":
             title = session.record.meta.initiative_name or session.record.meta.record_id or "Opportunity"
+            deliverable_label = (
+                "Technical Architecture Dossier"
+                if session.pack_name == "tech"
+                else "Business Value Brief"
+            )
             reply_text = (
                 f"✅ **Successfully Saved to SharePoint!**\n\n"
                 f"- **Initiative**: {title} (`{session.record.meta.record_id}`)\n"
                 f"- **SharePoint Folder**: [Open Opportunity Folder in SharePoint]({sp_res.folder_url})\n"
-                f"- **Business Value Brief**: [View Business_Value_Brief.md]({sp_res.brief_url})\n\n"
+                f"- **{deliverable_label}**: [Open {deliverable_label} in SharePoint]({sp_res.brief_url})\n\n"
                 + render_deliverable(
                     session.pack_name, session.record, skipped_stages=session.skipped
                 )
