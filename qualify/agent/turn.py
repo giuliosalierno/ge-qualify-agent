@@ -220,6 +220,11 @@ def _run_turn(
         store.save(session)
         return probe_output
 
+    portfolio_output = _try_portfolio_review(store, turn_input.user_text, session)
+    if portfolio_output is not None:
+        store.save(session)
+        return portfolio_output
+
     # Also ahead of SharePoint: "start the technical review for UC-2026-ABC123"
     # reads as a load request to that handler's keyword matcher.
     handover_output = _try_start_tech_review(store, turn_input.user_text, session)
@@ -708,6 +713,110 @@ def _try_a2ui_probe(user_text: str | None, session: Session) -> TurnOutput | Non
     return TurnOutput(
         reply_text=reply_text,
         a2ui_messages=build_openurl_probe(auth_url),
+        session=session,
+    )
+
+
+_PORTFOLIO_TRIGGERS = (
+    "portfolio review",
+    "analyze portfolio",
+    "analyse portfolio",
+    "portfolio analysis",
+    "prioritize portfolio",
+    "prioritise portfolio",
+    "portfolio prioritization",
+    "portfolio prioritisation",
+    "prioritize use cases",
+    "prioritise use cases",
+    "score backlog",
+    "score portfolio",
+    "rank portfolio",
+    "rank use cases",
+    "coe review",
+    "activity 3",
+)
+
+
+def _try_portfolio_review(
+    store: SessionStore, user_text: str | None, session: Session
+) -> TurnOutput | None:
+    """Executes Activity 3: Portfolio Prioritization & Analysis across SharePoint opportunities."""
+    if not user_text:
+        return None
+
+    lowered = user_text.strip().lower()
+    if not any(trigger in lowered for trigger in _PORTFOLIO_TRIGGERS):
+        return None
+
+    import os as _os  # noqa: PLC0415
+    import urllib.parse as _up  # noqa: PLC0415
+
+    from qualify.a2ui.signin import build_signin_card  # noqa: PLC0415
+    from qualify.connectors.sharepoint import get_sharepoint_connector  # noqa: PLC0415
+    from qualify.export.portfolio import render_portfolio_report  # noqa: PLC0415
+    from qualify.scoring.portfolio import evaluate_portfolio  # noqa: PLC0415
+
+    connector = get_sharepoint_connector()
+    try:
+        items = connector.load_all_opportunities(context_id=session.context_id)
+    except Exception:
+        base_url = _os.environ.get(
+            "AGENT_URL", "https://ge-qualify-agent-g22bhpwccq-uc.a.run.app"
+        ).rstrip("/")
+        auth_url = f"{base_url}/auth?context_id={_up.quote(session.context_id)}"
+        session.signin_prompted = True
+        return TurnOutput(
+            reply_text=(
+                "Happy to run the **AI CoE Portfolio Prioritization Review** — "
+                "but I couldn't reach SharePoint to load your qualified opportunities. "
+                "Please sign in with Microsoft below, then type `portfolio review` again."
+            ),
+            a2ui_messages=build_signin_card(auth_url),
+            session=session,
+        )
+
+    if not items:
+        return TurnOutput(
+            reply_text=(
+                "No qualified opportunities were found in SharePoint yet.\n\n"
+                "Complete at least one **Business Value Intake** (Phase 1) so its "
+                "`Business_Value_Brief.md` and `record.json` are saved to SharePoint, "
+                "then run `portfolio review` again."
+            ),
+            a2ui_messages=[],
+            session=session,
+        )
+
+    summary = evaluate_portfolio(items)
+
+    # Persist updated CoE scoring fields back to RecordStore if configured
+    if hasattr(store, "save_record"):
+        for ev in summary.evaluations:
+            try:
+                store.save_record(ev.record)  # type: ignore[attr-defined]
+            except Exception:
+                pass
+
+    # Save Portfolio_Prioritization_Report.md to SharePoint and include its URL
+    initial_md = render_portfolio_report(summary)
+    report_url = connector.sync_portfolio_report(
+        initial_md, context_id=session.context_id
+    )
+    final_md = render_portfolio_report(summary, report_url=report_url)
+    if report_url:
+        connector.sync_portfolio_report(final_md, context_id=session.context_id)
+
+    # Populate pending_review_choices with pending Gate 2 opportunities so the user
+    # can immediately reply e.g. "let's start with AAA" right after the portfolio table.
+    session.pending_review_choices = [
+        meta
+        for _, meta in items
+        if meta.get("hasBrief") and not meta.get("hasDossier")
+    ]
+
+    return TurnOutput(
+        reply_text=final_md,
+        a2ui_messages=[],
         session=session,
     )
 

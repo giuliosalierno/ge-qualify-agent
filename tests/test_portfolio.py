@@ -1,0 +1,206 @@
+"""Tests for Activity 3: Portfolio Prioritization & Analysis (`portfolio review`)."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+from qualify.agent.turn import TurnInput, execute_turn
+from qualify.connectors.sharepoint import SharePointConnector
+from qualify.export.portfolio import PORTFOLIO_REPORT_FILENAME, render_portfolio_report
+from qualify.schema.capability import CapabilityLevel
+from qualify.schema.use_case_record import (
+    Business,
+    Meta,
+    Network,
+    Security,
+    Sizing,
+    Technical,
+    UseCaseRecord,
+)
+from qualify.scoring.portfolio import evaluate_opportunity, evaluate_portfolio
+from qualify.sinks.session import InMemorySessionStore
+
+
+def _make_record(
+    record_id: str,
+    name: str,
+    *,
+    dept: str = "Finance",
+    users: int = 100,
+    freq: float = 5.0,
+    saved_mins: float = 30.0,
+    level: CapabilityLevel = CapabilityLevel.WORKFLOW_BUILDER_CHAT_AGENT,
+    transit_blocker: str | None = None,
+) -> UseCaseRecord:
+    return UseCaseRecord(
+        meta=Meta(record_id=record_id, initiative_name=name, department_bu=dept),
+        business=Business(
+            user_count=users,
+            problem_description="Manual contract triage across repositories.",
+            expected_impacts="Faster turnaround and reduced SLA breaches across global teams.",
+        ),
+        sizing=Sizing(
+            task_frequency_weekly=freq,
+            baseline_minutes_per_task=45.0,
+            target_minutes_saved_per_task=saved_mins,
+        ),
+        technical=Technical(
+            data_sources=["sharepoint"],
+            capability_level=level,
+            network=Network(transit_blocker_status=transit_blocker),
+            security=Security(data_classification="internal"),
+        ),
+    )
+
+
+def test_quadrant_classification_all_four_quadrants() -> None:
+    # 1. Quick Win: High Value (>=3) + High Feasibility (>=4)
+    quick_win = _make_record(
+        "UC-2026-QW0001",
+        "Invoice Triage Assistant",
+        users=120,
+        freq=5.0,
+        saved_mins=30.0,  # 15,000 hrs/yr -> value 5
+        level=CapabilityLevel.WORKFLOW_BUILDER_CHAT_AGENT,  # feasibility 4
+    )
+    ev_qw = evaluate_opportunity(quick_win)
+    assert ev_qw.business_value_score == 5
+    assert ev_qw.feasibility_score == 4
+    assert ev_qw.quadrant == "Quick Wins"
+    assert quick_win.scoring.category == "Quick Wins"
+
+    # 2. Strategic Bet: High Value (>=3) + Complex High-Code Tier (Feasibility 2-3)
+    strategic_bet = _make_record(
+        "UC-2026-SB0002",
+        "Global SAP Supply Chain Orchestrator",
+        users=200,
+        freq=4.0,
+        saved_mins=30.0,  # 20,000 hrs/yr -> value 5
+        level=CapabilityLevel.HIGH_CODE_AGENT,  # feasibility 2
+    )
+    ev_sb = evaluate_opportunity(strategic_bet)
+    assert ev_sb.business_value_score == 5
+    assert ev_sb.feasibility_score == 2
+    assert ev_sb.quadrant == "Strategic Bets"
+
+    # 3. Departmental Niche: Lower Value (<3) + High Feasibility (>=4)
+    niche = _make_record(
+        "UC-2026-DN0003",
+        "Team Meeting Notes Formatter",
+        users=5,
+        freq=1.0,
+        saved_mins=10.0,  # ~41.7 hrs/yr -> value 2
+        level=CapabilityLevel.CUSTOM_SKILL,  # feasibility 5
+    )
+    ev_niche = evaluate_opportunity(niche)
+    assert ev_niche.business_value_score <= 2
+    assert ev_niche.feasibility_score == 5
+    assert ev_niche.quadrant == "Departmental Niche"
+
+    # 4. Deprioritized / Blocked: Hard technical blocker (Airgapped network 2.4)
+    blocked = _make_record(
+        "UC-2026-BL0004",
+        "Airgapped Plant Controller",
+        users=300,
+        freq=5.0,
+        saved_mins=30.0,
+        level=CapabilityLevel.HIGH_CODE_AGENT,
+        transit_blocker="airgapped",
+    )
+    ev_blocked = evaluate_opportunity(blocked, has_dossier=True)
+    assert ev_blocked.has_hard_blocker is True
+    assert ev_blocked.feasibility_score == 1
+    assert ev_blocked.quadrant == "Deprioritized"
+    assert ev_blocked.priority_status == "Blocked"
+
+
+def test_evaluate_portfolio_and_markdown_rendering() -> None:
+    r1 = _make_record(
+        "UC-2026-QW0001",
+        "Invoice Triage Assistant",
+        users=120,
+        freq=5.0,
+        saved_mins=30.0,
+        level=CapabilityLevel.WORKFLOW_BUILDER_CHAT_AGENT,
+    )
+    r2 = _make_record(
+        "UC-2026-SB0002",
+        "SAP ERP Copilot",
+        users=80,
+        freq=4.0,
+        saved_mins=30.0,
+        level=CapabilityLevel.HIGH_CODE_AGENT,
+    )
+    summary = evaluate_portfolio(
+        [
+            (r2, {"hasBrief": True, "hasDossier": False, "webUrl": "https://sp.example/sb"}),
+            (r1, {"hasBrief": True, "hasDossier": True, "webUrl": "https://sp.example/qw"}),
+        ]
+    )
+    assert summary.total_count == 2
+    assert summary.pending_tech_review_count == 1
+    # Quick Win should be ordered ahead of Strategic Bet
+    assert summary.evaluations[0].record_id == "UC-2026-QW0001"
+    assert summary.evaluations[1].record_id == "UC-2026-SB0002"
+
+    report_md = render_portfolio_report(
+        summary, report_url="https://sp.example/Portfolio_Prioritization_Report.md"
+    )
+    assert "AI CoE Portfolio Prioritization Report" in report_md
+    assert "Invoice Triage Assistant" in report_md
+    assert "SAP ERP Copilot" in report_md
+    assert "Quick Wins" in report_md
+    assert "Strategic Bets" in report_md
+    assert PORTFOLIO_REPORT_FILENAME in report_md
+
+
+def test_portfolio_review_chat_turn_and_followup_selection(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    mock_sp = SharePointConnector(mock_dir=tmp_path / "sp_mock")
+    monkeypatch.setattr(
+        "qualify.connectors.sharepoint.get_sharepoint_connector", lambda: mock_sp
+    )
+
+    r1 = _make_record(
+        "UC-2026-0CD0BC",
+        "AAA",
+        users=100,
+        freq=4.0,
+        saved_mins=30.0,
+        level=CapabilityLevel.HIGH_CODE_AGENT,
+    )
+    mock_sp.sync_opportunity(r1, pack_name="business")
+
+    store = InMemorySessionStore()
+    out = execute_turn(
+        store,
+        TurnInput(context_id="ctx-portfolio-1", user_text="portfolio review"),
+    )
+
+    assert "AI CoE Portfolio Prioritization Report" in out.reply_text
+    assert "AAA" in out.reply_text
+    assert "UC-2026-0CD0BC" in out.reply_text
+    assert len(out.session.pending_review_choices) == 1
+
+    # Verify Portfolio_Prioritization_Report.md was written to SharePoint
+    report_file = (
+        tmp_path
+        / "sp_mock"
+        / "drives"
+        / "Documents"
+        / "Qualification Opportunities"
+        / PORTFOLIO_REPORT_FILENAME
+    )
+    assert report_file.is_file()
+
+    # Follow-up turn: user immediately selects "let's start with AAA" from the portfolio report
+    out2 = execute_turn(
+        store,
+        TurnInput(context_id="ctx-portfolio-1", user_text="let's start with AAA"),
+    )
+    assert out2.session.pack_name == "tech"
+    assert out2.session.record.meta.record_id == "UC-2026-0CD0BC"
+    assert "Technical Architecture Review" in out2.reply_text

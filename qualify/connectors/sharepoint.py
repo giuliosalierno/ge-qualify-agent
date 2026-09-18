@@ -1263,6 +1263,116 @@ class SharePointConnector:
                         return UseCaseRecord.model_validate_json(json_file.read_text(encoding="utf-8"))
         return None
 
+    def load_all_opportunities(
+        self,
+        delegated_token: str | None = None,
+        *,
+        context_id: str | None = None,
+        limit: int = 50,
+    ) -> list[tuple[UseCaseRecord, dict[str, Any]]]:
+        """Loads all qualified opportunities and their `UseCaseRecord`s from SharePoint.
+
+        Returns `(record, listing_entry)` pairs for every folder that holds a
+        valid `record.json`. Raises `RuntimeError` if Microsoft Graph is
+        configured (`auth_mode != 'mock'`) and unreachable, matching
+        `list_opportunities`.
+        """
+        entries = self.list_opportunities(
+            delegated_token=delegated_token,
+            context_id=context_id,
+            limit=limit,
+        )
+        if not entries:
+            return []
+
+        headers, auth_mode = self.get_graph_headers(delegated_token, context_id=context_id)
+        loaded: list[tuple[UseCaseRecord, dict[str, Any]]] = []
+
+        if auth_mode != "mock" and self._custom_mock_dir is None:
+            site_id = self.resolve_site_id(headers)
+            drive_id = self.resolve_drive_id(headers, site_id=site_id)
+            parent_folder = sanitize_path_segment(self.folder_path)
+            with httpx.Client(timeout=12.0) as client:
+                for entry in entries:
+                    folder_name = entry.get("name", "")
+                    if not folder_name:
+                        continue
+                    json_url = (
+                        f"{GRAPH_BASE_URL}/drives/{urllib.parse.quote(drive_id)}"
+                        f"/root:/{urllib.parse.quote(parent_folder)}/{urllib.parse.quote(folder_name)}/record.json:/content"
+                    )
+                    try:
+                        j_resp = client.get(json_url, headers=headers, follow_redirects=True)
+                        if j_resp.status_code == 200:
+                            rec = UseCaseRecord.model_validate_json(j_resp.text)
+                            loaded.append((rec, entry))
+                    except Exception as exc:
+                        logger.warning("Skipping invalid record.json in %s: %s", folder_name, exc)
+            return loaded
+
+        # Mock directory mode
+        root_dir = (
+            self.mock_dir
+            / "drives"
+            / sanitize_path_segment(self.drive_name)
+            / sanitize_path_segment(self.folder_path)
+        )
+        for entry in entries:
+            folder_name = entry.get("name", "")
+            json_file = root_dir / folder_name / "record.json"
+            if json_file.is_file():
+                try:
+                    rec = UseCaseRecord.model_validate_json(json_file.read_text(encoding="utf-8"))
+                    loaded.append((rec, entry))
+                except Exception as exc:
+                    logger.warning("Skipping invalid mock record.json in %s: %s", folder_name, exc)
+        return loaded
+
+    def sync_portfolio_report(
+        self,
+        report_md: str,
+        delegated_token: str | None = None,
+        *,
+        context_id: str | None = None,
+        filename: str = "Portfolio_Prioritization_Report.md",
+    ) -> str | None:
+        """Uploads `Portfolio_Prioritization_Report.md` to the SharePoint root qualification folder."""
+        headers, auth_mode = self.get_graph_headers(delegated_token, context_id=context_id)
+        safe_filename = sanitize_path_segment(filename)
+
+        if auth_mode != "mock" and self._custom_mock_dir is None:
+            try:
+                site_id = self.resolve_site_id(headers)
+                drive_id = self.resolve_drive_id(headers, site_id=site_id)
+                parent_folder = sanitize_path_segment(self.folder_path)
+                put_url = (
+                    f"{GRAPH_BASE_URL}/drives/{urllib.parse.quote(drive_id)}"
+                    f"/root:/{urllib.parse.quote(parent_folder)}/{urllib.parse.quote(safe_filename)}:/content"
+                )
+                put_headers = {
+                    **headers,
+                    "Content-Type": "text/markdown; charset=utf-8",
+                }
+                with httpx.Client(timeout=12.0) as client:
+                    resp = client.put(put_url, content=report_md.encode("utf-8"), headers=put_headers)
+                    if resp.status_code in (200, 201):
+                        return resp.json().get("webUrl")
+            except Exception as exc:
+                logger.warning("Failed to upload portfolio report to live SharePoint: %s", exc)
+
+        # Fallback / mock directory write
+        root_dir = (
+            self.mock_dir
+            / "drives"
+            / sanitize_path_segment(self.drive_name)
+            / sanitize_path_segment(self.folder_path)
+        )
+        root_dir.mkdir(parents=True, exist_ok=True)
+        report_path = root_dir / safe_filename
+        report_path.write_text(report_md, encoding="utf-8")
+        return f"https://sharepoint.mock/sites/AI-CoE/{urllib.parse.quote(self.folder_path)}/{urllib.parse.quote(safe_filename)}"
+
+
     # -----------------------------------------------------------------------
     # Safe Document Text Extraction (Ported from L400 SharePoint MCP Server)
     # -----------------------------------------------------------------------
