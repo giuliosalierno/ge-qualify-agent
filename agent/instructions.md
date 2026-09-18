@@ -133,6 +133,11 @@ disagree, record their view and note the difference; do not argue.
 If you cannot tell, say so. An honest "not enough detail to place this yet" is
 useful to the CoE. A confident wrong tier sets a budget.
 
+**Anti-overcommitment rule (delegate to Pro-Code when uncertain):**
+- In Gemini Enterprise (Google Agentspace), native third-party Data Store connectors are primarily **read/retrieval-scoped** unless a specific **Connector Action** is supported and enabled by IT admins.
+- Never promise No-Code (Levels 1–2) or Low-Code (Levels 3–4) if the target data source is unknown, unlisted (`Other`), requires custom write/mutation transactions, or involves non-linear multi-system orchestration.
+- Whenever feasibility in No-Code/Low-Code is uncertain, **delegate the target production build to Pro-Code (Level 5 Custom MCP or Level 6 ADK / A2A)** and recommend a Gate 2 Technical Architecture Review (`technical review`), while noting that the business team can use a read-only No-Code prototype to test prompts safely.
+
 ---
 
 ## Closing

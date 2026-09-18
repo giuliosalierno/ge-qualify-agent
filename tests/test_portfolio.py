@@ -224,3 +224,49 @@ def test_welcome_banner_and_help_command() -> None:
     )
     assert "Welcome to the Gemini Enterprise AI Qualification & CoE Agent" in out_first.reply_text
 
+
+def test_capability_grounding_anti_overcommitment_delegation() -> None:
+    from qualify.agent.turn import load_instructions
+    from qualify.scoring.business_tier import classify_capability
+
+    # 1. Skill is loaded into agent instructions
+    inst = load_instructions()
+    assert "ge-capability-grounding" in inst
+    assert "Zero Overcommitment" in inst
+
+    # 2. Unknown data sources -> delegates to Pro-Code (Level 5 Custom MCP), never No-Code/Low-Code
+    rec_unknown = UseCaseRecord(
+        meta=Meta(record_id="UC-2026-UNKN01", initiative_name="Mystery Data Helper"),
+        business=Business(problem_description="Help analysts look up policy rules."),
+        technical=Technical(data_sources=["unknown"]),
+    )
+    classify_capability(rec_unknown)
+    assert rec_unknown.technical.capability_level == CapabilityLevel.WORKFLOW_AGENT_WITH_CUSTOM_MCP
+    assert "Not sure yet (`unknown`)" in (rec_unknown.technical.capability_rationale or "")
+
+    # 3. Write/mutation on read-only native connector (SharePoint) -> delegates to Pro-Code (Level 5)
+    rec_sp_write = UseCaseRecord(
+        meta=Meta(record_id="UC-2026-SPWR02", initiative_name="SharePoint Mutator"),
+        business=Business(
+            problem_description="Read contract drafts and write updated clauses back to SharePoint.",
+            user_stories="Agent must write and update record metadata in SharePoint libraries.",
+        ),
+        technical=Technical(data_sources=["sharepoint"]),
+    )
+    classify_capability(rec_sp_write)
+    assert rec_sp_write.technical.capability_level == CapabilityLevel.WORKFLOW_AGENT_WITH_CUSTOM_MCP
+    assert "read/retrieval-scoped" in (rec_sp_write.technical.capability_rationale or "")
+
+    # 4. Cross-system mutations across >=2 systems -> delegates to Pro-Code (Level 6 ADK)
+    rec_multi_write = UseCaseRecord(
+        meta=Meta(record_id="UC-2026-MLTW03", initiative_name="Cross-CRM Sync"),
+        business=Business(
+            problem_description="Synchronize customer escalations.",
+            user_stories="Update record in Salesforce and create ticket in Jira automatically.",
+        ),
+        technical=Technical(data_sources=["salesforce", "jira"]),
+    )
+    classify_capability(rec_multi_write)
+    assert rec_multi_write.technical.capability_level == CapabilityLevel.HIGH_CODE_AGENT
+
+

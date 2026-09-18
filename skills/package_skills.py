@@ -43,6 +43,7 @@ def package_full_skill():
 def main():
     package_single_file_skill("ge_intake_business.zip", "ge_intake_business", "Front Office Business Intake")
     package_single_file_skill("ge_tech_review.zip", "ge_tech_review", "Back Office Technical Review")
+    package_single_file_skill("ge_capability_grounding.zip", "ge_capability_grounding", "GCP Capability Grounding & Anti-Overcommitment")
     package_full_skill()
     print("All skill packages built successfully.")
 

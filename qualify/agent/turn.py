@@ -103,11 +103,22 @@ class TurnOutput:
         return self.session.stage
 
 
+CAPABILITY_GROUNDING_SKILL_PATH = (
+    Path(__file__).resolve().parent.parent.parent
+    / "skills"
+    / "ge_capability_grounding"
+    / "SKILL.md"
+)
+
+
 def load_instructions() -> str:
-    """Loads agent/instructions.md."""
+    """Loads agent/instructions.md and appends the GCP capability grounding skill."""
+    parts: list[str] = []
     if INSTRUCTIONS_PATH.is_file():
-        return INSTRUCTIONS_PATH.read_text(encoding="utf-8")
-    return ""
+        parts.append(INSTRUCTIONS_PATH.read_text(encoding="utf-8"))
+    if CAPABILITY_GROUNDING_SKILL_PATH.is_file():
+        parts.append(CAPABILITY_GROUNDING_SKILL_PATH.read_text(encoding="utf-8"))
+    return "\n\n---\n\n".join(parts)
 
 
 def execute_turn(
