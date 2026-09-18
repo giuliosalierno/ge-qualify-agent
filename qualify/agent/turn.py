@@ -338,7 +338,8 @@ def _run_turn(
     reply_text = _generate_chat_reply(
         session, stage, chat_client, turn_input.user_text, turn_input.conversation_history
     )
-    if is_first_stage_open:
+    if is_first_stage_open and not session.welcome_shown:
+        session.welcome_shown = True
         reply_text = f"{_WELCOME_BANNER}\n\n---\n\n{reply_text}"
 
     store.save(session)
@@ -613,13 +614,17 @@ def _maybe_offer_signin(session: Session) -> TurnOutput | None:
 
     session.signin_prompted = True
 
-    reply_text = (
-        f"{_WELCOME_BANNER}\n\n---\n\n"
+    signin_prompt_body = (
         "Before we start — would you like to connect **Microsoft SharePoint**?\n\n"
         "Signing in now means this qualification will be saved directly to the "
         "shared SharePoint folder when we finish. You can also continue without "
         "it and connect later."
     )
+    if not session.welcome_shown:
+        session.welcome_shown = True
+        reply_text = f"{_WELCOME_BANNER}\n\n---\n\n{signin_prompt_body}"
+    else:
+        reply_text = signin_prompt_body
 
     return TurnOutput(
         reply_text=reply_text,
@@ -659,6 +664,7 @@ def _try_help_command(user_text: str | None, session: Session) -> TurnOutput | N
     if cleaned in ("help", "menu", "info") or any(
         phrase in cleaned for phrase in _HELP_PHRASES
     ):
+        session.welcome_shown = True
         return TurnOutput(
             reply_text=_WELCOME_BANNER,
             a2ui_messages=[],

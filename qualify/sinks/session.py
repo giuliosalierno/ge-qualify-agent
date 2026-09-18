@@ -78,6 +78,9 @@ class Session:
     #: after a token lands announces it. This flag stops every turn after that
     #: repeating the news.
     signin_confirmed: bool = False
+    #: True once _WELCOME_BANNER has been displayed in this session so subsequent
+    #: turns (e.g. sign-in prompt or Stage 1 open) do not repeat the banner.
+    welcome_shown: bool = False
     #: Pending opportunities offered to the reviewer when they ask to start a
     #: technical review without specifying a record ID.
     pending_review_choices: list[dict[str, str]] = field(default_factory=list)
