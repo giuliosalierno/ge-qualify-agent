@@ -444,7 +444,7 @@ async def handle_oauth_auth(request: Request) -> Response:
           <div style="text-align:center;padding:1rem;">
             <h2 style="color:#16a34a;margin-top:0;">✅ SharePoint Connected &amp; Opportunity Saved!</h2>
             <p style="color:#334155;font-size:1.05rem;">
-              Your opportunity <strong>${{data.synced.title}}</strong> (<code>${{data.synced.recordId}}</code>) has been automatically saved to SharePoint Online under your Microsoft account!
+              The opportunity <strong>${{data.synced.title}}</strong> (<code>${{data.synced.recordId}}</code>) has been saved to the shared SharePoint folder.
             </p>
             <p style="margin: 1.5rem 0;">
               <a class="btn btn-success" href="${{data.synced.syncedUrl}}" target="_blank">📂 Open Opportunity Folder in SharePoint ↗</a>
@@ -471,10 +471,10 @@ async def handle_oauth_auth(request: Request) -> Response:
           <div style="text-align:center;padding:1rem;">
             <h2 style="color:#16a34a;margin-top:0;">✅ Microsoft SharePoint Connected!</h2>
             <p style="color:#334155;font-size:1.05rem;">
-              Your Microsoft account is now linked to your Gemini Enterprise session.
+              Microsoft SharePoint is now connected to this Gemini Enterprise session.
             </p>
             <p style="color:#475569;font-size:0.95rem;">
-              Return to Gemini Enterprise chat and type <strong>save to sharepoint</strong> (or submit Stage 4) to sync your opportunity directly under your user account!
+              Return to Gemini Enterprise chat and type <strong>save to sharepoint</strong> (or submit Stage 4) to save the opportunity to the shared SharePoint folder.
             </p>
           </div>
         `;

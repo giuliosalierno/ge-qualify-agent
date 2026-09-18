@@ -410,14 +410,14 @@ def _handle_action_outcome(
                 auth_link = f"{base_url}/auth?context_id={_up.quote(session.context_id)}"
                 if sp_res and sp_res.auth_mode == "delegated":
                     reply_text += (
-                        f"\n\n---\n✅ **Synced to SharePoint Online (On-Behalf-Of User)**: "
+                        f"\n\n---\n✅ **Saved to SharePoint**: "
                         f"[Open SharePoint Folder]({sp_res.folder_url})"
                     )
                 else:
                     reply_text += (
-                        f"\n\n---\n⚠️ **SharePoint User Login Required**: Saved to local backup because no active Microsoft user session was found. "
-                        f"**[Click here to Sign in with Microsoft SharePoint]({auth_link})** to sync directly under your user account "
-                        f"(it will auto-sync immediately upon sign-in, or type `save to sharepoint` anytime)."
+                        f"\n\n---\n⚠️ **SharePoint Sign-In Required**: Saved to local backup because no active Microsoft session was found. "
+                        f"**[Click here to Sign in with Microsoft SharePoint]({auth_link})** to save to the shared SharePoint folder "
+                        f"(it will sync automatically upon sign-in, or type `save to sharepoint` anytime)."
                     )
                 sid = session.next_surface_id("complete")
                 a2ui_messages.extend(
@@ -606,9 +606,9 @@ def _maybe_offer_signin(session: Session) -> TurnOutput | None:
     reply_text = (
         f"{_WELCOME_BANNER}\n\n---\n\n"
         "Before we start — would you like to connect **Microsoft SharePoint**?\n\n"
-        "Signing in now means this qualification saves straight to your own "
-        "SharePoint account when we finish. You can also continue without it "
-        "and connect later."
+        "Signing in now means this qualification will be saved directly to the "
+        "shared SharePoint folder when we finish. You can also continue without "
+        "it and connect later."
     )
 
     return TurnOutput(
@@ -620,7 +620,7 @@ def _maybe_offer_signin(session: Session) -> TurnOutput | None:
 
 _WELCOME_BANNER = (
     "### 👋 Welcome to the Gemini Enterprise AI Qualification & CoE Agent\n"
-    "I support three workflows connected to your **Microsoft SharePoint** repository:\n\n"
+    "I support three workflows connected to the shared **Microsoft SharePoint** repository:\n\n"
     "1. **📋 Business Value Intake (Phase 1 — Business Owners)**\n"
     "   Describe a new use case idea below (or fill in the **Stage 1** card) to size annual hours saved, match the right Gemini Enterprise capability (Levels 1–6), and save a `Business_Value_Brief.md` to SharePoint.\n"
     "2. **🏗️ Technical Architecture Review (Phase 2 — Solution Architects)**\n"
@@ -701,7 +701,7 @@ def _acknowledge_signin(session: Session) -> TurnOutput:
             session.signin_confirmed = True
             header = (
                 "✅ **SharePoint connected.** Nothing is saved yet — I'll write "
-                "the opportunity to your SharePoint site once we're done.\n\n"
+                "the opportunity to the shared SharePoint folder once we're done.\n\n"
             )
     else:
         header = (
@@ -831,7 +831,7 @@ def _try_portfolio_review(
         return TurnOutput(
             reply_text=(
                 "Happy to run the **AI CoE Portfolio Prioritization Review** — "
-                "but I couldn't reach SharePoint to load your qualified opportunities. "
+                "but I couldn't reach SharePoint to load the qualified opportunities. "
                 "Please sign in with Microsoft below, then type `portfolio review` again."
             ),
             a2ui_messages=build_signin_card(auth_url),
@@ -1211,7 +1211,7 @@ def _try_load_from_sharepoint(user_text: str | None, session: Session) -> TurnOu
         if sp_res and sp_res.auth_mode == "delegated":
             title = session.record.meta.initiative_name or session.record.meta.record_id or "Opportunity"
             reply_text = (
-                f"✅ **Successfully Saved to SharePoint Online (On-Behalf-Of User)!**\n\n"
+                f"✅ **Successfully Saved to SharePoint!**\n\n"
                 f"- **Initiative**: {title} (`{session.record.meta.record_id}`)\n"
                 f"- **SharePoint Folder**: [Open Opportunity Folder in SharePoint]({sp_res.folder_url})\n"
                 f"- **Business Value Brief**: [View Business_Value_Brief.md]({sp_res.brief_url})\n\n"
@@ -1242,12 +1242,12 @@ def _try_load_from_sharepoint(user_text: str | None, session: Session) -> TurnOu
             })
         )
         reply_text = (
-            f"🔐 **Microsoft SharePoint User Sign-In Required**\n\n"
-            f"To save **{session.record.meta.initiative_name or session.record.meta.record_id}** directly under your Microsoft account:\n\n"
+            f"🔐 **Microsoft SharePoint Sign-In Required**\n\n"
+            f"To save **{session.record.meta.initiative_name or session.record.meta.record_id}** to the shared SharePoint folder:\n\n"
             f"1. **[Sign in with Microsoft ↗]({ms_direct_auth})**\n"
             f"2. After signing in, paste the resulting `oauth-redirect?code=...` URL right here in chat "
             f"(or use the **[SharePoint Auth Page]({auth_link})**).\n\n"
-            f"I will immediately exchange your token and save this opportunity to SharePoint Online."
+            f"I will immediately exchange the token and save this opportunity to SharePoint."
         )
         return TurnOutput(
             reply_text=reply_text,
@@ -1285,7 +1285,7 @@ def _try_load_from_sharepoint(user_text: str | None, session: Session) -> TurnOu
             )
             return TurnOutput(
                 reply_text=(
-                    "⚠️ I couldn't reach SharePoint to list your opportunities. "
+                    "⚠️ I couldn't reach SharePoint to list the qualified opportunities. "
                     "Please sign in with Microsoft below, then try `list sharepoint` again."
                 ),
                 a2ui_messages=cards,

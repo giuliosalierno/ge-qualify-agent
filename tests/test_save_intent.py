@@ -222,5 +222,5 @@ def test_save_request_with_a_named_initiative_still_saves() -> None:
         store, TurnInput(context_id="ctx-named", user_text="save to sharepoint")
     )
 
-    assert "Successfully Saved to SharePoint Online" in out.reply_text
+    assert "Successfully Saved to SharePoint" in out.reply_text
     assert "Contract Renewal Triage" in out.reply_text

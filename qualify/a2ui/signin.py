@@ -212,9 +212,9 @@ def build_signin_card(
             "id": "signin-body",
             "component": "Text",
             "text": (
-                "Sign in now and this qualification saves straight to your "
-                "SharePoint site under your own account. You can also continue "
-                "without connecting and decide later."
+                "Sign in with Microsoft to save this qualification directly to "
+                "the shared SharePoint workspace. You can also continue without "
+                "connecting and decide later."
             ),
             "variant": "body",
         },

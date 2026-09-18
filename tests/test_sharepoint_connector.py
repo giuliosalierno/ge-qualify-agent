@@ -270,7 +270,7 @@ def test_turn_loop_save_to_sharepoint_and_post_login_auto_sync(tmp_path: Path, m
         store,
         TurnInput(context_id="ctx-save-sp", user_text="logged in save it into sharepoint"),
     )
-    assert "Successfully Saved to SharePoint Online (On-Behalf-Of User)" in out2.reply_text
+    assert "Successfully Saved to SharePoint" in out2.reply_text
     assert "Automated Invoice Matching" in out2.reply_text
 
 
