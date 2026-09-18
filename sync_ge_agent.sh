@@ -20,14 +20,18 @@ ENGINE_ID="${ENGINE_ID:-gemini-enterprise-17888530_1788853050024}"
 AGENT_ID="${AGENT_ID:-2763559167028725339}"
 AUTH_ID="${AUTH_ID:-sharepoint-auth}"
 
-SERVICE_URL=$(gcloud run services describe "$SERVICE_NAME" \
-  --project="$PROJECT_ID" --region="$REGION" --format='value(status.url)')
+LB_IP=$(gcloud compute addresses describe "${SERVICE_NAME}-ip" --global --project="$PROJECT_ID" --format="value(address)" 2>/dev/null || true)
+if [ -n "${LB_IP}" ]; then
+  SERVICE_URL="https://${LB_IP}.nip.io"
+else
+  SERVICE_URL=$(gcloud run services describe "$SERVICE_NAME" \
+    --project="$PROJECT_ID" --region="$REGION" --format='value(status.url)')
+fi
 echo "Service URL: $SERVICE_URL"
 
 CARD_FILE="/tmp/ge_qualify_agent_card.json"
 echo "Fetching live agent card from ${SERVICE_URL}/.well-known/agent-card.json ..."
 curl -sf "${SERVICE_URL}/.well-known/agent-card.json" \
-  -H "Authorization: Bearer $(gcloud auth print-identity-token)" \
   -o "$CARD_FILE"
 
 python3 - <<PY

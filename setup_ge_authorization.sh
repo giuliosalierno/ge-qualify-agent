@@ -31,8 +31,13 @@ fi
 : "${MS_GRAPH_CLIENT_SECRET:?MS_GRAPH_CLIENT_SECRET must be set (check .env)}"
 : "${MS_GRAPH_TENANT_ID:?MS_GRAPH_TENANT_ID must be set (check .env)}"
 
-SERVICE_URL=$(gcloud run services describe "$SERVICE_NAME" \
-  --project="$PROJECT_ID" --region="$REGION" --format='value(status.url)')
+LB_IP=$(gcloud compute addresses describe "${SERVICE_NAME}-ip" --global --project="$PROJECT_ID" --format="value(address)" 2>/dev/null || true)
+if [ -n "${LB_IP}" ]; then
+  SERVICE_URL="https://${LB_IP}.nip.io"
+else
+  SERVICE_URL=$(gcloud run services describe "$SERVICE_NAME" \
+    --project="$PROJECT_ID" --region="$REGION" --format='value(status.url)')
+fi
 SERVICE_URL="${SERVICE_URL%/}"
 echo "Service URL: $SERVICE_URL"
 
