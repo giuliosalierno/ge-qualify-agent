@@ -204,3 +204,23 @@ def test_portfolio_review_chat_turn_and_followup_selection(
     assert out2.session.pack_name == "tech"
     assert out2.session.record.meta.record_id == "UC-2026-0CD0BC"
     assert "Technical Architecture Review" in out2.reply_text
+
+
+def test_welcome_banner_and_help_command() -> None:
+    store = InMemorySessionStore()
+    # 1. Explicit help command
+    out_help = execute_turn(
+        store,
+        TurnInput(context_id="ctx-welcome-1", user_text="what can you do?"),
+    )
+    assert "Welcome to the Gemini Enterprise AI Qualification & CoE Agent" in out_help.reply_text
+    assert "technical review" in out_help.reply_text
+    assert "portfolio review" in out_help.reply_text
+
+    # 2. First turn opening Stage 1 / Sign-In card includes the welcome banner
+    out_first = execute_turn(
+        store,
+        TurnInput(context_id="ctx-welcome-2", user_text="hi"),
+    )
+    assert "Welcome to the Gemini Enterprise AI Qualification & CoE Agent" in out_first.reply_text
+

@@ -220,6 +220,11 @@ def _run_turn(
         store.save(session)
         return probe_output
 
+    help_output = _try_help_command(turn_input.user_text, session)
+    if help_output is not None:
+        store.save(session)
+        return help_output
+
     portfolio_output = _try_portfolio_review(store, turn_input.user_text, session)
     if portfolio_output is not None:
         store.save(session)
@@ -244,6 +249,11 @@ def _run_turn(
     a2ui_messages: list[dict[str, Any]] = []
     drafts: list[FieldDraft] = []
     stage = session.pack.stages[session.active_stage]
+    is_first_stage_open = (
+        session.pack_name == "business"
+        and session.active_stage == 0
+        and not session.rendered_stages
+    )
 
     # If the surface for the active stage hasn't been emitted yet, build it
     # with a fresh surfaceId so it renders as a new card in the chat flow.
@@ -317,6 +327,8 @@ def _run_turn(
     reply_text = _generate_chat_reply(
         session, stage, chat_client, turn_input.user_text, turn_input.conversation_history
     )
+    if is_first_stage_open:
+        reply_text = f"{_WELCOME_BANNER}\n\n---\n\n{reply_text}"
 
     store.save(session)
     return TurnOutput(
@@ -581,6 +593,7 @@ def _maybe_offer_signin(session: Session) -> TurnOutput | None:
     session.signin_prompted = True
 
     reply_text = (
+        f"{_WELCOME_BANNER}\n\n---\n\n"
         "Before we start — would you like to connect **Microsoft SharePoint**?\n\n"
         "Signing in now means this qualification saves straight to your own "
         "SharePoint account when we finish. You can also continue without it "
@@ -592,6 +605,45 @@ def _maybe_offer_signin(session: Session) -> TurnOutput | None:
         a2ui_messages=build_signin_card(auth_url),
         session=session,
     )
+
+
+_WELCOME_BANNER = (
+    "### 👋 Welcome to the Gemini Enterprise AI Qualification & CoE Agent\n"
+    "I support three workflows connected to your **Microsoft SharePoint** repository:\n\n"
+    "1. **📋 Business Value Intake (Phase 1 — Business Owners)**\n"
+    "   Describe a new use case idea below (or fill in the **Stage 1** card) to size annual hours saved, match the right Gemini Enterprise capability (Levels 1–6), and save a `Business_Value_Brief.md` to SharePoint.\n"
+    "2. **🏗️ Technical Architecture Review (Phase 2 — Solution Architects)**\n"
+    "   Type **`technical review`** to list qualified opportunities waiting in SharePoint, pick one by name or ID, and produce a 22-point `Technical_Architecture_Dossier.md`.\n"
+    "3. **📊 CoE Portfolio Prioritization (Activity 3 — CoE Leads)**\n"
+    "   Type **`portfolio review`** to score all SharePoint opportunities on Business Value (1–5) & Feasibility (1–5), segment them into quadrants (*Quick Wins*, *Strategic Bets*, *Departmental Niche*, *Deprioritized*), and publish `Portfolio_Prioritization_Report.md`."
+)
+
+_HELP_PHRASES = (
+    "what can you do",
+    "what do you do",
+    "how does this work",
+    "how to use",
+    "help menu",
+    "capabilities",
+    "show commands",
+    "commands",
+)
+
+
+def _try_help_command(user_text: str | None, session: Session) -> TurnOutput | None:
+    """Returns the Welcome & Capabilities menu when explicitly requested."""
+    if not user_text:
+        return None
+    cleaned = user_text.strip().lower().rstrip("?.!")
+    if cleaned in ("help", "menu", "info") or any(
+        phrase in cleaned for phrase in _HELP_PHRASES
+    ):
+        return TurnOutput(
+            reply_text=_WELCOME_BANNER,
+            a2ui_messages=[],
+            session=session,
+        )
+    return None
 
 
 def _record_has_content(session: Session) -> bool:
