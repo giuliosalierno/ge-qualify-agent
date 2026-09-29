@@ -142,6 +142,32 @@ SIGNIN_CARD="${SIGNIN_CARD:-1}"
 A2A_AUDIENCES="${A2A_AUDIENCES:-https://${SERVICE_NAME}-g22bhpwccq-uc.a.run.app,https://${SERVICE_NAME}-${PROJECT_NUMBER}.${REGION}.run.app}"
 echo "A2A caller verification: mode=$A2A_AUTH_MODE audiences=$A2A_AUDIENCES"
 
+# Cloud Run IAM gates every request: only Gemini Enterprise's Discovery Engine
+# service agent and the IAP service agent (browser traffic via the Load
+# Balancer, including /auth and /auth/callback) may invoke the service.
+# allUsers is NOT an invoker (--no-allow-unauthenticated below). Cloud Run
+# then verifies GE's ID token itself and strips its signature, so the app is
+# told to trust the stripped claims (A2A_TRUST_CLOUD_RUN_IAM=1). Never set
+# that flag on a service that allows unauthenticated invocations.
+GE_SA="service-${PROJECT_NUMBER}@gcp-sa-discoveryengine.iam.gserviceaccount.com"
+IAP_SA="service-${PROJECT_NUMBER}@gcp-sa-iap.iam.gserviceaccount.com"
+gcloud beta services identity create --service=iap.googleapis.com --project="$PROJECT_ID" >/dev/null 2>&1 || true
+grant_invokers() {
+  for member in "serviceAccount:${GE_SA}" "serviceAccount:${IAP_SA}"; do
+    echo "Granting roles/run.invoker to $member ..."
+    gcloud run services add-iam-policy-binding "$SERVICE_NAME" \
+      --project="$PROJECT_ID" \
+      --region="$REGION" \
+      --member="$member" \
+      --role=roles/run.invoker >/dev/null
+  done
+}
+# Grant before redeploying an existing service, so removing allUsers never
+# leaves a window where the Load Balancer path is refused.
+if gcloud run services describe "$SERVICE_NAME" --project="$PROJECT_ID" --region="$REGION" >/dev/null 2>&1; then
+  grant_invokers
+fi
+
 # Initial deployment from source (builds Dockerfile)
 gcloud run deploy "$SERVICE_NAME" \
   --source "$SCRIPT_DIR" \
@@ -152,9 +178,9 @@ gcloud run deploy "$SERVICE_NAME" \
   --max-instances "$MAX_INSTANCES" \
   --ingress "$INGRESS_MODE" \
   --clear-base-image \
-  --allow-unauthenticated \
+  --no-allow-unauthenticated \
   --set-secrets="MS_GRAPH_CLIENT_SECRET=ms-graph-client-secret:latest,OAUTH_STATE_SECRET=oauth-state-secret:latest" \
-  --set-env-vars="^@^GOOGLE_CLOUD_PROJECT=${PROJECT_ID}@GOOGLE_CLOUD_LOCATION=${GENAI_LOCATION}@GOOGLE_GENAI_USE_VERTEXAI=TRUE@MODEL=${MODEL_NAME}@MS_GRAPH_TENANT_ID=${MS_GRAPH_TENANT_ID:-}@MS_GRAPH_CLIENT_ID=${MS_GRAPH_CLIENT_ID:-}@SHAREPOINT_INSTANCE_URL=${SHAREPOINT_INSTANCE_URL:-}@WEB_OAUTH_CALLBACK=${WEB_OAUTH_CALLBACK}@QUALIFY_GCS_BUCKET=${QUALIFY_GCS_BUCKET}@PROJECT_NUMBER=${PROJECT_NUMBER}@A2A_AUTH_MODE=${A2A_AUTH_MODE}@A2A_AUDIENCES=${A2A_AUDIENCES}@SIGNIN_CARD=${SIGNIN_CARD}"
+  --set-env-vars="^@^GOOGLE_CLOUD_PROJECT=${PROJECT_ID}@GOOGLE_CLOUD_LOCATION=${GENAI_LOCATION}@GOOGLE_GENAI_USE_VERTEXAI=TRUE@MODEL=${MODEL_NAME}@MS_GRAPH_TENANT_ID=${MS_GRAPH_TENANT_ID:-}@MS_GRAPH_CLIENT_ID=${MS_GRAPH_CLIENT_ID:-}@SHAREPOINT_INSTANCE_URL=${SHAREPOINT_INSTANCE_URL:-}@WEB_OAUTH_CALLBACK=${WEB_OAUTH_CALLBACK}@QUALIFY_GCS_BUCKET=${QUALIFY_GCS_BUCKET}@PROJECT_NUMBER=${PROJECT_NUMBER}@A2A_AUTH_MODE=${A2A_AUTH_MODE}@A2A_AUDIENCES=${A2A_AUDIENCES}@SIGNIN_CARD=${SIGNIN_CARD}@A2A_TRUST_CLOUD_RUN_IAM=1"
 
 SERVICE_URL=$(gcloud run services describe "$SERVICE_NAME" \
   --project="$PROJECT_ID" \
@@ -178,14 +204,8 @@ gcloud run services update "$SERVICE_NAME" \
   --region="$REGION" \
   --update-env-vars=AGENT_URL="$PUBLIC_URL"
 
-# Grant roles/run.invoker to the Discovery Engine service agent
-GE_SA="service-${PROJECT_NUMBER}@gcp-sa-discoveryengine.iam.gserviceaccount.com"
-echo "Granting roles/run.invoker to $GE_SA ..."
-gcloud run services add-iam-policy-binding "$SERVICE_NAME" \
-  --project="$PROJECT_ID" \
-  --region="$REGION" \
-  --member="serviceAccount:${GE_SA}" \
-  --role=roles/run.invoker >/dev/null
+# First deploy: the service exists only now.
+grant_invokers
 
 echo "============================================================"
 echo "Deployment & IAM Setup Complete!"

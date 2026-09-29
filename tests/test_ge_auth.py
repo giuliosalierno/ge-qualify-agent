@@ -98,13 +98,13 @@ async def test_authorization_header_is_accepted_too() -> None:
 )
 async def test_bad_claims_are_rejected(token_kwargs: dict[str, Any], reason: str) -> None:
     v = await _verify(_token(**token_kwargs))
-    assert not v.ok and v.reason == reason
+    assert not v.ok and v.reason.split(":")[0] == reason
 
 
 @pytest.mark.anyio
 async def test_forged_signature_is_rejected() -> None:
     v = await _verify(_token(signer=OTHER_SIGNER))
-    assert not v.ok and v.reason == "invalid_token"
+    assert not v.ok and v.reason.startswith("invalid_token")
 
 
 @pytest.mark.anyio
@@ -112,6 +112,53 @@ async def test_missing_and_unsigned_tokens_are_rejected() -> None:
     assert (await _verify(None)).reason == "no_token"
     header, payload, _sig = _token().split(".")
     assert (await _verify(f"{header}.{payload}")).reason == "not_a_signed_jwt"
+
+
+def _stripped(**overrides: Any) -> str:
+    """What Cloud Run forwards after verifying a token itself."""
+    header, payload, _sig = _token(**overrides).split(".")
+    return f"{header}.{payload}.{ge_auth.CLOUD_RUN_STRIPPED_SIGNATURE}"
+
+
+@pytest.mark.anyio
+async def test_stripped_token_is_refused_without_the_trust_flag(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("A2A_TRUST_CLOUD_RUN_IAM", raising=False)
+    v = await _verify(_stripped())
+    assert not v.ok and v.reason == "signature_stripped" and v.audience == AUD
+
+
+@pytest.mark.anyio
+async def test_stripped_token_is_accepted_when_cloud_run_iam_is_trusted(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("A2A_TRUST_CLOUD_RUN_IAM", "1")
+    v = await _verify(_stripped())
+    assert v.ok and v.reason == "ok_cloud_run_iam" and v.principal == GE_SA
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    ("token_kwargs", "reason"),
+    [
+        ({"aud": "https://evil.example"}, "bad_audience"),
+        ({"email": "someone@gcp-sa-other.iam.gserviceaccount.com"}, "caller_not_allowed"),
+        ({"email_verified": False}, "caller_not_allowed"),
+        ({"iss": "https://evil.example"}, "bad_issuer"),
+        ({"exp": int(time.time()) - 3600}, "expired"),
+    ],
+)
+async def test_trusted_stripped_token_still_checks_claims(
+    monkeypatch: pytest.MonkeyPatch, token_kwargs: dict[str, Any], reason: str
+) -> None:
+    monkeypatch.setenv("A2A_TRUST_CLOUD_RUN_IAM", "1")
+    v = await _verify(_stripped(**token_kwargs))
+    assert not v.ok and v.reason == reason
+
+
+@pytest.mark.anyio
+async def test_other_garbage_signatures_are_still_verified(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("A2A_TRUST_CLOUD_RUN_IAM", "1")
+    header, payload, _sig = _token().split(".")
+    v = await _verify(f"{header}.{payload}.bm90LWEtc2ln")
+    assert not v.ok and v.reason.startswith("invalid_token")
 
 
 @pytest.mark.anyio

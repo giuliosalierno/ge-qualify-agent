@@ -1,10 +1,9 @@
 """Verifies that A2A calls really come from Gemini Enterprise.
 
-Why: the Cloud Run service is deployed ``--allow-unauthenticated`` because
-the browser must reach ``/auth`` and ``/auth/callback`` directly during
-Microsoft sign-in. That also leaves the A2A endpoint (``POST /``) open to
-anyone who knows the ``run.app`` URL, who could then drive the agent and
-spend its Gemini quota.
+Why: without it, anyone who can reach the ``run.app`` URL could drive the
+agent and spend its Gemini quota. Cloud Run IAM is the first gate (only the
+GE and IAP service agents are invokers, see ``deploy.sh``); this middleware
+is the second, and pins the caller to GE's service agent specifically.
 
 Gemini Enterprise attaches a Google-signed OIDC ID token for its Discovery
 Engine service agent to every call, in ``X-Serverless-Authorization``
@@ -23,6 +22,15 @@ Modes (``A2A_AUTH_MODE``):
 - ``log``: verify and log the outcome, never reject. For rollout, to confirm
   the audience GE actually uses before enforcing.
 - ``off``: skip entirely. Default for local development and tests.
+
+Cloud Run in front of the container: when a service requires IAM
+authentication, Cloud Run verifies the token itself and replaces its
+signature with ``SIGNATURE_REMOVED_BY_GOOGLE`` before the request reaches us.
+Such a token cannot be verified here. Its claims are trusted only when
+``A2A_TRUST_CLOUD_RUN_IAM=1``, which is safe only while ``allUsers`` is NOT a
+``roles/run.invoker`` on the service (``deploy.sh`` deploys with
+``--no-allow-unauthenticated``). With the flag unset such tokens are rejected
+as ``signature_stripped``.
 
 Token values are never logged. Only the outcome, the audience and a service
 account email are, and a human email is reduced to its domain.
@@ -51,6 +59,7 @@ log = logging.getLogger(__name__)
 
 GOOGLE_CERTS_URL = "https://www.googleapis.com/oauth2/v1/certs"
 GOOGLE_ISSUERS = ("accounts.google.com", "https://accounts.google.com")
+CLOUD_RUN_STRIPPED_SIGNATURE = "SIGNATURE_REMOVED_BY_GOOGLE"
 
 #: Routes that execute agent logic. The public agent card stays open: GE
 #: fetches it during registration and it holds nothing secret.
@@ -74,6 +83,16 @@ def auth_mode() -> str:
     default = "enforce" if os.environ.get("K_SERVICE") else "off"
     mode = os.environ.get("A2A_AUTH_MODE", default).strip().lower()
     return mode if mode in ("enforce", "log", "off") else "enforce"
+
+
+def trust_cloud_run_iam() -> bool:
+    """Whether Cloud Run's own IAM check may stand in for our signature check.
+
+    TODO(security): the flag is an operator assertion that ``allUsers`` is not
+    an invoker. The app does not check the IAM policy itself (that would need
+    run.services.getIamPolicy for the runtime service account).
+    """
+    return os.environ.get("A2A_TRUST_CLOUD_RUN_IAM", "").strip() == "1"
 
 
 def _csv_env(name: str) -> list[str]:
@@ -152,14 +171,15 @@ async def verify_request_headers(
     if not token:
         return Verdict(False, "no_token")
     if token.count(".") != 2:
-        # Cloud Run strips the signature from tokens it verified itself; an
-        # unsigned token is no proof of anything here.
         return Verdict(False, "not_a_signed_jwt")
 
     audiences = allowed_audiences()
     invokers = allowed_invokers()
     if not audiences or not invokers:
         return Verdict(False, "not_configured")
+
+    if token.rsplit(".", 1)[1] == CLOUD_RUN_STRIPPED_SIGNATURE:
+        return _verify_stripped(token, audiences, invokers)
 
     try:
         cert_map = certs if certs is not None else await _CERTS.get()
@@ -176,16 +196,46 @@ async def verify_request_headers(
             aud = str(google_jwt.decode(token, verify=False).get("aud", ""))
         except Exception:
             pass
-        reason = "bad_audience" if "audience" in str(exc).lower() else "invalid_token"
+        reason = "bad_audience" if "audience" in str(exc).lower() else f"invalid_token:{type(exc).__name__}"
         return Verdict(False, reason, audience=aud)
 
+    return _check_claims(claims, invokers, ok_reason="ok")
+
+
+def _check_claims(claims: dict[str, Any], invokers: set[str], *, ok_reason: str) -> Verdict:
     email = str(claims.get("email", "")).lower()
     aud = str(claims.get("aud", ""))
     if claims.get("iss") not in GOOGLE_ISSUERS:
         return Verdict(False, "bad_issuer", aud, _redact_principal(email))
     if not claims.get("email_verified") or email not in invokers:
         return Verdict(False, "caller_not_allowed", aud, _redact_principal(email))
-    return Verdict(True, "ok", aud, _redact_principal(email))
+    return Verdict(True, ok_reason, aud, _redact_principal(email))
+
+
+def _verify_stripped(token: str, audiences: list[str], invokers: set[str]) -> Verdict:
+    """A token Cloud Run already verified and then stripped of its signature.
+
+    The claims are read unverified, so they only count when the operator has
+    asserted that Cloud Run IAM gates the service. Audience, expiry, issuer
+    and caller are still checked, so a token minted for another service or a
+    different caller is refused.
+    """
+    try:
+        claims = google_jwt.decode(token, verify=False)
+    except Exception as exc:
+        return Verdict(False, f"invalid_token:{type(exc).__name__}")
+    aud = str(claims.get("aud", ""))
+    if not trust_cloud_run_iam():
+        return Verdict(False, "signature_stripped", audience=aud)
+    if aud not in audiences:
+        return Verdict(False, "bad_audience", audience=aud)
+    try:
+        exp = float(claims.get("exp", 0))
+    except (TypeError, ValueError):
+        exp = 0.0
+    if exp + 30 < time.time():
+        return Verdict(False, "expired", audience=aud)
+    return _check_claims(claims, invokers, ok_reason="ok_cloud_run_iam")
 
 
 def _is_protected(scope: Scope) -> bool:
