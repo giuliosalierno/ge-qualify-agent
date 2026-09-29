@@ -2,7 +2,7 @@
 
 Why: without it, anyone who can reach the ``run.app`` URL could drive the
 agent and spend its Gemini quota. Cloud Run IAM is the first gate (only the
-GE and IAP service agents are invokers, see ``deploy.sh``); this middleware
+GE and IAP service agents are invokers, see ``scripts/deploy.sh``); this middleware
 is the second, and pins the caller to GE's service agent specifically.
 
 Gemini Enterprise attaches a Google-signed OIDC ID token for its Discovery
@@ -28,7 +28,7 @@ authentication, Cloud Run verifies the token itself and replaces its
 signature with ``SIGNATURE_REMOVED_BY_GOOGLE`` before the request reaches us.
 Such a token cannot be verified here. Its claims are trusted only when
 ``A2A_TRUST_CLOUD_RUN_IAM=1``, which is safe only while ``allUsers`` is NOT a
-``roles/run.invoker`` on the service (``deploy.sh`` deploys with
+``roles/run.invoker`` on the service (``scripts/deploy.sh`` deploys with
 ``--no-allow-unauthenticated``). With the flag unset such tokens are rejected
 as ``signature_stripped``.
 

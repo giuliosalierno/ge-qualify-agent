@@ -1,7 +1,7 @@
 """Activity 2: Capability tier classification & GCP-grounded solution routing.
 
 Maps the collected business requirements and system footprint to the least
-complex Gemini Enterprise agentic capability (Levels 1-6) per AGENT_PLAN.MD
+complex Gemini Enterprise agentic capability (Levels 1-6) per docs/framework.md
 Activity 2 and `skills/ge_capability_grounding/SKILL.md`.
 
 Enforces the **Anti-Overcommitment & Pro-Code Delegation Rule**:

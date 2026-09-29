@@ -119,6 +119,10 @@ def load_instructions() -> str:
         parts.append(INSTRUCTIONS_PATH.read_text(encoding="utf-8"))
     if CAPABILITY_GROUNDING_SKILL_PATH.is_file():
         parts.append(CAPABILITY_GROUNDING_SKILL_PATH.read_text(encoding="utf-8"))
+    else:
+        # Missing from the image once already (it was .gcloudignore'd); the
+        # agent still runs but recommends capabilities without grounding.
+        log.warning("Capability grounding skill not found at %s", CAPABILITY_GROUNDING_SKILL_PATH)
     return "\n\n---\n\n".join(parts)
 
 

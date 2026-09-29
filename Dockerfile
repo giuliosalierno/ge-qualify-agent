@@ -13,6 +13,8 @@ RUN uv sync --frozen --no-dev --no-install-project
 
 # Copy application source
 COPY agent/ ./agent/
+# Appended to the system instruction by qualify/agent/turn.py:load_instructions.
+COPY skills/ge_capability_grounding/ ./skills/ge_capability_grounding/
 COPY qualify/ ./qualify/
 
 # Install the local package

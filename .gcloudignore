@@ -14,11 +14,15 @@ venv/
 .env
 .env.*
 
-# Private design & implementation documentation
+# Documentation and operator scripts (not needed in deployed container)
 doc/
+docs/
+scripts/
 
-# Legacy skills archive & test suites (not needed in deployed container)
-skills/
+# Skill sources & test suites. Only the capability grounding skill ships in
+# the container: the agent appends it to its system instruction.
+skills/*
+!skills/ge_capability_grounding/
 tests/
 *.zip
 

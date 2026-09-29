@@ -57,7 +57,7 @@ def test_business_pack_has_four_stages():
 
 
 def test_business_pack_collects_no_coe_fields():
-    """AGENT_PLAN.MD L144-146: scoring and execution belong to the CoE."""
+    """docs/framework.md L144-146: scoring and execution belong to the CoE."""
     pack = load_all_packs()["business"]
     for stage in pack.stages:
         for field in stage.fields:

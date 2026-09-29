@@ -73,17 +73,37 @@ Invoke either skill in Gemini Enterprise and describe the workflow. Connect a da
 
 ## Development & Packaging
 
-To rebuild the distributable zip files from source:
+To rebuild the distributable zip files from source (written to the repo root,
+git-ignored):
 
 ```bash
-python3 tests/package_skills.py
+python3 skills/package_skills.py
 ```
 
-To run the verification tests:
+To run the skill verification tests:
 
 ```bash
-python3 tests/run_eval.py
+python3 skills/run_eval.py
 ```
+
+---
+
+## Qualification agent (A2A)
+
+The same interview also runs as an A2A agent with an A2UI living form
+(`qualify/`), deployed to Cloud Run and registered in Gemini Enterprise.
+
+```bash
+uv run pytest -q          # unit tests
+scripts/deploy.sh         # build and deploy to Cloud Run (reads .env)
+scripts/register_ge.sh    # first-time registration in Gemini Enterprise
+scripts/sync_ge_agent.sh  # push a changed agent card to the GE registration
+scripts/setup_lb.sh       # one-time Load Balancer + IAP provisioning
+scripts/smoke_test_auth.sh
+```
+
+Only the Gemini Enterprise and IAP service agents may invoke the Cloud Run
+service; see `scripts/deploy.sh` and `qualify/agent/ge_auth.py`.
 
 ---
 
@@ -91,15 +111,7 @@ python3 tests/run_eval.py
 
 | Document | What it covers |
 | :--- | :--- |
-| [`doc/a2ui_integration.md`](doc/a2ui_integration.md) | A2UI wire format, component catalog, and **every verified Gemini Enterprise behaviour** — including the task states that silently break server-dispatched buttons |
-| [`doc/sharepoint_auth.md`](doc/sharepoint_auth.md) | Per-user (on-behalf-of) SharePoint OAuth: the flow, the traps, and why GE withholding the token is spec-mandated |
-| [`doc/technical_review.md`](doc/technical_review.md) | The Phase 2 pack: starting a review from a business record, the 22-subcriteria score, and why the systems inventory is extracted rather than typed |
-| [`doc/design_plan.md`](doc/design_plan.md) | Qualification model, stages, and scoring |
-| [`doc/implementation_plan.md`](doc/implementation_plan.md) | Build phases and decisions |
-| [`doc/skill_best_practices.md`](doc/skill_best_practices.md) | Authoring guidance for the two skills |
+| [`docs/framework.md`](docs/framework.md) | The GE App Use Case Discovery Framework the agent and skills implement; code comments cite it by line |
 
-> [!TIP]
-> Read §8 of `a2ui_integration.md` before changing anything that touches the A2A
-> protocol boundary. Several of its findings cost days to discover and produce no
-> error message when violated — a broken agent looks identical to a working one from
-> the unit tests.
+Design notes, implementation plans and integration findings live in a local,
+git-ignored `doc/` folder and are not published.

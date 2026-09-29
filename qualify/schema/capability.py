@@ -1,14 +1,14 @@
 """GE App capability ladder.
 
 Six levels, ordered by build complexity. This is the `🟩 GE App agentic
-capabilities needed` inventory field and the primary output of AGENT_PLAN.MD
+capabilities needed` inventory field and the primary output of docs/framework.md
 Activity 2, which asks the agent to "map the requirement to the least complex
 agentic capability".
 
-Naming. AGENT_PLAN.MD L61 lists six capabilities, but two of its labels no
+Naming. docs/framework.md L61 lists six capabilities, but two of its labels no
 longer match the Gemini Enterprise documentation:
 
-    AGENT_PLAN.MD label            | Actual GE App surface
+    docs/framework.md label            | Actual GE App surface
     -------------------------------|----------------------------------------
     "Workflow Builder"             | Workflow Builder -> chat agent
     "Gemini Spark"                 | Workflow Builder -> workflow agent
@@ -16,10 +16,10 @@ longer match the Gemini Enterprise documentation:
 Verified against the GE docs navigation on 2026-09-15: there is no "Agent
 Designer" and no "Spark" anywhere in it. Workflow Builder is the no-code
 builder, and it contains two distinct agent types. We use the documented
-names and keep the AGENT_PLAN.MD wording in `legacy_label` so the mapping
+names and keep the docs/framework.md wording in `legacy_label` so the mapping
 stays traceable.
 
-Numbering. AGENT_PLAN.MD L111 calls "Tiers 1-4" citizen-builder opportunities,
+Numbering. docs/framework.md L111 calls "Tiers 1-4" citizen-builder opportunities,
 and levels 1-4 below are exactly the ones an end user can build unaided. That
 boundary is independent corroboration that six is the intended length.
 L156's reference to "Tier 5-7" does not reconcile with any enumerated list and
@@ -46,7 +46,7 @@ class CapabilityLevel(IntEnum):
 
     @property
     def legacy_label(self) -> str:
-        """The wording used in AGENT_PLAN.MD L61.
+        """The wording used in docs/framework.md L61.
 
         Kept so a reader of the framework document can find the corresponding
         level without guessing.
@@ -57,7 +57,7 @@ class CapabilityLevel(IntEnum):
     def is_citizen_builder(self) -> bool:
         """True when an end user can build this without a developer.
 
-        The 1-4 / 5-6 split is AGENT_PLAN.MD L111's "Tiers 1-4". Activity 2
+        The 1-4 / 5-6 split is docs/framework.md L111's "Tiers 1-4". Activity 2
         uses it to decide whether to hand the user step-by-step build
         instructions or route the case to the CoE backlog.
         """

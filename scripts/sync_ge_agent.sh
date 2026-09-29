@@ -13,7 +13,7 @@
 #   native "Sign in" prompt), the stored snapshot goes stale and GE keeps serving the old one.
 #   This script PATCHes `a2aAgentDefinition.jsonAgentCard` in place.
 #
-# Prerequisite: run ./deploy.sh first so the newest card is live on Cloud Run.
+# Prerequisite: run scripts/deploy.sh first so the newest card is live on Cloud Run.
 
 set -e
 
@@ -45,7 +45,7 @@ if ! curl -sf "${SERVICE_URL}/.well-known/agent-card.json" -o "$CARD_FILE" \
   CARD_URL="${CARD_URL:-$(gcloud run services describe "$SERVICE_NAME" \
     --project="$PROJECT_ID" --region="$REGION" --format='value(status.url)')}"
   echo "Live card not reachable (IAP?); building it from source for ${CARD_URL} ..."
-  (cd "$(dirname "${BASH_SOURCE[0]}")" && uv run python -c '
+  (cd "$(dirname "${BASH_SOURCE[0]}")/.." && uv run python -c '
 import sys
 from qualify.agent.card import build_agent_card
 print(build_agent_card(sys.argv[1]).model_dump_json(by_alias=True, exclude_none=True))

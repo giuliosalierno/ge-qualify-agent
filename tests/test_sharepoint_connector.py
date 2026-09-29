@@ -24,7 +24,7 @@ from qualify.sinks.session import InMemorySessionStore
 #: Anything here silently promotes the connector out of mock mode.
 #:
 #: Real values leak in easily — `.env` sourced into the shell, or a prior
-#: `deploy.sh` run — and the failure is baffling when it happens, because the
+#: `scripts/deploy.sh` run — and the failure is baffling when it happens, because the
 #: test looks pure. Clearing them keeps the suite honest regardless of who runs
 #: it and on what machine.
 _GRAPH_ENV_VARS = (

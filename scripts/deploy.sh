@@ -17,12 +17,13 @@ MEMORY="${MEMORY:-1Gi}"
 MAX_INSTANCES="${MAX_INSTANCES:-1}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 # Load environment variables from .env if present
-if [ -f "${SCRIPT_DIR}/.env" ]; then
+if [ -f "${REPO_ROOT}/.env" ]; then
   echo "Loading environment variables from .env ..."
   set -a
-  source "${SCRIPT_DIR}/.env"
+  source "${REPO_ROOT}/.env"
   set +a
 fi
 
@@ -170,7 +171,7 @@ fi
 
 # Initial deployment from source (builds Dockerfile)
 gcloud run deploy "$SERVICE_NAME" \
-  --source "$SCRIPT_DIR" \
+  --source "$REPO_ROOT" \
   --project "$PROJECT_ID" \
   --region "$REGION" \
   --memory "$MEMORY" \

@@ -1,7 +1,7 @@
 # Business intake pack — Activity 2, the Discovery Agent's business interview.
 #
 # Four stages, matching skills/ge_intake_business/SKILL.md. Every field here is
-# green (Discovery Agent owned) under AGENT_PLAN.MD L144-146. Owner and sponsor
+# green (Discovery Agent owned) under docs/framework.md L144-146. Owner and sponsor
 # questions land in /uc/proposed/, never in /uc/execution/, because those are
 # the CoE's to decide.
 #
@@ -170,7 +170,7 @@ stages:
       - At least one data source is confirmed, or "Not sure yet" is chosen deliberately.
 
   # -- 4 ------------------------------------------------------------------
-  # Everything here is a proposal. AGENT_PLAN.MD gives owners and sponsors to
+  # Everything here is a proposal. docs/framework.md gives owners and sponsors to
   # the CoE, but the submitter usually knows them, and asking costs one turn
   # while chasing it later costs an email per use case.
   - id: ownership

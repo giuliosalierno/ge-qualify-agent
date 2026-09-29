@@ -147,7 +147,7 @@ def test_derived_tracks_its_inputs():
 
 
 def test_citizen_builder_boundary_is_four():
-    """AGENT_PLAN.MD L111: "citizen builder opportunities (Tiers 1-4)"."""
+    """docs/framework.md L111: "citizen builder opportunities (Tiers 1-4)"."""
     for level in CapabilityLevel:
         assert level.is_citizen_builder == (level <= 4)
 
@@ -167,7 +167,7 @@ def test_every_level_maps_to_a_tier_and_labels():
 
 
 def test_legacy_labels_cover_agent_plan_wording():
-    """A reader of AGENT_PLAN.MD L61 must be able to find each level."""
+    """A reader of docs/framework.md L61 must be able to find each level."""
     legacy = {lvl.legacy_label for lvl in CapabilityLevel}
 
     assert "Gemini Spark" in legacy

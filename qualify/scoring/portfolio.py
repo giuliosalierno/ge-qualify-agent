@@ -2,7 +2,7 @@
 
 Evaluates a collection of qualified `UseCaseRecord` items across business units,
 computing independent **Business Value (1–5)** and **Technical Feasibility (1–5)**
-scores and segmenting the portfolio into the four `AGENT_PLAN.MD` (§Activity 3)
+scores and segmenting the portfolio into the four `docs/framework.md` (§Activity 3)
 quadrants:
 
 1. **Quick Wins** — High Business Value (>=3), High Feasibility (>=4), no hard blockers.
@@ -239,7 +239,7 @@ def _assign_quadrant(
     feasibility_score: int,
     has_hard_blocker: bool,
 ) -> QuadrantName:
-    """Assigns one of the four AGENT_PLAN.MD portfolio quadrants."""
+    """Assigns one of the four docs/framework.md portfolio quadrants."""
     if has_hard_blocker:
         return "Deprioritized"
     if value_score >= 3 and feasibility_score >= 4:

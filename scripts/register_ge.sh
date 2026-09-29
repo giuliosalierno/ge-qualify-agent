@@ -1,7 +1,7 @@
 #!/bin/bash
 # Registers the ge-qualify-agent in Gemini Enterprise as an A2A agent.
 #
-# Prerequisite: run ./deploy.sh first so the service is deployed and IAM is configured.
+# Prerequisite: run scripts/deploy.sh first so the service is deployed and IAM is configured.
 
 set -e
 

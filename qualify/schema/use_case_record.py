@@ -12,7 +12,7 @@ Two ideas drive the shape.
    keep in sync.
 
 2. Ownership is structural, not conventional.
-   AGENT_PLAN.MD L144-146 splits every inventory field between the Discovery
+   docs/framework.md L144-146 splits every inventory field between the Discovery
    Agent (green) and the CoE's Analysis Agent (blue). That split is enforced
    here by putting CoE fields in their own models and refusing agent writes,
    rather than relying on anyone remembering the rule.
@@ -64,7 +64,7 @@ class Meta(_Base):
 
 
 class Business(_Base):
-    """AGENT_PLAN.MD "Business needs" — all green."""
+    """docs/framework.md "Business needs" — all green."""
 
     user_profile: str | None = None
     user_count: Annotated[int | None, Field(ge=0)] = None
@@ -135,7 +135,7 @@ class Grounding(_Base):
 
 
 class Technical(_Base):
-    """AGENT_PLAN.MD "Technical aspects", plus the tech review's detail.
+    """docs/framework.md "Technical aspects", plus the tech review's detail.
 
     `data_sources` is the flat green inventory field. `systems` is the richer
     structure the technical review produces. The Sheet writer projects
@@ -159,7 +159,7 @@ class Technical(_Base):
 class Proposed(_Base):
     """What the user said about CoE-owned fields.
 
-    AGENT_PLAN.MD assigns owners, sponsors and scores to the CoE. But the
+    docs/framework.md assigns owners, sponsors and scores to the CoE. But the
     submitter is often the business owner, or knows the sponsor, and asking
     costs one turn while recovering it later costs a follow-up email per use
     case.
@@ -184,7 +184,7 @@ class Proposed(_Base):
 
 
 class Scoring(_Base):
-    """AGENT_PLAN.MD Activity 3 outputs. Analysis Agent territory.
+    """docs/framework.md Activity 3 outputs. Analysis Agent territory.
 
     Both scores are 1-5 per L75. The technical review's 0-100% readiness
     figure is NOT the feasibility score — it is advisory input, and lives in
@@ -201,7 +201,7 @@ class Scoring(_Base):
 
 
 class Execution(_Base):
-    """AGENT_PLAN.MD "Execution" — all blue."""
+    """docs/framework.md "Execution" — all blue."""
 
     business_owner: str | None = None
     executive_sponsor: str | None = None
@@ -343,7 +343,7 @@ def compute_derived(record: UseCaseRecord) -> Derived:
 # Ownership enforcement
 # ---------------------------------------------------------------------------
 
-#: Sub-trees the Discovery Agent must never write. AGENT_PLAN.MD L144-146.
+#: Sub-trees the Discovery Agent must never write. docs/framework.md L144-146.
 COE_OWNED_ROOTS = ("scoring", "execution", "derived")
 
 #: A2UI data model paths are rooted at the record, e.g. `/uc/business/problem`.
