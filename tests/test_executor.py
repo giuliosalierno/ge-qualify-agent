@@ -14,7 +14,6 @@ from a2a.types import (
     MessageSendParams,
     Part,
     Role,
-    Task,
     TaskState,
     TextPart,
 )

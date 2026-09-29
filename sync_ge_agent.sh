@@ -1,12 +1,17 @@
 #!/bin/bash
-# Re-syncs the live A2A Agent Card and OAuth authorization config into the already-registered
-# Gemini Enterprise agent.
+# Re-syncs the live A2A Agent Card into the already-registered Gemini Enterprise agent, and
+# CLEARS any previously attached `authorizationConfig`.
+#
+# Why the authorization is cleared: Gemini Enterprise never forwarded the delegated Microsoft
+# token over A2A (verified in Cloud Run logs), so the GE-native OAuth flow and its `/token`
+# endpoint carried no user identity. `/token` was removed; SharePoint sign-in now uses a signed,
+# per-conversation link rendered by the agent itself.
 #
 # Why this exists:
 #   Gemini Enterprise stores a SNAPSHOT of the agent card taken at registration time. When the
 #   card changes (for example when `securitySchemes` / `security` are added so GE renders its
 #   native "Sign in" prompt), the stored snapshot goes stale and GE keeps serving the old one.
-#   This script PATCHes `a2aAgentDefinition.jsonAgentCard` plus `authorizationConfig` in place.
+#   This script PATCHes `a2aAgentDefinition.jsonAgentCard` in place.
 #
 # Prerequisite: run ./deploy.sh first so the newest card is live on Cloud Run.
 
@@ -18,7 +23,6 @@ SERVICE_NAME="${SERVICE_NAME:-ge-qualify-agent}"
 REGION="${REGION:-us-central1}"
 ENGINE_ID="${ENGINE_ID:-gemini-enterprise-17888530_1788853050024}"
 AGENT_ID="${AGENT_ID:-2763559167028725339}"
-AUTH_ID="${AUTH_ID:-sharepoint-auth}"
 
 LB_IP=$(gcloud compute addresses describe "${SERVICE_NAME}-ip" --global --project="$PROJECT_ID" --format="value(address)" 2>/dev/null || true)
 if [ -n "${LB_IP}" ]; then
@@ -31,17 +35,28 @@ echo "Service URL: $SERVICE_URL"
 
 CARD_FILE="/tmp/ge_qualify_agent_card.json"
 echo "Fetching live agent card from ${SERVICE_URL}/.well-known/agent-card.json ..."
-curl -sf "${SERVICE_URL}/.well-known/agent-card.json" \
-  -o "$CARD_FILE"
+# IAP fronts the load balancer and answers anonymous requests with a 302, so
+# fall back to building the identical card from source (same function the
+# server uses to serve it).
+if ! curl -sf "${SERVICE_URL}/.well-known/agent-card.json" -o "$CARD_FILE" \
+    || ! python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "$CARD_FILE" 2>/dev/null; then
+  # The card `url` is what GE calls for A2A. Keep it on the Cloud Run URL GE
+  # already uses; the LB URL is behind IAP.
+  CARD_URL="${CARD_URL:-$(gcloud run services describe "$SERVICE_NAME" \
+    --project="$PROJECT_ID" --region="$REGION" --format='value(status.url)')}"
+  echo "Live card not reachable (IAP?); building it from source for ${CARD_URL} ..."
+  (cd "$(dirname "${BASH_SOURCE[0]}")" && uv run python -c '
+import sys
+from qualify.agent.card import build_agent_card
+print(build_agent_card(sys.argv[1]).model_dump_json(by_alias=True, exclude_none=True))
+' "$CARD_URL") > "$CARD_FILE"
+fi
 
 python3 - <<PY
 import json, sys
 card = json.load(open("$CARD_FILE"))
-schemes = card.get("securitySchemes") or {}
-if not schemes:
-    print("WARNING: live agent card has no securitySchemes; GE will not render a native sign-in prompt.", file=sys.stderr)
-else:
-    print("Live card declares security schemes:", ", ".join(schemes))
+if card.get("securitySchemes"):
+    print("WARNING: live card still declares securitySchemes; deploy the latest build first.", file=sys.stderr)
 PY
 
 PAYLOAD_FILE="/tmp/ge_sync_qualify_body.json"
@@ -57,11 +72,8 @@ payload = {
         "and guides users on the appropriate agentic capability tier."
     ),
     "a2aAgentDefinition": {"jsonAgentCard": card_text},
-    "authorizationConfig": {
-        "toolAuthorizations": [
-            "projects/$PROJECT_NUMBER/locations/global/authorizations/$AUTH_ID"
-        ]
-    },
+    # authorizationConfig is intentionally omitted while listed in UPDATE_MASK,
+    # which clears the old GE-native OAuth binding.
     "sharingConfig": {
         "scope": "ALL_USERS"
     },

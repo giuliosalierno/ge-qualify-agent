@@ -42,8 +42,8 @@ echo "============================================================"
 
 # WEB_OAUTH_CALLBACK gates one-click browser sign-in. It requires
 # "${SERVICE_URL}/auth/callback" to be registered under Authentication -> Web
-# on the Azure app, otherwise Microsoft answers AADSTS50011. Set it to 0 to
-# fall back to device code.
+# on the Azure app, otherwise Microsoft answers AADSTS50011. With 0 the /auth
+# page only explains which redirect URI still needs registering.
 WEB_OAUTH_CALLBACK="${WEB_OAUTH_CALLBACK:-1}"
 
 # Durable record and session storage.
@@ -80,6 +80,50 @@ else
 fi
 
 INGRESS_MODE="${INGRESS_MODE:-internal-and-cloud-load-balancing}"
+RUNTIME_SA="${RUNTIME_SA:-${PROJECT_NUMBER}-compute@developer.gserviceaccount.com}"
+
+# ---------------------------------------------------------------------------
+# Secrets live in Secret Manager, never in plain env vars.
+#
+# Plain `--set-env-vars` values are readable by anyone with run.services.get.
+#   - ms-graph-client-secret: seeded once from MS_GRAPH_CLIENT_SECRET in .env.
+#   - oauth-state-secret:     HMAC key that signs per-conversation sign-in
+#                             links; generated once if missing.
+# There is deliberately no MS_GRAPH_REFRESH_TOKEN: user tokens are held in
+# memory per conversation only.
+# ---------------------------------------------------------------------------
+gcloud services enable secretmanager.googleapis.com --project="$PROJECT_ID" >/dev/null
+
+ensure_secret() {  # name, value-if-creating
+  local name="$1" value="$2"
+  if ! gcloud secrets describe "$name" --project="$PROJECT_ID" >/dev/null 2>&1; then
+    if [ -z "$value" ]; then
+      echo "ERROR: secret '$name' does not exist and no value was provided to create it." >&2
+      exit 1
+    fi
+    echo "Creating secret $name ..."
+    printf '%s' "$value" | gcloud secrets create "$name" \
+      --project="$PROJECT_ID" --replication-policy=automatic --data-file=- >/dev/null
+  fi
+  gcloud secrets add-iam-policy-binding "$name" \
+    --project="$PROJECT_ID" \
+    --member="serviceAccount:${RUNTIME_SA}" \
+    --role=roles/secretmanager.secretAccessor >/dev/null
+}
+
+ensure_secret ms-graph-client-secret "${MS_GRAPH_CLIENT_SECRET:-}"
+ensure_secret oauth-state-secret "$(openssl rand -base64 48 | tr -d '\n')"
+
+# One-time migration: an existing revision may still carry these as plain env
+# vars (including a leaked user refresh token). Cloud Run refuses to turn an
+# env var into a secret in place, so strip them first.
+if gcloud run services describe "$SERVICE_NAME" --project="$PROJECT_ID" --region="$REGION" \
+    --format='value(spec.template.spec.containers[0].env[].name)' 2>/dev/null \
+    | tr ';' '\n' | grep -qE '^(MS_GRAPH_CLIENT_SECRET|MS_GRAPH_REFRESH_TOKEN)$'; then
+  echo "Removing plain-text secret env vars from the existing service ..."
+  gcloud run services update "$SERVICE_NAME" --project="$PROJECT_ID" --region="$REGION" \
+    --remove-env-vars=MS_GRAPH_CLIENT_SECRET,MS_GRAPH_REFRESH_TOKEN >/dev/null
+fi
 
 # Initial deployment from source (builds Dockerfile)
 gcloud run deploy "$SERVICE_NAME" \
@@ -92,7 +136,8 @@ gcloud run deploy "$SERVICE_NAME" \
   --ingress "$INGRESS_MODE" \
   --clear-base-image \
   --allow-unauthenticated \
-  --set-env-vars="GOOGLE_CLOUD_PROJECT=${PROJECT_ID},GOOGLE_CLOUD_LOCATION=${GENAI_LOCATION},GOOGLE_GENAI_USE_VERTEXAI=TRUE,MODEL=${MODEL_NAME},MS_GRAPH_TENANT_ID=${MS_GRAPH_TENANT_ID:-},MS_GRAPH_CLIENT_ID=${MS_GRAPH_CLIENT_ID:-},MS_GRAPH_CLIENT_SECRET=${MS_GRAPH_CLIENT_SECRET:-},MS_GRAPH_REFRESH_TOKEN=${MS_GRAPH_REFRESH_TOKEN:-},SHAREPOINT_INSTANCE_URL=${SHAREPOINT_INSTANCE_URL:-},WEB_OAUTH_CALLBACK=${WEB_OAUTH_CALLBACK},QUALIFY_GCS_BUCKET=${QUALIFY_GCS_BUCKET}"
+  --set-secrets="MS_GRAPH_CLIENT_SECRET=ms-graph-client-secret:latest,OAUTH_STATE_SECRET=oauth-state-secret:latest" \
+  --set-env-vars="GOOGLE_CLOUD_PROJECT=${PROJECT_ID},GOOGLE_CLOUD_LOCATION=${GENAI_LOCATION},GOOGLE_GENAI_USE_VERTEXAI=TRUE,MODEL=${MODEL_NAME},MS_GRAPH_TENANT_ID=${MS_GRAPH_TENANT_ID:-},MS_GRAPH_CLIENT_ID=${MS_GRAPH_CLIENT_ID:-},SHAREPOINT_INSTANCE_URL=${SHAREPOINT_INSTANCE_URL:-},WEB_OAUTH_CALLBACK=${WEB_OAUTH_CALLBACK},QUALIFY_GCS_BUCKET=${QUALIFY_GCS_BUCKET}"
 
 SERVICE_URL=$(gcloud run services describe "$SERVICE_NAME" \
   --project="$PROJECT_ID" \

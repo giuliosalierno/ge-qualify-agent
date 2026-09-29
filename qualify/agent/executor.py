@@ -81,8 +81,6 @@ class QualifyAgentExecutor(AgentExecutor):
             or "default"
         )
 
-        self._extract_and_cache_oauth_tokens(message, context_id, context)
-
         turn_input = TurnInput(
             context_id=context_id,
             user_text=user_text,
@@ -180,41 +178,6 @@ class QualifyAgentExecutor(AgentExecutor):
             if isinstance(part.root, TextPart) and part.root.text:
                 texts.append(part.root.text.strip())
         return " ".join(texts) if texts else None
-
-    def _extract_and_cache_oauth_tokens(
-        self,
-        message: Any,
-        context_id: str,
-        context: RequestContext | None = None,
-    ) -> None:
-        """Captures any end-user OAuth token injected by Gemini Enterprise.
-
-        Gemini Enterprise delivers the token from a Discovery Engine `Authorization`
-        resource either as an inbound HTTP header (e.g. `X-Serialized-Auth-Tokens`)
-        or inside the A2A `message.metadata`. Both surfaces are scanned recursively.
-        """
-        from qualify.connectors.sharepoint import harvest_microsoft_tokens  # noqa: PLC0415
-
-        # 1. Inbound HTTP headers (A2A DefaultCallContextBuilder stores them in call_context.state)
-        headers: dict[str, Any] = {}
-        call_context = getattr(context, "call_context", None) if context is not None else None
-        state = getattr(call_context, "state", None)
-        if isinstance(state, dict):
-            raw_headers = state.get("headers")
-            if isinstance(raw_headers, dict):
-                headers = raw_headers
-
-        if headers:
-            # Log header names only (never values) so the GE-injected auth key is discoverable in Cloud Run logs
-            log.info("Inbound A2A header keys: %s", sorted(headers.keys()))
-            token = harvest_microsoft_tokens(headers, context_id, path="header")
-            if token:
-                return
-
-        # 2. A2A message metadata (e.g. temp:sharepoint-auth)
-        metadata = getattr(message, "metadata", None) if message is not None else None
-        if metadata:
-            harvest_microsoft_tokens(metadata, context_id, path="metadata")
 
     async def cancel(self, request: RequestContext, event_queue: EventQueue) -> Task | None:
         raise ServerError(error=UnsupportedOperationError())

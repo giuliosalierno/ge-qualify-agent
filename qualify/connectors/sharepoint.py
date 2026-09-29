@@ -21,7 +21,6 @@ import json
 import logging
 import os
 import re
-import threading
 import time
 import urllib.parse
 import xml.etree.ElementTree as ET
@@ -38,7 +37,8 @@ from qualify.scoring import classify_capability
 
 logger = logging.getLogger(__name__)
 
-# In-memory token vault storing (access_token, expires_at_unix_ts)
+# In-memory, per-conversation vault: context_id -> (access_token, expires_at_unix_ts).
+# See "Per-conversation token vault" below for the security model.
 _TOKEN_VAULT: dict[str, tuple[str, float]] = {}
 
 GRAPH_BASE_URL = "https://graph.microsoft.com/v1.0"
@@ -140,310 +140,106 @@ def is_microsoft_graph_token(token: str) -> bool:
     return True
 
 
-def is_strict_microsoft_jwt(token: str) -> bool:
-    """Returns True only for a fully decodable JWT actually issued by Microsoft Entra ID.
+# ---------------------------------------------------------------------------
+# Per-conversation token vault (memory only)
+# ---------------------------------------------------------------------------
+#
+# Security model:
+# - Tokens are keyed by the conversation (`context_id`) that completed the
+#   sign-in. That binding is proven by a signed OAuth `state`
+#   (see `qualify/connectors/oauth_state.py`), never taken from a query string.
+# - There is no shared or fallback key. A conversation only ever uses its own
+#   token; without one, callers get `unauthenticated` and show the sign-in card.
+# - Nothing is written to disk, GCS, logs or `os.environ`. A restart signs
+#   everyone out, which is the intended trade-off.
+# - Tokens are never harvested from inbound A2A requests: Gemini Enterprise
+#   does not forward the user's Microsoft token (verified in Cloud Run logs),
+#   and an inbound header is no proof of which conversation it belongs to.
 
-    Unlike :func:`is_microsoft_graph_token`, which is deliberately permissive so opaque tokens
-    handed over by trusted callers still work, this performs real structural validation:
+DELEGATED_GRAPH_SCOPE = "https://graph.microsoft.com/Sites.ReadWrite.All offline_access"
 
-    1. exactly three segments,
-    2. header and payload both base64url-decode to JSON objects,
-    3. the header carries an ``alg``,
-    4. the issuer or audience is Microsoft (and is definitively not Google).
+# context_id -> refresh_token
+_REFRESH_VAULT: dict[str, str] = {}
+# App-only token cache, used only when SHAREPOINT_APP_AUTH=1.
+_APP_TOKEN: dict[str, tuple[str, float]] = {}
 
-    This is required when scanning untrusted surfaces such as HTTP headers, where ordinary values
-    like the ``host`` header (``my-service.a.run.app``) are dot-separated and would otherwise be
-    misread as a token.
-    """
+
+class SharePointAuthRequired(RuntimeError):
+    """A live SharePoint call needs a signed-in user and this conversation has none."""
+
+
+def _strip_bearer(token: str) -> str:
     clean = token.strip()
-    if clean.lower().startswith("bearer "):
-        clean = clean[7:].strip()
-
-    parts = clean.split(".")
-    if len(parts) != 3 or not parts[0] or not parts[1]:
-        return False
-
-    try:
-        header_raw = base64.urlsafe_b64decode(parts[0] + "=" * (-len(parts[0]) % 4))
-        payload_raw = base64.urlsafe_b64decode(parts[1] + "=" * (-len(parts[1]) % 4))
-        header = json.loads(header_raw.decode("utf-8"))
-        payload = json.loads(payload_raw.decode("utf-8"))
-    except Exception:
-        return False
-
-    if not isinstance(header, dict) or not isinstance(payload, dict) or "alg" not in header:
-        return False
-
-    iss = str(payload.get("iss", "")).lower()
-    aud = str(payload.get("aud", "")).lower()
-    if "google.com" in iss or "googleapis.com" in aud:
-        return False
-
-    return (
-        "login.microsoftonline.com" in iss
-        or "sts.windows.net" in iss
-        or "microsoftonline" in iss
-        or "graph.microsoft.com" in aud
-    )
+    return clean[7:].strip() if clean.lower().startswith("bearer ") else clean
 
 
-
-def cache_delegated_token(token: str, key: str = "latest", ttl_seconds: int = 3600) -> None:
-    """Caches an end-user delegated OAuth 2.0 Bearer token received via MCP."""
-    clean = token.strip()
-    if clean.lower().startswith("bearer "):
-        clean = clean[7:].strip()
+def cache_delegated_token(token: str, key: str, ttl_seconds: int = 3600) -> None:
+    """Caches a delegated Microsoft Graph access token for one conversation."""
+    if not key:
+        return
+    clean = _strip_bearer(token)
     if is_microsoft_graph_token(clean):
         _TOKEN_VAULT[key] = (clean, time.time() + ttl_seconds)
-        logger.info("Cached delegated Microsoft Graph user token (key=%s, ttl=%ds)", key, ttl_seconds)
+        logger.info("Cached delegated Microsoft Graph user token (context=%s, ttl=%ds)", key, ttl_seconds)
 
 
-def _gcs_token_blob(safe_k: str) -> Any | None:
-    """Returns a GCS blob for sharepoint_tokens/{safe_k}.json if QUALIFY_GCS_BUCKET is set."""
-    bucket_name = os.environ.get("QUALIFY_GCS_BUCKET", "").strip()
-    if not bucket_name:
+def get_cached_delegated_token(key: str | None) -> str | None:
+    """Returns this conversation's non-expired access token, or None."""
+    if not key:
         return None
-    try:
-        from google.cloud import storage  # type: ignore[import-untyped] # noqa: PLC0415
-
-        return storage.Client().bucket(bucket_name).blob(f"sharepoint_tokens/{safe_k}.json")
-    except Exception as exc:
-        logger.debug("Could not access GCS token blob %s: %s", safe_k, exc)
-        return None
-
-
-def _tokens_dir() -> Path:
-    return Path(os.environ.get("SHAREPOINT_TOKENS_DIR", ".data/sharepoint_tokens"))
-
-
-def _load_persisted_token_dict(key: str) -> dict[str, Any]:
-    """Reads token JSON from local disk or GCS bucket."""
-    safe_k = re.sub(r"[^a-zA-Z0-9_-]", "_", key)
-    try:
-        token_file = _tokens_dir() / f"{safe_k}.json"
-        if token_file.exists():
-            return json.loads(token_file.read_text(encoding="utf-8"))
-    except Exception:
-        pass
-
-    blob = _gcs_token_blob(safe_k)
-    if blob is not None:
-        try:
-            if blob.exists():
-                data = json.loads(blob.download_as_text(encoding="utf-8"))
-                # Mirror to local disk for fast subsequent reads in this container
-                try:
-                    token_dir = _tokens_dir()
-                    token_dir.mkdir(parents=True, exist_ok=True)
-                    (token_dir / f"{safe_k}.json").write_text(
-                        json.dumps(data, indent=2), encoding="utf-8"
-                    )
-                except Exception:
-                    pass
-                return data
-        except Exception as exc:
-            logger.debug("Could not download GCS token blob %s: %s", safe_k, exc)
-
-    return {}
-
-
-def get_cached_delegated_token(key: str = "latest") -> str | None:
-    """Retrieves a non-expired delegated user token from the vault, local disk, or GCS."""
     entry = _TOKEN_VAULT.get(key)
-    if entry is not None:
-        token, expires_at = entry
-        if time.time() < expires_at:
-            return token
-        _TOKEN_VAULT.pop(key, None)
-
-    data = _load_persisted_token_dict(key)
-    acc = str(data.get("access_token", "")).strip()
-    exp = float(data.get("expires_at", 0.0) or 0.0)
-    rt = str(data.get("refresh_token", "")).strip()
-    if rt:
-        _REFRESH_VAULT[key] = rt
-    if acc and exp > time.time() and is_microsoft_graph_token(acc):
-        _TOKEN_VAULT[key] = (acc, exp)
-        return acc
+    if entry is None:
+        return None
+    token, expires_at = entry
+    if time.time() < expires_at:
+        return token
+    _TOKEN_VAULT.pop(key, None)
     return None
-
-
-def harvest_microsoft_tokens(
-    payload: Any,
-    context_id: str = "latest",
-    *,
-    path: str = "",
-    _depth: int = 0,
-) -> str | None:
-    """Recursively scans arbitrary payloads for a Microsoft Graph user token and caches it.
-
-    Gemini Enterprise may inject an end-user OAuth token in several shapes (a raw HTTP header,
-    a JSON or base64-encoded header such as ``X-Serialized-Auth-Tokens``, or inside the A2A
-    ``message.metadata`` under a key like ``temp:sharepoint-auth``). This walks every structure
-    so the token is captured regardless of the exact key or encoding used.
-
-    Returns:
-        The first Microsoft Graph token found (already cached), or None.
-    """
-    if payload is None or _depth > 6:
-        return None
-
-    if isinstance(payload, str):
-        raw = payload.strip()
-        if not raw:
-            return None
-        if raw.lower().startswith("bearer "):
-            raw = raw[7:].strip()
-
-        # Embedded JSON payload first (e.g. {"sharepoint-auth": {"access_token": "<jwt>"}})
-        if raw.startswith(("{", "[")):
-            try:
-                return harvest_microsoft_tokens(json.loads(raw), context_id, path=f"{path}[json]", _depth=_depth + 1)
-            except Exception:
-                return None
-
-        # Strict three-segment JWT actually issued by Microsoft Entra ID.
-        # Strict validation matters here: values like the `host` header are dot-separated too.
-        if is_strict_microsoft_jwt(raw):
-            cache_delegated_token(raw, key=context_id)
-            cache_delegated_token(raw, key="latest")
-            logger.info("Harvested Microsoft Graph user token from %r (context_id=%s)", path or "payload", context_id)
-            return raw
-
-        # Base64-encoded JSON payload
-        if len(raw) > 40 and re.fullmatch(r"[A-Za-z0-9_\-+/=]+", raw):
-            try:
-                padded = raw + "=" * (-len(raw) % 4)
-                decoded = base64.urlsafe_b64decode(padded.encode("ascii")).decode("utf-8", errors="strict")
-                if decoded.strip().startswith(("{", "[")):
-                    return harvest_microsoft_tokens(json.loads(decoded), context_id, path=f"{path}[b64]", _depth=_depth + 1)
-            except Exception:
-                return None
-        return None
-
-    if isinstance(payload, dict):
-        for key, val in payload.items():
-            found = harvest_microsoft_tokens(val, context_id, path=f"{path}/{key}" if path else str(key), _depth=_depth + 1)
-            if found:
-                return found
-        return None
-
-    if isinstance(payload, (list, tuple, set)):
-        for idx, val in enumerate(payload):
-            found = harvest_microsoft_tokens(val, context_id, path=f"{path}[{idx}]", _depth=_depth + 1)
-            if found:
-                return found
-        return None
-
-    return None
-
-
-
-# Per-user refresh token vault: maps context_id -> refresh_token
-_REFRESH_VAULT: dict[str, str] = {}
 
 
 def save_delegated_refresh_token(
     refresh_token: str,
     access_token: str = "",
     expires_in: int = 3599,
-    context_id: str | None = None,
+    *,
+    context_id: str,
 ) -> None:
-    """Stores a delegated user refresh token and access token per-user (context_id) as well as latest."""
-    keys = ["latest"]
-    if context_id and context_id != "latest":
-        keys.insert(0, context_id)
-
-    ttl = max(60, expires_in - 60)
-    expires_at = time.time() + ttl if access_token else 0.0
-
-    for k in keys:
-        if refresh_token:
-            _REFRESH_VAULT[k] = refresh_token
-        if access_token:
-            cache_delegated_token(access_token, key=k, ttl_seconds=ttl)
-
+    """Vaults a user's delegated tokens in memory, for exactly one conversation."""
+    if not context_id:
+        raise ValueError("context_id is required to store user tokens")
     if refresh_token:
-        os.environ["MS_GRAPH_REFRESH_TOKEN"] = refresh_token
-
-    payload_str = json.dumps(
-        {
-            "refresh_token": refresh_token,
-            "access_token": access_token,
-            "expires_at": expires_at,
-        },
-        indent=2,
-    )
-
-    try:
-        token_dir = _tokens_dir()
-        token_dir.mkdir(parents=True, exist_ok=True)
-        for k in keys:
-            safe_k = re.sub(r"[^a-zA-Z0-9_-]", "_", k)
-            (token_dir / f"{safe_k}.json").write_text(payload_str, encoding="utf-8")
-    except Exception as exc:
-        logger.debug("Could not write token file: %s", exc)
-
-    for k in keys:
-        safe_k = re.sub(r"[^a-zA-Z0-9_-]", "_", k)
-        blob = _gcs_token_blob(safe_k)
-        if blob is not None:
-            try:
-                blob.upload_from_string(payload_str, content_type="application/json")
-                logger.info("Persisted SharePoint OAuth tokens to GCS (key=%s)", safe_k)
-            except Exception as exc:
-                logger.warning("Could not upload SharePoint token blob %s to GCS: %s", safe_k, exc)
+        _REFRESH_VAULT[context_id] = refresh_token
+    if access_token:
+        cache_delegated_token(access_token, key=context_id, ttl_seconds=max(60, expires_in - 60))
 
 
-def load_delegated_refresh_token(context_id: str | None = None) -> str:
-    """Loads a persisted delegated user refresh token for a specific user session (context_id) or latest."""
-    keys = []
-    if context_id and context_id != "latest":
-        keys.append(context_id)
-    keys.append("latest")
+def load_delegated_refresh_token(context_id: str | None) -> str:
+    """Returns this conversation's refresh token, or an empty string."""
+    if not context_id:
+        return ""
+    return _REFRESH_VAULT.get(context_id, "")
 
-    for k in keys:
-        if k in _REFRESH_VAULT and _REFRESH_VAULT[k]:
-            return _REFRESH_VAULT[k]
-        data = _load_persisted_token_dict(k)
-        tok = str(data.get("refresh_token", "")).strip()
-        if tok:
-            _REFRESH_VAULT[k] = tok
-            return tok
 
-    env_tok = os.environ.get("MS_GRAPH_REFRESH_TOKEN", "").strip()
-    if env_tok:
-        return env_tok
-    return ""
+def has_user_session(context_id: str | None) -> bool:
+    """True if this conversation holds a usable access token or a refresh token."""
+    return bool(get_cached_delegated_token(context_id) or load_delegated_refresh_token(context_id))
+
+
+def clear_user_tokens(context_id: str) -> None:
+    """Forgets every token held for a conversation."""
+    _TOKEN_VAULT.pop(context_id, None)
+    _REFRESH_VAULT.pop(context_id, None)
 
 
 # Pending records awaiting user authentication (context_id -> (UseCaseRecord, skipped_stages))
 _PENDING_RECORDS: dict[str, tuple[UseCaseRecord, set[int]]] = {}
-# Synced results after authentication (context_id -> dict with syncedUrl, recordId, title)
-_SYNCED_RESULTS: dict[str, dict[str, Any]] = {}
-# Poll/auth errors (context_id -> error message)
-_POLL_ERRORS: dict[str, str] = {}
 
 
-def get_synced_result(context_id: str | None = None) -> dict[str, Any] | None:
-    """Returns the last synced SharePoint result for a user session (or latest)."""
-    if context_id and context_id in _SYNCED_RESULTS:
-        return _SYNCED_RESULTS[context_id]
-    return _SYNCED_RESULTS.get("latest")
-
-
-def get_poll_error(context_id: str | None = None) -> str | None:
-    """Returns any OAuth error encountered during background polling for a user session."""
-    if context_id and context_id in _POLL_ERRORS:
-        return _POLL_ERRORS[context_id]
-    return _POLL_ERRORS.get("latest")
-
-
-def auto_sync_pending_records(access_token: str, context_id: str = "latest") -> SharePointSyncResult | None:
-    """Automatically syncs any pending UseCaseRecord for the session immediately after user sign-in."""
-    _POLL_ERRORS.pop(context_id, None)
-    _POLL_ERRORS.pop("latest", None)
-    pending = _PENDING_RECORDS.pop(context_id, None) or _PENDING_RECORDS.pop("latest", None)
+def auto_sync_pending_records(access_token: str, context_id: str) -> SharePointSyncResult | None:
+    """Syncs this conversation's pending UseCaseRecord immediately after its user signs in."""
+    if not context_id:
+        return None
+    pending = _PENDING_RECORDS.pop(context_id, None)
     if not pending:
         return None
     pending_rec, pending_skipped = pending
@@ -455,176 +251,10 @@ def auto_sync_pending_records(access_token: str, context_id: str = "latest") -> 
             delegated_token=access_token,
             context_id=context_id,
         )
-        if res and res.auth_mode == "delegated":
-            info = {
-                "syncedUrl": res.folder_url,
-                "briefUrl": res.brief_url,
-                "recordId": res.record_id,
-                "title": pending_rec.meta.initiative_name or res.record_id,
-            }
-            _SYNCED_RESULTS[context_id] = info
-            _SYNCED_RESULTS["latest"] = info
         return res
     except Exception as exc:
         logger.warning("Auto-sync after sign-in failed: %s", exc)
         return None
-
-
-def exchange_auth_code_for_session(
-    code_or_url: str,
-    redirect_uri: str = "https://vertexaisearch.cloud.google.com/oauth-redirect",
-    context_id: str = "latest",
-) -> dict[str, Any]:
-    """Exchanges a Microsoft OAuth 2.0 authorization code (or full redirect URL) for a user token and auto-syncs pending records."""
-    raw = code_or_url.strip()
-    code = raw
-    if "code=" in raw:
-        try:
-            parsed = urllib.parse.urlparse(raw)
-            qs = urllib.parse.parse_qs(parsed.query)
-            if "code" in qs and qs["code"]:
-                code = qs["code"][0]
-            else:
-                m = re.search(r"[?&]code=([^&#\s]+)", raw)
-                if m:
-                    code = urllib.parse.unquote(m.group(1))
-        except Exception:
-            pass
-
-    tenant_id = os.environ.get("MS_GRAPH_TENANT_ID", "").strip()
-    client_id = os.environ.get("MS_GRAPH_CLIENT_ID", "").strip()
-    client_secret = os.environ.get("MS_GRAPH_CLIENT_SECRET", "").strip()
-    if not tenant_id or not client_id or not code:
-        return {"success": False, "error": "Missing tenant_id, client_id, or authorization code."}
-
-    token_url = f"https://login.microsoftonline.com/{urllib.parse.quote(tenant_id)}/oauth2/v2.0/token"
-    try:
-        with httpx.Client(timeout=10.0) as client:
-            payload = {
-                "client_id": client_id,
-                "grant_type": "authorization_code",
-                "code": code,
-                "redirect_uri": redirect_uri,
-                "scope": "https://graph.microsoft.com/Sites.ReadWrite.All offline_access",
-            }
-            if client_secret:
-                payload["client_secret"] = client_secret
-            resp = client.post(
-                token_url,
-                data=payload,
-                headers={"Content-Type": "application/x-www-form-urlencoded"},
-            )
-            if resp.status_code != 200:
-                err_body = resp.text[:300]
-                logger.warning("Microsoft auth code exchange failed (%s): %s", resp.status_code, err_body)
-                return {"success": False, "error": f"Microsoft returned {resp.status_code}: {err_body}"}
-
-            data = resp.json()
-            access_token = data.get("access_token", "")
-            refresh_token = data.get("refresh_token", "")
-            expires_in = int(data.get("expires_in", 3599))
-            save_delegated_refresh_token(
-                refresh_token,
-                access_token,
-                expires_in,
-                context_id=context_id,
-            )
-            sync_res = auto_sync_pending_records(access_token, context_id=context_id)
-            return {
-                "success": True,
-                "synced": get_synced_result(context_id),
-                "folderUrl": sync_res.folder_url if sync_res else None,
-            }
-    except Exception as exc:
-        return {"success": False, "error": str(exc)}
-
-
-def start_device_code_flow_for_session(context_id: str = "latest") -> dict[str, Any] | None:
-    """Initiates a Microsoft Device Code OAuth 2.0 flow for a specific user session (context_id) and polls in background."""
-    tenant_id = os.environ.get("MS_GRAPH_TENANT_ID", "").strip()
-    client_id = os.environ.get("MS_GRAPH_CLIENT_ID", "").strip()
-    client_secret = os.environ.get("MS_GRAPH_CLIENT_SECRET", "").strip()
-    if not tenant_id or not client_id:
-        return None
-
-    _POLL_ERRORS.pop(context_id, None)
-    _POLL_ERRORS.pop("latest", None)
-
-    try:
-        with httpx.Client(timeout=8.0) as client:
-            resp = client.post(
-                f"https://login.microsoftonline.com/{urllib.parse.quote(tenant_id)}/oauth2/v2.0/devicecode",
-                data={
-                    "client_id": client_id,
-                    "scope": "https://graph.microsoft.com/Sites.ReadWrite.All offline_access",
-                },
-            )
-            resp.raise_for_status()
-            data = resp.json()
-    except Exception as exc:
-        logger.warning("Device code request failed: %s", exc)
-        return None
-
-    user_code = data.get("user_code", "")
-    device_code = data.get("device_code", "")
-    verification_uri = data.get("verification_uri", "https://login.microsoft.com/device")
-    interval = int(data.get("interval", 5))
-
-    def _poll_worker() -> None:
-        token_url = f"https://login.microsoftonline.com/{urllib.parse.quote(tenant_id)}/oauth2/v2.0/token"
-        start_time = time.time()
-        while time.time() - start_time < 600:
-            time.sleep(interval)
-            try:
-                with httpx.Client(timeout=8.0) as client:
-                    # Microsoft Device Code flow is a public client flow; do NOT send client_secret first
-                    payload = {
-                        "client_id": client_id,
-                        "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
-                        "device_code": device_code,
-                    }
-                    r = client.post(token_url, data=payload)
-                    if r.status_code in (400, 401) and client_secret and "authorization_pending" not in r.text:
-                        # Retry with client_secret if app registration requires confidential client auth
-                        payload["client_secret"] = client_secret
-                        r = client.post(token_url, data=payload)
-                    if r.status_code == 200:
-                        res = r.json()
-                        access_token = res.get("access_token", "")
-                        refresh_token = res.get("refresh_token", "")
-                        expires_in = int(res.get("expires_in", 3599))
-                        save_delegated_refresh_token(
-                            refresh_token,
-                            access_token,
-                            expires_in,
-                            context_id=context_id,
-                        )
-                        logger.info("Successfully authenticated Microsoft user for session context_id=%s", context_id)
-                        auto_sync_pending_records(access_token, context_id=context_id)
-                        return
-                    try:
-                        err_json = r.json()
-                        err = err_json.get("error", "")
-                        err_desc = err_json.get("error_description", "")
-                    except Exception:
-                        err = ""
-                        err_desc = r.text[:200]
-                    if err not in ("authorization_pending", "slow_down"):
-                        msg = f"Device Code flow blocked by Azure AD ({err}): {err_desc[:180]}"
-                        _POLL_ERRORS[context_id] = msg
-                        _POLL_ERRORS["latest"] = msg
-                        logger.warning("Device code poll stopped: %s", msg)
-                        return
-            except Exception as exc:
-                logger.debug("Device code poll exception: %s", exc)
-
-    threading.Thread(target=_poll_worker, daemon=True).start()
-    return {
-        "user_code": user_code,
-        "verification_uri": verification_uri,
-        "message": data.get("message", f"Open {verification_uri} and enter code {user_code}"),
-    }
-
 
 
 class SharePointConnector:
@@ -663,106 +293,109 @@ class SharePointConnector:
         delegated_token: str | None = None,
         context_id: str | None = None,
     ) -> tuple[dict[str, str], str]:
-        """Resolves Microsoft Graph Authorization headers using Dual-Layer OAuth 2.0.
+        """Resolves Microsoft Graph Authorization headers for one conversation.
 
         Returns:
-            (headers_dict, auth_mode) where auth_mode is 'delegated', 'client_credentials', or 'mock'.
+            (headers_dict, auth_mode) where auth_mode is one of:
+            - 'delegated': the signed-in user of *this* conversation.
+            - 'client_credentials': app-only access, only when explicitly
+              enabled with SHAREPOINT_APP_AUTH=1.
+            - 'mock': local development (SHAREPOINT_MOCK=1, or Entra not
+              configured at all).
+            - 'unauthenticated': Entra is configured but this conversation has
+              no signed-in user. Callers must ask the user to sign in; there is
+              deliberately no silent fallback to another identity.
         """
-        # Force mock mode if explicitly requested
         if os.environ.get("SHAREPOINT_MOCK") == "1":
             return {"Authorization": "Bearer mock_graph_token", "Accept": "application/json"}, "mock"
 
-        # Layer 1: Explicit or cached Delegated User Identity Token (per-user context_id first, then latest)
-        token_candidate = (
-            delegated_token
-            or (get_cached_delegated_token(context_id) if context_id else None)
-            or get_cached_delegated_token("latest")
-        )
-        if token_candidate:
-            clean = token_candidate.strip()
-            if clean.lower().startswith("bearer "):
-                clean = clean[7:].strip()
+        # 1. A token supplied with this request (e.g. /mcp). Used once, never vaulted:
+        #    an inbound header is not proof of which conversation it belongs to.
+        if delegated_token:
+            clean = _strip_bearer(delegated_token)
             if is_microsoft_graph_token(clean):
-                cache_delegated_token(clean, key=context_id or "latest")
-                return {
-                    "Authorization": f"Bearer {clean}",
-                    "Accept": "application/json",
-                }, "delegated"
+                return {"Authorization": f"Bearer {clean}", "Accept": "application/json"}, "delegated"
 
-        # Layer 1b: Refresh Token exchange for Delegated User Identity (per-user context_id first)
+        # 2. This conversation's own vaulted token, refreshed if needed.
+        if context_id:
+            cached = get_cached_delegated_token(context_id)
+            if cached:
+                return {"Authorization": f"Bearer {cached}", "Accept": "application/json"}, "delegated"
+            refreshed = self._refresh_user_token(context_id)
+            if refreshed:
+                return {"Authorization": f"Bearer {refreshed}", "Accept": "application/json"}, "delegated"
+
+        # 3. Entra not configured: local development against the mock directory.
+        if not (self.tenant_id and self.client_id):
+            return {"Authorization": "Bearer mock_graph_token", "Accept": "application/json"}, "mock"
+
+        # 4. App-only access is opt-in. It bypasses per-user SharePoint permissions.
+        if os.environ.get("SHAREPOINT_APP_AUTH") == "1" and self.client_secret:
+            app_token = self._app_token()
+            if app_token:
+                return {"Authorization": f"Bearer {app_token}", "Accept": "application/json"}, "client_credentials"
+
+        return {"Accept": "application/json"}, "unauthenticated"
+
+    def _token_url(self) -> str:
+        return f"https://login.microsoftonline.com/{urllib.parse.quote(self.tenant_id)}/oauth2/v2.0/token"
+
+    def _refresh_user_token(self, context_id: str) -> str | None:
+        """Exchanges this conversation's refresh token for a new access token."""
         refresh_token = load_delegated_refresh_token(context_id)
-        if refresh_token and self.tenant_id and self.client_id:
-            token_url = f"https://login.microsoftonline.com/{urllib.parse.quote(self.tenant_id)}/oauth2/v2.0/token"
-            try:
-                with httpx.Client(timeout=8.0) as client:
-                    payload = {
+        if not (refresh_token and self.tenant_id and self.client_id):
+            return None
+        payload = {
+            "client_id": self.client_id,
+            "grant_type": "refresh_token",
+            "refresh_token": refresh_token,
+            "scope": DELEGATED_GRAPH_SCOPE,
+        }
+        if self.client_secret:
+            payload["client_secret"] = self.client_secret
+        try:
+            with httpx.Client(timeout=8.0) as client:
+                resp = client.post(self._token_url(), data=payload)
+            if resp.status_code != 200:
+                logger.warning("Refresh token rejected by Entra (%s); user must sign in again.", resp.status_code)
+                clear_user_tokens(context_id)
+                return None
+            data = resp.json()
+            access_token = data["access_token"]
+            save_delegated_refresh_token(
+                data.get("refresh_token", refresh_token),
+                access_token,
+                int(data.get("expires_in", 3599)),
+                context_id=context_id,
+            )
+            return access_token
+        except Exception as exc:
+            logger.warning("Entra refresh_token flow failed (%s).", type(exc).__name__)
+            return None
+
+    def _app_token(self) -> str | None:
+        """App-only client_credentials token. Only reached when SHAREPOINT_APP_AUTH=1."""
+        entry = _APP_TOKEN.get("app")
+        if entry and time.time() < entry[1]:
+            return entry[0]
+        try:
+            with httpx.Client(timeout=8.0) as client:
+                resp = client.post(
+                    self._token_url(),
+                    data={
                         "client_id": self.client_id,
-                        "grant_type": "refresh_token",
-                        "refresh_token": refresh_token,
-                        "scope": "https://graph.microsoft.com/Sites.ReadWrite.All offline_access",
-                    }
-                    # Try public client refresh first (for Device Code tokens), then confidential client if needed
-                    resp = client.post(
-                        token_url,
-                        data=payload,
-                        headers={"Content-Type": "application/x-www-form-urlencoded"},
-                    )
-                    if resp.status_code in (400, 401) and self.client_secret:
-                        payload["client_secret"] = self.client_secret
-                        resp = client.post(
-                            token_url,
-                            data=payload,
-                            headers={"Content-Type": "application/x-www-form-urlencoded"},
-                        )
-                    if resp.status_code == 200:
-                        data = resp.json()
-                        access_token = data["access_token"]
-                        new_rt = data.get("refresh_token", refresh_token)
-                        expires_in = int(data.get("expires_in", 3599))
-                        save_delegated_refresh_token(new_rt, access_token, expires_in, context_id=context_id)
-                        return {
-                            "Authorization": f"Bearer {access_token}",
-                            "Accept": "application/json",
-                        }, "delegated"
-            except Exception as exc:
-                logger.warning("Microsoft Entra refresh_token flow failed (%s), falling back to client_credentials.", type(exc).__name__)
-
-        # Layer 2: Application Client Credentials OAuth 2.0 flow
-        if self.tenant_id and self.client_id and self.client_secret:
-            cached_app = get_cached_delegated_token("app_client_credentials")
-            if cached_app:
-                return {
-                    "Authorization": f"Bearer {cached_app}",
-                    "Accept": "application/json",
-                }, "client_credentials"
-
-            token_url = f"https://login.microsoftonline.com/{urllib.parse.quote(self.tenant_id)}/oauth2/v2.0/token"
-            try:
-                with httpx.Client(timeout=8.0) as client:
-                    resp = client.post(
-                        token_url,
-                        data={
-                            "client_id": self.client_id,
-                            "client_secret": self.client_secret,
-                            "scope": "https://graph.microsoft.com/.default",
-                            "grant_type": "client_credentials",
-                        },
-                        headers={"Content-Type": "application/x-www-form-urlencoded"},
-                    )
-                    resp.raise_for_status()
-                    data = resp.json()
-                    access_token = data["access_token"]
-                    expires_in = int(data.get("expires_in", 3599))
-                    cache_delegated_token(access_token, key="app_client_credentials", ttl_seconds=max(60, expires_in - 60))
-                    return {
-                        "Authorization": f"Bearer {access_token}",
-                        "Accept": "application/json",
-                    }, "client_credentials"
-            except Exception as exc:
-                logger.warning("Microsoft Entra client_credentials flow failed (%s), falling back to mock mode.", type(exc).__name__)
-
-        # Layer 3: Local Mock / Offline Mode
-        return {"Authorization": "Bearer mock_graph_token", "Accept": "application/json"}, "mock"
+                        "client_secret": self.client_secret,
+                        "scope": "https://graph.microsoft.com/.default",
+                        "grant_type": "client_credentials",
+                    },
+                )
+            resp.raise_for_status()
+            data = resp.json()
+            _APP_TOKEN["app"] = (data["access_token"], time.time() + max(60, int(data.get("expires_in", 3599)) - 60))
+            return data["access_token"]
+        except Exception as exc:
+            logger.warning("Entra client_credentials flow failed (%s).", type(exc).__name__)
+            return None
 
     # -----------------------------------------------------------------------
     # Smart Name-to-GUID Resolvers (Ported from  SharePoint MCP Server)
@@ -864,6 +497,15 @@ class SharePointConnector:
         """
         filename = deliverable_filename(pack_name)
         headers, auth_mode = self.get_graph_headers(delegated_token, context_id=context_id)
+        if auth_mode == "unauthenticated" and self._custom_mock_dir is None:
+            return SharePointSyncResult(
+                success=False,
+                record_id=record.meta.record_id,
+                folder_url="",
+                brief_url="",
+                auth_mode=auth_mode,
+                message="Microsoft sign-in required before saving to SharePoint.",
+            )
         record_id = sanitize_path_segment(record.meta.record_id or "UC-UNKNOWN")
         init_name = sanitize_path_segment(record.meta.initiative_name or "Untitled Initiative")
         folder_name = f"{record_id} - {init_name}"
@@ -1066,6 +708,8 @@ class SharePointConnector:
         SharePoint.
         """
         headers, auth_mode = self.get_graph_headers(delegated_token, context_id=context_id)
+        if auth_mode == "unauthenticated" and self._custom_mock_dir is None:
+            raise SharePointAuthRequired("Microsoft sign-in required to list SharePoint opportunities.")
         q_norm = query.strip().lower()
 
         if auth_mode == "mock" or self._custom_mock_dir is not None:
@@ -1221,6 +865,8 @@ class SharePointConnector:
         target = query_or_record_id.strip()
         if not target:
             return None
+        if auth_mode == "unauthenticated" and self._custom_mock_dir is None:
+            raise SharePointAuthRequired("Microsoft sign-in required to load from SharePoint.")
 
         if auth_mode != "mock":
             try:
@@ -1338,6 +984,8 @@ class SharePointConnector:
     ) -> str | None:
         """Uploads `Portfolio_Prioritization_Report.md` to the SharePoint root qualification folder."""
         headers, auth_mode = self.get_graph_headers(delegated_token, context_id=context_id)
+        if auth_mode == "unauthenticated" and self._custom_mock_dir is None:
+            return None
         safe_filename = sanitize_path_segment(filename)
 
         if auth_mode != "mock" and self._custom_mock_dir is None:
@@ -1385,6 +1033,8 @@ class SharePointConnector:
     ) -> str:
         """Downloads a document from SharePoint and safely extracts its plain text."""
         headers, auth_mode = self.get_graph_headers(delegated_token)
+        if auth_mode == "unauthenticated":
+            raise SharePointAuthRequired("A Microsoft user token is required to read documents.")
         if auth_mode == "mock":
             # In mock mode, treat item_id as a relative path or filename inside mock_dir
             candidate = self.mock_dir / sanitize_path_segment(item_id)
@@ -1473,21 +1123,12 @@ def sync_to_optional_sharepoint(
             context_id=context_id,
             pack_name=pack_name,
         )
-        if res:
-            cid = context_id or "latest"
+        if res and context_id:
             if res.auth_mode != "delegated":
-                _PENDING_RECORDS[cid] = (record, set(skipped_stages or set()))
-                _PENDING_RECORDS["latest"] = (record, set(skipped_stages or set()))
+                # Queued for this conversation only; written once its user signs in.
+                _PENDING_RECORDS[context_id] = (record, set(skipped_stages or set()))
             else:
-                info = {
-                    "syncedUrl": res.folder_url,
-                    "briefUrl": res.brief_url,
-                    "recordId": res.record_id,
-                    "title": record.meta.initiative_name or res.record_id,
-                }
-                _SYNCED_RESULTS[cid] = info
-                _SYNCED_RESULTS["latest"] = info
-                _PENDING_RECORDS.pop(cid, None)
+                _PENDING_RECORDS.pop(context_id, None)
         return res
     except Exception as exc:
         logger.warning("SharePoint sync skipped due to error: %s", exc)

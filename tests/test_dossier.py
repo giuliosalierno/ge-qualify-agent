@@ -17,7 +17,6 @@ from qualify.export import (
     render_deliverable,
 )
 from qualify.export.dossier import render_technical_dossier
-from qualify.schema.use_case_record import Meta, SystemEntry, UseCaseRecord
 from qualify.scoring.technical import score_technical
 from tests.test_technical_scoring import empty_record, perfect_record
 

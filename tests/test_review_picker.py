@@ -59,7 +59,6 @@ def _force_mock_mode(monkeypatch: pytest.MonkeyPatch) -> None:
         "MS_GRAPH_CLIENT_ID",
         "MS_GRAPH_CLIENT_SECRET",
         "MS_GRAPH_TENANT_ID",
-        "MS_GRAPH_REFRESH_TOKEN",
     ):
         monkeypatch.delenv(var, raising=False)
     sp_mod._TOKEN_VAULT.clear()

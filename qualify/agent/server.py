@@ -22,9 +22,7 @@ from qualify.mcp import (
     handle_mcp_request,
     handle_oauth_auth,
     handle_oauth_callback,
-    handle_oauth_exchange,
     handle_oauth_status,
-    handle_oauth_token,
 )
 from qualify.sinks.record_store import create_default_store
 
@@ -102,21 +100,27 @@ def build_app():
         [
             Route("/api/me", handle_whoami, methods=["GET"]),
             Route("/mcp", handle_mcp_request, methods=["POST", "GET", "OPTIONS"]),
-            Route("/auth", handle_oauth_auth, methods=["GET", "POST"]),
+            Route("/auth", handle_oauth_auth, methods=["GET"]),
             Route("/auth/status", handle_oauth_status, methods=["GET"]),
-            Route("/auth/exchange", handle_oauth_exchange, methods=["POST"]),
-            Route("/auth/callback", handle_oauth_callback, methods=["GET", "POST"]),
-            Route("/token", handle_oauth_token, methods=["POST", "GET"]),
+            Route("/auth/callback", handle_oauth_callback, methods=["GET"]),
         ]
     )
 
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origin_regex=r"https?://.*",
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
+    # The web UI and sign-in page are same-origin and need no CORS. Only
+    # origins listed explicitly may call cross-origin, and never with cookies.
+    cors_origins = [
+        o.strip()
+        for o in os.environ.get("CORS_ALLOWED_ORIGINS", "").split(",")
+        if o.strip()
+    ]
+    if cors_origins:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=cors_origins,
+            allow_credentials=False,
+            allow_methods=["GET", "POST", "OPTIONS"],
+            allow_headers=["*"],
+        )
 
     log.info("Qualification Agent app built (A2A + SharePoint MCP). base_url=%s", base_url)
     return app, host, port

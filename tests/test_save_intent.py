@@ -17,6 +17,7 @@ Either fix alone would have hidden the other, so both are covered here.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
@@ -28,7 +29,6 @@ _GRAPH_ENV_VARS = (
     "MS_GRAPH_CLIENT_ID",
     "MS_GRAPH_CLIENT_SECRET",
     "MS_GRAPH_TENANT_ID",
-    "MS_GRAPH_REFRESH_TOKEN",
 )
 
 
@@ -55,7 +55,11 @@ def _isolate_sharepoint(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
     sp_mod._TOKEN_VAULT.clear()
     sp_mod._REFRESH_VAULT.clear()
     sp_mod._PENDING_RECORDS.clear()
-    sp_mod._SYNCED_RESULTS.clear()
+
+
+def _saved_records() -> list[Path]:
+    """Records the mock connector wrote to disk during the test."""
+    return list(Path(os.environ["SHAREPOINT_MOCK_DIR"]).rglob("*.json"))
 
 
 def test_signed_in_starts_the_interview_instead_of_saving() -> None:
@@ -73,7 +77,7 @@ def test_signed_in_starts_the_interview_instead_of_saving() -> None:
     assert "Saved to SharePoint" not in out.reply_text
     # Nothing was written and nothing was queued for the post-login auto-sync.
     assert not sp_mod._PENDING_RECORDS
-    assert not sp_mod._SYNCED_RESULTS
+    assert not _saved_records()
     # The user is moved forward rather than left staring at a bare confirmation.
     assert out.a2ui_messages
     assert out.session.rendered_stages == {0}
@@ -91,7 +95,7 @@ def test_logged_in_is_also_an_acknowledgement() -> None:
     out = execute_turn(store, TurnInput(context_id="ctx-ack2", user_text="logged in"))
 
     assert "SharePoint connected" in out.reply_text
-    assert not sp_mod._SYNCED_RESULTS
+    assert not _saved_records()
 
 
 def test_claiming_to_be_signed_in_without_a_token_says_so() -> None:
@@ -198,7 +202,7 @@ def test_save_request_on_an_empty_record_is_refused() -> None:
 
     assert "nothing to save yet" in out.reply_text.lower()
     assert not sp_mod._PENDING_RECORDS
-    assert not sp_mod._SYNCED_RESULTS
+    assert not _saved_records()
 
 
 def test_save_request_with_a_named_initiative_still_saves() -> None:

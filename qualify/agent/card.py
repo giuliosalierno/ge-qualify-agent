@@ -9,10 +9,6 @@ from a2a.types import (
     AgentCapabilities,
     AgentCard,
     AgentSkill,
-    AuthorizationCodeOAuthFlow,
-    OAuth2SecurityScheme,
-    OAuthFlows,
-    SecurityScheme,
 )
 from a2ui.a2a.extension import get_a2ui_agent_extension
 
@@ -24,8 +20,13 @@ WIRE_VERSION = "v0.9"
 
 
 def build_agent_card(base_url: str) -> AgentCard:
-    """Builds the A2A agent card advertising A2UI v0.9 extension support and OAuth 2.0 user auth."""
-    clean_base = base_url.rstrip("/")
+    """Builds the A2A agent card advertising A2UI v0.9 extension support.
+
+    No OAuth security scheme is declared. Gemini Enterprise does not forward
+    a delegated Microsoft token over A2A, so the scheme (and its `/token`
+    endpoint) never carried a user identity. SharePoint sign-in happens through
+    the per-conversation signed link instead (see `qualify/connectors/oauth_state.py`).
+    """
     extension = get_a2ui_agent_extension(
         A2UI_SDK_VERSION,
         False,  # accepts_inline_catalogs - only use GE composite catalog by ID
@@ -49,21 +50,6 @@ def build_agent_card(base_url: str) -> AgentCard:
         ],
     )
 
-    oauth_scheme = SecurityScheme(
-        root=OAuth2SecurityScheme(
-            description="Microsoft SharePoint Delegated User Login (On-Behalf-Of User)",
-            flows=OAuthFlows(
-                authorizationCode=AuthorizationCodeOAuthFlow(
-                    authorizationUrl=f"{clean_base}/auth",
-                    tokenUrl=f"{clean_base}/token",
-                    scopes={
-                        "https://graph.microsoft.com/Sites.ReadWrite.All": "Read and write SharePoint opportunities on behalf of the signed-in user",
-                    },
-                )
-            ),
-        )
-    )
-
     return AgentCard(
         name="GE Use Case Qualification Agent",
         description=(
@@ -76,6 +62,4 @@ def build_agent_card(base_url: str) -> AgentCard:
         default_output_modes=["text", "text/plain"],
         capabilities=AgentCapabilities(streaming=True, extensions=[extension]),
         skills=[skill],
-        security_schemes={"microsoft_sharepoint_oauth": oauth_scheme},
-        security=[{"microsoft_sharepoint_oauth": ["https://graph.microsoft.com/Sites.ReadWrite.All"]}],
     )

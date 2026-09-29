@@ -16,6 +16,7 @@ import asyncio
 import pytest
 from starlette.requests import Request
 
+from qualify.connectors import oauth_state
 from qualify.mcp.sharepoint_mcp import handle_oauth_auth
 
 _TENANT = "918002ad-54bb-4139-804a-2da0d762bd54"
@@ -30,19 +31,9 @@ def _entra_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("AGENT_URL", "https://agent.example.run.app")
 
 
-@pytest.fixture(autouse=True)
-def _no_device_code_network(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Stubs the device code call so the page renders without touching Entra."""
-    monkeypatch.setattr(
-        "qualify.connectors.sharepoint.start_device_code_flow_for_session",
-        lambda context_id="latest": {
-            "user_code": "TEST-CODE",
-            "verification_uri": "https://microsoft.com/devicelogin",
-        },
-    )
-
-
-def _render(query: str = "context_id=ctx-1") -> str:
+def _render(query: str | None = None) -> str:
+    if query is None:
+        query = "t=" + oauth_state.issue("ctx-1", "link", 600)
     request = Request(
         scope={
             "type": "http",
@@ -70,8 +61,6 @@ def test_auth_page_hides_one_click_until_the_callback_is_registered() -> None:
 
     assert "One-click sign-in is not enabled yet" in html
     assert "https://agent.example.run.app/auth/callback" in html
-    # Device code still offered, because it works today.
-    assert "TEST-CODE" in html
 
 
 def test_auth_page_offers_one_click_when_enabled(

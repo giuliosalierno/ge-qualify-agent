@@ -11,15 +11,12 @@ import zipfile
 import pytest
 from starlette.requests import Request
 
-from qualify.a2ui.actions import COMMIT_STAGE
 from qualify.agent.turn import TurnInput, execute_turn
 from qualify.connectors.sharepoint import (
     SharePointConnector,
-    cache_delegated_token,
-    get_cached_delegated_token,
     sanitize_path_segment,
 )
-from qualify.mcp.sharepoint_mcp import handle_mcp_request, handle_oauth_auth, handle_oauth_token
+from qualify.mcp.sharepoint_mcp import handle_mcp_request
 from qualify.schema.use_case_record import Meta, UseCaseRecord
 from qualify.sinks.session import InMemorySessionStore
 
@@ -34,7 +31,6 @@ _GRAPH_ENV_VARS = (
     "MS_GRAPH_CLIENT_ID",
     "MS_GRAPH_CLIENT_SECRET",
     "MS_GRAPH_TENANT_ID",
-    "MS_GRAPH_REFRESH_TOKEN",
 )
 
 
@@ -46,7 +42,14 @@ def _reset_sharepoint_state(monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv(var, raising=False)
 
     sp_mod._TOKEN_VAULT.clear()
+    sp_mod._REFRESH_VAULT.clear()
     sp_mod._CONNECTOR_INSTANCE = None
+
+
+def sp_mod_vault_is_empty() -> bool:
+    import qualify.connectors.sharepoint as sp_mod
+
+    return not sp_mod._TOKEN_VAULT and not sp_mod._REFRESH_VAULT
 
 
 def _make_docx_bytes(text: str, malicious_member: str | None = None) -> bytes:
@@ -73,7 +76,7 @@ def test_sanitize_path_segment_prevents_traversal() -> None:
 
 
 def test_dual_layer_oauth_header_resolution(tmp_path: Path) -> None:
-    """Verifies Layer 1 (delegated token caching) and Layer 3 (mock fallback)."""
+    """Explicit per-request token is used but never vaulted; no credentials -> mock."""
     connector = SharePointConnector(mock_dir=tmp_path)
 
     # Without credentials or delegated token -> mock mode
@@ -85,7 +88,8 @@ def test_dual_layer_oauth_header_resolution(tmp_path: Path) -> None:
     headers_del, mode_del = connector.get_graph_headers(delegated_token="eyJ_real_user_token_123")
     assert mode_del == "delegated"
     assert headers_del["Authorization"] == "Bearer eyJ_real_user_token_123"
-    assert get_cached_delegated_token("latest") == "eyJ_real_user_token_123"
+    # A per-request token must not leak into the vault for anyone else to reuse.
+    assert sp_mod_vault_is_empty()
 
 
 def test_sync_and_load_opportunity_folder_and_list(tmp_path: Path) -> None:
@@ -208,8 +212,8 @@ def test_mcp_jsonrpc_server_and_delegated_auth(tmp_path: Path, monkeypatch: pyte
     )
     content_text = call_res["result"]["content"][0]["text"]
     assert "HR Policy Bot" in content_text
-    # Verify token was cached from the MCP call
-    assert get_cached_delegated_token("latest") == "eyJ_delegated_from_ge_mcp"
+    # The MCP bearer token is used for that request only, never vaulted.
+    assert sp_mod_vault_is_empty()
 
 
 def test_turn_loop_load_from_sharepoint_chat_command(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -245,7 +249,6 @@ def test_turn_loop_save_to_sharepoint_and_post_login_auto_sync(tmp_path: Path, m
     sp_mod._TOKEN_VAULT.clear()
     sp_mod._REFRESH_VAULT.clear()
     sp_mod._PENDING_RECORDS.clear()
-    sp_mod._SYNCED_RESULTS.clear()
 
     store = InMemorySessionStore(quiet=True)
     # 1. Start session and populate initiative
@@ -274,97 +277,6 @@ def test_turn_loop_save_to_sharepoint_and_post_login_auto_sync(tmp_path: Path, m
     assert "Automated Invoice Matching" in out2.reply_text
 
 
-def _fake_ms_jwt() -> str:
-    """Builds a syntactically valid Microsoft Entra JWT (header.payload.signature)."""
-    import base64 as _b64
-
-    def seg(obj: dict) -> str:
-        raw = json.dumps(obj).encode("utf-8")
-        return _b64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
-
-    header = seg({"typ": "JWT", "alg": "RS256"})
-    payload = seg({"iss": "https://sts.windows.net/918002ad/", "aud": "https://graph.microsoft.com"})
-    return f"{header}.{payload}.signature_placeholder"
-
-
-def test_harvest_microsoft_tokens_from_all_injection_shapes() -> None:
-    """Verifies Gemini Enterprise tokens are captured from raw headers, JSON, and base64 payloads."""
-    import base64 as _b64
-
-    import qualify.connectors.sharepoint as sp_mod
-    from qualify.connectors.sharepoint import get_cached_delegated_token, harvest_microsoft_tokens
-
-    token = _fake_ms_jwt()
-
-    # 1. Raw Bearer header, alongside a Google OIDC token that must be ignored
-    sp_mod._TOKEN_VAULT.clear()
-    google_jwt_payload = _b64.urlsafe_b64encode(
-        json.dumps({"iss": "https://accounts.google.com", "aud": "ge-qualify"}).encode()
-    ).decode().rstrip("=")
-    headers = {
-        "authorization": f"Bearer hdr.{google_jwt_payload}.sig",
-        "x-serialized-auth-tokens": f"Bearer {token}",
-    }
-    assert harvest_microsoft_tokens(headers, "ctx-a") == token
-    assert get_cached_delegated_token("ctx-a") == token
-
-    # 2. JSON-encoded header value (GE serialized auth tokens map)
-    sp_mod._TOKEN_VAULT.clear()
-    json_header = {"x-serialized-auth-tokens": json.dumps({"sharepoint-auth": {"access_token": token}})}
-    assert harvest_microsoft_tokens(json_header, "ctx-b") == token
-    assert get_cached_delegated_token("ctx-b") == token
-
-    # 3. Base64-encoded JSON header value
-    sp_mod._TOKEN_VAULT.clear()
-    b64_val = _b64.urlsafe_b64encode(json.dumps({"sharepoint-auth": token}).encode()).decode()
-    assert harvest_microsoft_tokens({"x-serialized-auth-tokens": b64_val}, "ctx-c") == token
-    assert get_cached_delegated_token("ctx-c") == token
-
-    # 4. A2A message metadata (temp:<authorization-id> convention)
-    sp_mod._TOKEN_VAULT.clear()
-    metadata = {"temp:sharepoint-auth": {"accessToken": token}}
-    assert harvest_microsoft_tokens(metadata, "ctx-d") == token
-    assert get_cached_delegated_token("ctx-d") == token
-
-    # 5. No token present returns None
-    sp_mod._TOKEN_VAULT.clear()
-    assert harvest_microsoft_tokens({"content-type": "application/json"}, "ctx-e") is None
-
-
-def test_harvest_rejects_dotted_non_jwt_header_values() -> None:
-    """Regression: the Cloud Run hostname must never be vaulted as a Graph token.
-
-    The `host` header value `ge-qualify-agent-g22bhpwccq-uc.a.run.app` has three
-    dot-separated segments, so it matched the JWT-shaped regex and was cached as
-    the user's delegated token. Every subsequent Graph call then returned 401 and
-    the connector silently fell back to the local mock.
-    """
-    import qualify.connectors.sharepoint as sp_mod
-    from qualify.connectors.sharepoint import (
-        get_cached_delegated_token,
-        harvest_microsoft_tokens,
-        is_strict_microsoft_jwt,
-    )
-
-    hostname = "ge-qualify-agent-g22bhpwccq-uc.a.run.app"
-    assert is_strict_microsoft_jwt(hostname) is False
-
-    sp_mod._TOKEN_VAULT.clear()
-    real_headers = {
-        "host": hostname,
-        "user-agent": "Google-Discovery-Engine/1.0",
-        "content-type": "application/json",
-        "x-cloud-trace-context": "abc123/456;o=1",
-        "traceparent": "00-abc.def.ghi-0000-01",
-    }
-    assert harvest_microsoft_tokens(real_headers, "ctx-host") is None
-    assert get_cached_delegated_token("ctx-host") is None
-
-    # A genuine Microsoft JWT in the same header set is still harvested.
-    token = _fake_ms_jwt()
-    assert harvest_microsoft_tokens({**real_headers, "x-serialized-auth-tokens": token}, "ctx-host2") == token
-
-
 def test_turn_emits_auth_required_when_sharepoint_login_needed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Verifies the turn loop flags auth_required so the executor emits A2A TaskState.auth_required."""
     monkeypatch.setenv("SHAREPOINT_MOCK_DIR", str(tmp_path))
@@ -375,7 +287,6 @@ def test_turn_emits_auth_required_when_sharepoint_login_needed(tmp_path: Path, m
     sp_mod._TOKEN_VAULT.clear()
     sp_mod._REFRESH_VAULT.clear()
     sp_mod._PENDING_RECORDS.clear()
-    sp_mod._SYNCED_RESULTS.clear()
 
     store = InMemorySessionStore(quiet=True)
     session = get_or_start(store, "ctx-auth-required")

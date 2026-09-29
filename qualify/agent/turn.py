@@ -41,7 +41,8 @@ from qualify.a2ui.patcher import (
     apply_drafts,
     extract_drafts,
 )
-from qualify.a2ui.provenance import missing_required, unconfirmed_in_stage
+from qualify.a2ui.provenance import missing_required
+from qualify.connectors.oauth_state import build_signin_url
 from qualify.a2ui.systems_extractor import (
     SYSTEMS_STAGE_ID,
     SYSTEMS_TABLE_PATH,
@@ -168,8 +169,8 @@ def _consume_signin_banner(session: Session) -> str | None:
     """Returns the one-time "you are connected" notice, or None.
 
     Fires on the first turn where a delegated token exists and the user has not
-    been told yet. Deliberately not tied to the sign-in card: the device code
-    flow lands a token the same way and deserves the same acknowledgement.
+    been told yet. Deliberately not tied to the sign-in card: the user may
+    finish sign-in in the browser without ever pressing it.
     """
     if session.signin_confirmed:
         return None
@@ -441,7 +442,6 @@ def _handle_action_outcome(
                 from qualify.sinks.sheets import sync_to_optional_sheet  # noqa: PLC0415
 
                 import os as _os  # noqa: PLC0415
-                import urllib.parse as _up  # noqa: PLC0415
                 sync_to_optional_sheet(session.record)
                 sp_res = sync_to_optional_sharepoint(
                     session.record,
@@ -453,7 +453,7 @@ def _handle_action_outcome(
                     session.pack_name, session.record, skipped_stages=session.skipped
                 )
                 base_url = _os.environ.get("AGENT_URL", "https://ge-qualify-agent-g22bhpwccq-uc.a.run.app").rstrip("/")
-                auth_link = f"{base_url}/auth?context_id={_up.quote(session.context_id)}"
+                auth_link = build_signin_url(base_url, session.context_id)
                 if sp_res and sp_res.auth_mode == "delegated":
                     reply_text += (
                         f"\n\n---\n✅ **Saved to SharePoint**: "
@@ -633,7 +633,6 @@ def _maybe_offer_signin(session: Session) -> TurnOutput | None:
     sign-in prompt at save time.
     """
     import os as _os  # noqa: PLC0415
-    import urllib.parse as _up  # noqa: PLC0415
 
     if _os.environ.get("SIGNIN_CARD") == "0":
         return None
@@ -655,7 +654,7 @@ def _maybe_offer_signin(session: Session) -> TurnOutput | None:
     base_url = _os.environ.get(
         "AGENT_URL", "https://ge-qualify-agent-g22bhpwccq-uc.a.run.app"
     ).rstrip("/")
-    auth_url = f"{base_url}/auth?context_id={_up.quote(session.context_id)}"
+    auth_url = build_signin_url(base_url, session.context_id)
 
     session.signin_prompted = True
 
@@ -816,14 +815,13 @@ def _try_a2ui_probe(user_text: str | None, session: Session) -> TurnOutput | Non
         return None
 
     import os as _os  # noqa: PLC0415
-    import urllib.parse as _up  # noqa: PLC0415
 
     from qualify.a2ui.signin import build_openurl_probe  # noqa: PLC0415
 
     base_url = _os.environ.get(
         "AGENT_URL", "https://ge-qualify-agent-g22bhpwccq-uc.a.run.app"
     ).rstrip("/")
-    auth_url = f"{base_url}/auth?context_id={_up.quote(session.context_id)}"
+    auth_url = build_signin_url(base_url, session.context_id)
 
     reply_text = (
         "**A2UI `openUrl` probe**\n\n"
@@ -873,7 +871,6 @@ def _try_portfolio_review(
         return None
 
     import os as _os  # noqa: PLC0415
-    import urllib.parse as _up  # noqa: PLC0415
 
     from qualify.a2ui.signin import build_signin_card  # noqa: PLC0415
     from qualify.connectors.sharepoint import get_sharepoint_connector  # noqa: PLC0415
@@ -887,7 +884,7 @@ def _try_portfolio_review(
         base_url = _os.environ.get(
             "AGENT_URL", "https://ge-qualify-agent-g22bhpwccq-uc.a.run.app"
         ).rstrip("/")
-        auth_url = f"{base_url}/auth?context_id={_up.quote(session.context_id)}"
+        auth_url = build_signin_url(base_url, session.context_id)
         session.signin_prompted = True
         return TurnOutput(
             reply_text=(
@@ -1104,13 +1101,12 @@ def _offer_pending_reviews(
     if not reachable:
         session.pending_review_choices = []
         import os as _os  # noqa: PLC0415
-        import urllib.parse as _up  # noqa: PLC0415
         from qualify.a2ui.signin import build_signin_card  # noqa: PLC0415
 
         base_url = _os.environ.get(
             "AGENT_URL", "https://ge-qualify-agent-g22bhpwccq-uc.a.run.app"
         ).rstrip("/")
-        auth_url = f"{base_url}/auth?context_id={_up.quote(session.context_id)}"
+        auth_url = build_signin_url(base_url, session.context_id)
         cards = (
             build_signin_card(auth_url)
             if _os.environ.get("SIGNIN_CARD") != "0"
@@ -1177,41 +1173,8 @@ def _try_load_from_sharepoint(user_text: str | None, session: Session) -> TurnOu
         return None
     import os as _os  # noqa: PLC0415
     import re  # noqa: PLC0415
-    import urllib.parse as _up  # noqa: PLC0415
 
     text_lower = user_text.strip().lower()
-
-    # Case A: User pasted a Microsoft OAuth redirect URL (https://vertexaisearch.cloud.google.com/oauth-redirect?code=...) or raw code
-    if "vertexaisearch.cloud.google.com/oauth-redirect" in text_lower or "code=0." in text_lower or user_text.strip().startswith("0.A"):
-        from qualify.connectors.sharepoint import (
-            exchange_auth_code_for_session,
-            sync_to_optional_sharepoint,
-        )
-
-        ex_res = exchange_auth_code_for_session(user_text.strip(), context_id=session.context_id)
-        if ex_res.get("success"):
-            sp_res = sync_to_optional_sharepoint(
-                session.record,
-                skipped_stages=session.skipped,
-                context_id=session.context_id,
-                pack_name=session.pack_name,
-            )
-            folder_url = (sp_res.folder_url if sp_res else None) or ex_res.get("folderUrl") or "https://zd8vn.sharepoint.com/"
-            title = session.record.meta.initiative_name or session.record.meta.record_id or "Opportunity"
-            reply_text = (
-                f"✅ **Microsoft SharePoint Connected & Opportunity Saved!**\n\n"
-                f"- **Initiative**: {title} (`{session.record.meta.record_id}`)\n"
-                f"- **SharePoint Folder**: [Open Opportunity Folder in SharePoint]({folder_url})\n\n"
-                + render_deliverable(
-                    session.pack_name, session.record, skipped_stages=session.skipped
-                )
-            )
-            return TurnOutput(reply_text=reply_text, a2ui_messages=[], session=session)
-        return TurnOutput(
-            reply_text=f"⚠️ Could not exchange Microsoft authorization code: `{ex_res.get('error')}`. Please click the sign-in link again to generate a fresh code.",
-            a2ui_messages=[],
-            session=session,
-        )
 
     # Case B0: the user is telling us they finished signing in.
     #
@@ -1291,28 +1254,12 @@ def _try_load_from_sharepoint(user_text: str | None, session: Session) -> TurnOu
             )
 
         base_url = _os.environ.get("AGENT_URL", "https://ge-qualify-agent-g22bhpwccq-uc.a.run.app").rstrip("/")
-        auth_link = f"{base_url}/auth?context_id={_up.quote(session.context_id)}"
-        tenant_id = _os.environ.get("MS_GRAPH_TENANT_ID", "918002ad-54bb-4139-804a-2da0d762bd54").strip()
-        client_id = _os.environ.get("MS_GRAPH_CLIENT_ID", "d8a18018-c2a9-4f7e-b464-320141d6623d").strip()
-        ms_direct_auth = (
-            f"https://login.microsoftonline.com/{_up.quote(tenant_id)}/oauth2/v2.0/authorize?"
-            + _up.urlencode({
-                "client_id": client_id,
-                "response_type": "code",
-                "redirect_uri": "https://vertexaisearch.cloud.google.com/oauth-redirect",
-                "response_mode": "query",
-                "scope": "https://graph.microsoft.com/Sites.ReadWrite.All offline_access",
-                "state": session.context_id,
-                "prompt": "select_account",
-            })
-        )
+        auth_link = build_signin_url(base_url, session.context_id)
         reply_text = (
             f"🔐 **Microsoft SharePoint Sign-In Required**\n\n"
-            f"To save **{session.record.meta.initiative_name or session.record.meta.record_id}** to the shared SharePoint folder:\n\n"
-            f"1. **[Sign in with Microsoft ↗]({ms_direct_auth})**\n"
-            f"2. After signing in, paste the resulting `oauth-redirect?code=...` URL right here in chat "
-            f"(or use the **[SharePoint Auth Page]({auth_link})**).\n\n"
-            f"I will immediately exchange the token and save this opportunity to SharePoint."
+            f"To save **{session.record.meta.initiative_name or session.record.meta.record_id}** to the shared SharePoint folder, "
+            f"**[sign in with Microsoft ↗]({auth_link})**.\n\n"
+            f"As soon as you finish signing in, I'll save this opportunity automatically."
         )
         return TurnOutput(
             reply_text=reply_text,
@@ -1342,7 +1289,7 @@ def _try_load_from_sharepoint(user_text: str | None, session: Session) -> TurnOu
             base_url = _os.environ.get(
                 "AGENT_URL", "https://ge-qualify-agent-g22bhpwccq-uc.a.run.app"
             ).rstrip("/")
-            auth_url = f"{base_url}/auth?context_id={_up.quote(session.context_id)}"
+            auth_url = build_signin_url(base_url, session.context_id)
             cards = (
                 build_signin_card(auth_url)
                 if _os.environ.get("SIGNIN_CARD") != "0"
@@ -1403,8 +1350,25 @@ def _try_load_from_sharepoint(user_text: str | None, session: Session) -> TurnOu
     if not query:
         return None
 
+    from qualify.connectors.sharepoint import SharePointAuthRequired  # noqa: PLC0415
+
     connector = get_sharepoint_connector()
-    loaded = connector.load_opportunity(query)
+    try:
+        loaded = connector.load_opportunity(query, context_id=session.context_id)
+    except SharePointAuthRequired:
+        base_url = _os.environ.get(
+            "AGENT_URL", "https://ge-qualify-agent-g22bhpwccq-uc.a.run.app"
+        ).rstrip("/")
+        return TurnOutput(
+            reply_text=(
+                "🔐 Please **[sign in with Microsoft ↗]"
+                f"({build_signin_url(base_url, session.context_id)})** so I can load "
+                f"**{query}** from SharePoint, then ask again."
+            ),
+            a2ui_messages=[],
+            session=session,
+            auth_required=True,
+        )
     if loaded is None:
         return TurnOutput(
             reply_text=f"Could not find an opportunity matching **{query}** in SharePoint.",
