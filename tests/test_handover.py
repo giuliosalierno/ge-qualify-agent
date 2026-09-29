@@ -191,9 +191,9 @@ def test_handover_survives_the_rest_of_the_turn(
     passes whether or not the bug is present, which is worth stating out loud —
     it was written that way first, and a mutation run caught it.
     """
-    import qualify.connectors.sharepoint as sp
+    import qualify.connectors.token_vault as token_vault
 
-    monkeypatch.setattr(sp, "get_cached_delegated_token", lambda _ctx: "fake-token")
+    monkeypatch.setattr(token_vault, "get_access", lambda _ctx: "fake-token")
 
     out = execute_turn(
         store,

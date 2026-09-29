@@ -25,12 +25,13 @@ import time
 import urllib.parse
 import xml.etree.ElementTree as ET
 import zipfile
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import httpx
 
+from qualify.connectors import storage, token_vault
+from qualify.connectors.storage import StorageAuthRequired, StorageSyncResult
 from qualify.export import deliverable_filename, render_deliverable
 from qualify.schema.use_case_record import UseCaseRecord
 from qualify.scoring import classify_capability
@@ -38,25 +39,16 @@ from qualify.scoring import classify_capability
 logger = logging.getLogger(__name__)
 
 # In-memory, per-conversation vault: context_id -> (access_token, expires_at_unix_ts).
-# See "Per-conversation token vault" below for the security model.
-_TOKEN_VAULT: dict[str, tuple[str, float]] = {}
+# The same dict object as `token_vault.ACCESS`; see that module for the
+# security model. Kept under this name for existing callers and tests.
+_TOKEN_VAULT: dict[str, tuple[str, float]] = token_vault.ACCESS
 
 GRAPH_BASE_URL = "https://graph.microsoft.com/v1.0"
 DEFAULT_FOLDER_PATH = "Qualification Opportunities"
 DEFAULT_LIST_NAME = "AI Use Case Inventory"
 
-
-@dataclass
-class SharePointSyncResult:
-    """Result of syncing a qualification opportunity to SharePoint."""
-
-    success: bool
-    record_id: str
-    folder_url: str
-    brief_url: str
-    list_item_id: str | None = None
-    auth_mode: str = "mock"
-    message: str = ""
+#: Historical name for the provider-neutral result type.
+SharePointSyncResult = StorageSyncResult
 
 
 def sanitize_path_segment(segment: str) -> str:
@@ -144,28 +136,26 @@ def is_microsoft_graph_token(token: str) -> bool:
 # Per-conversation token vault (memory only)
 # ---------------------------------------------------------------------------
 #
-# Security model:
-# - Tokens are keyed by the conversation (`context_id`) that completed the
-#   sign-in. That binding is proven by a signed OAuth `state`
-#   (see `qualify/connectors/oauth_state.py`), never taken from a query string.
-# - There is no shared or fallback key. A conversation only ever uses its own
-#   token; without one, callers get `unauthenticated` and show the sign-in card.
-# - Nothing is written to disk, GCS, logs or `os.environ`. A restart signs
-#   everyone out, which is the intended trade-off.
+# The vault itself lives in `token_vault.py`, shared with the Google Drive
+# connector; its docstring holds the full security model. SharePoint-specific
+# points:
+# - Only tokens that look like Microsoft Graph tokens are vaulted here
+#   (`is_microsoft_graph_token`), so a Google IAM token can never be mistaken
+#   for a user's Microsoft token.
 # - Tokens are never harvested from inbound A2A requests: Gemini Enterprise
 #   does not forward the user's Microsoft token (verified in Cloud Run logs),
 #   and an inbound header is no proof of which conversation it belongs to.
 
 DELEGATED_GRAPH_SCOPE = "https://graph.microsoft.com/Sites.ReadWrite.All offline_access"
 
-# context_id -> refresh_token
-_REFRESH_VAULT: dict[str, str] = {}
+# context_id -> refresh_token (same object as `token_vault.REFRESH`)
+_REFRESH_VAULT: dict[str, str] = token_vault.REFRESH
 # App-only token cache, used only when SHAREPOINT_APP_AUTH=1.
 _APP_TOKEN: dict[str, tuple[str, float]] = {}
 
-
-class SharePointAuthRequired(RuntimeError):
-    """A live SharePoint call needs a signed-in user and this conversation has none."""
+#: Historical name for the provider-neutral auth error. Same class, so
+#: `except SharePointAuthRequired` also catches errors from other providers.
+SharePointAuthRequired = StorageAuthRequired
 
 
 def _strip_bearer(token: str) -> str:
@@ -179,22 +169,12 @@ def cache_delegated_token(token: str, key: str, ttl_seconds: int = 3600) -> None
         return
     clean = _strip_bearer(token)
     if is_microsoft_graph_token(clean):
-        _TOKEN_VAULT[key] = (clean, time.time() + ttl_seconds)
-        logger.info("Cached delegated Microsoft Graph user token (context=%s, ttl=%ds)", key, ttl_seconds)
+        token_vault.put_access(key, clean, ttl_seconds)
 
 
 def get_cached_delegated_token(key: str | None) -> str | None:
     """Returns this conversation's non-expired access token, or None."""
-    if not key:
-        return None
-    entry = _TOKEN_VAULT.get(key)
-    if entry is None:
-        return None
-    token, expires_at = entry
-    if time.time() < expires_at:
-        return token
-    _TOKEN_VAULT.pop(key, None)
-    return None
+    return token_vault.get_access(key)
 
 
 def save_delegated_refresh_token(
@@ -208,57 +188,49 @@ def save_delegated_refresh_token(
     if not context_id:
         raise ValueError("context_id is required to store user tokens")
     if refresh_token:
-        _REFRESH_VAULT[context_id] = refresh_token
+        token_vault.save_tokens(context_id, refresh_token=refresh_token)
     if access_token:
         cache_delegated_token(access_token, key=context_id, ttl_seconds=max(60, expires_in - 60))
 
 
 def load_delegated_refresh_token(context_id: str | None) -> str:
     """Returns this conversation's refresh token, or an empty string."""
-    if not context_id:
-        return ""
-    return _REFRESH_VAULT.get(context_id, "")
+    return token_vault.get_refresh(context_id)
 
 
 def has_user_session(context_id: str | None) -> bool:
     """True if this conversation holds a usable access token or a refresh token."""
-    return bool(get_cached_delegated_token(context_id) or load_delegated_refresh_token(context_id))
+    return token_vault.has_session(context_id)
 
 
 def clear_user_tokens(context_id: str) -> None:
     """Forgets every token held for a conversation."""
-    _TOKEN_VAULT.pop(context_id, None)
-    _REFRESH_VAULT.pop(context_id, None)
+    token_vault.clear(context_id)
 
 
-# Pending records awaiting user authentication (context_id -> (UseCaseRecord, skipped_stages))
-_PENDING_RECORDS: dict[str, tuple[UseCaseRecord, set[int]]] = {}
+# Pending records awaiting user authentication, shared with other providers:
+# context_id -> (UseCaseRecord, skipped_stages, pack_name)
+_PENDING_RECORDS: dict[str, tuple[UseCaseRecord, set[int], str]] = token_vault.PENDING
 
 
 def auto_sync_pending_records(access_token: str, context_id: str) -> SharePointSyncResult | None:
     """Syncs this conversation's pending UseCaseRecord immediately after its user signs in."""
     if not context_id:
         return None
-    pending = _PENDING_RECORDS.pop(context_id, None)
-    if not pending:
-        return None
-    pending_rec, pending_skipped = pending
-    logger.info("Auto-syncing pending opportunity %s to SharePoint after user sign-in", pending_rec.meta.record_id)
     try:
-        res = sync_to_optional_sharepoint(
-            pending_rec,
-            skipped_stages=pending_skipped,
-            delegated_token=access_token,
-            context_id=context_id,
-        )
-        return res
+        connector = get_sharepoint_connector()
     except Exception as exc:
         logger.warning("Auto-sync after sign-in failed: %s", exc)
         return None
+    return storage.auto_sync_pending(access_token, context_id, connector=connector)
 
 
 class SharePointConnector:
     """Client for reading and writing qualification opportunities in SharePoint Online."""
+
+    provider_id = "sharepoint"
+    display_name = "Microsoft SharePoint"
+    account_label = "Microsoft"
 
     def __init__(
         self,
@@ -1116,21 +1088,16 @@ def sync_to_optional_sharepoint(
     """
     try:
         connector = get_sharepoint_connector()
-        res = connector.sync_opportunity(
-            record,
-            skipped_stages=skipped_stages,
-            delegated_token=delegated_token,
-            context_id=context_id,
-            pack_name=pack_name,
-        )
-        if res and context_id:
-            if res.auth_mode != "delegated":
-                # Queued for this conversation only; written once its user signs in.
-                _PENDING_RECORDS[context_id] = (record, set(skipped_stages or set()))
-            else:
-                _PENDING_RECORDS.pop(context_id, None)
-        return res
     except Exception as exc:
         logger.warning("SharePoint sync skipped due to error: %s", exc)
         return None
+    # Queues for this conversation only when not written as its own user.
+    return storage.sync_record(
+        connector,
+        record,
+        skipped_stages=skipped_stages,
+        delegated_token=delegated_token,
+        context_id=context_id,
+        pack_name=pack_name,
+    )
 

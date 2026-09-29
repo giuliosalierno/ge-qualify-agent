@@ -39,3 +39,7 @@ def _isolate_sharepoint_mock_dir(
     """
     monkeypatch.setenv("SHAREPOINT_MOCK_DIR", str(tmp_path / "sharepoint_mock"))
     monkeypatch.delenv("QUALIFY_GCS_BUCKET", raising=False)
+    # Same reasoning for the Google Drive mock, and a developer's shell
+    # exporting STORAGE_PROVIDER must not silently switch the suite's provider.
+    monkeypatch.setenv("GDRIVE_MOCK_DIR", str(tmp_path / "gdrive_mock"))
+    monkeypatch.delenv("STORAGE_PROVIDER", raising=False)
