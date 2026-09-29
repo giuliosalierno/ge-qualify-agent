@@ -125,6 +125,23 @@ if gcloud run services describe "$SERVICE_NAME" --project="$PROJECT_ID" --region
     --remove-env-vars=MS_GRAPH_CLIENT_SECRET,MS_GRAPH_REFRESH_TOKEN >/dev/null
 fi
 
+# A2A caller verification (qualify/agent/ge_auth.py): only Gemini
+# Enterprise's Discovery Engine service agent may call POST /.
+#   A2A_AUTH_MODE=log      verify and log, never block (rollout default)
+#   A2A_AUTH_MODE=enforce  reject unverified callers with 401
+# GE calls the run.app URL registered in its agent card; that URL is the ID
+# token audience. Both run.app URL forms are accepted. These are set on the
+# initial deploy (not the second pass) because --set-env-vars replaces every
+# variable, and a revision without them would default to enforce with no
+# audience configured, rejecting GE until the second pass lands.
+A2A_AUTH_MODE="${A2A_AUTH_MODE:-log}"
+# SIGNIN_CARD=0 hides the "Connect Microsoft SharePoint" card at the start of a
+# conversation. Use it where testers have no account in the SharePoint tenant
+# (go/demo); saving stays available by typing `save to sharepoint`.
+SIGNIN_CARD="${SIGNIN_CARD:-1}"
+A2A_AUDIENCES="${A2A_AUDIENCES:-https://${SERVICE_NAME}-g22bhpwccq-uc.a.run.app,https://${SERVICE_NAME}-${PROJECT_NUMBER}.${REGION}.run.app}"
+echo "A2A caller verification: mode=$A2A_AUTH_MODE audiences=$A2A_AUDIENCES"
+
 # Initial deployment from source (builds Dockerfile)
 gcloud run deploy "$SERVICE_NAME" \
   --source "$SCRIPT_DIR" \
@@ -137,7 +154,7 @@ gcloud run deploy "$SERVICE_NAME" \
   --clear-base-image \
   --allow-unauthenticated \
   --set-secrets="MS_GRAPH_CLIENT_SECRET=ms-graph-client-secret:latest,OAUTH_STATE_SECRET=oauth-state-secret:latest" \
-  --set-env-vars="GOOGLE_CLOUD_PROJECT=${PROJECT_ID},GOOGLE_CLOUD_LOCATION=${GENAI_LOCATION},GOOGLE_GENAI_USE_VERTEXAI=TRUE,MODEL=${MODEL_NAME},MS_GRAPH_TENANT_ID=${MS_GRAPH_TENANT_ID:-},MS_GRAPH_CLIENT_ID=${MS_GRAPH_CLIENT_ID:-},SHAREPOINT_INSTANCE_URL=${SHAREPOINT_INSTANCE_URL:-},WEB_OAUTH_CALLBACK=${WEB_OAUTH_CALLBACK},QUALIFY_GCS_BUCKET=${QUALIFY_GCS_BUCKET}"
+  --set-env-vars="^@^GOOGLE_CLOUD_PROJECT=${PROJECT_ID}@GOOGLE_CLOUD_LOCATION=${GENAI_LOCATION}@GOOGLE_GENAI_USE_VERTEXAI=TRUE@MODEL=${MODEL_NAME}@MS_GRAPH_TENANT_ID=${MS_GRAPH_TENANT_ID:-}@MS_GRAPH_CLIENT_ID=${MS_GRAPH_CLIENT_ID:-}@SHAREPOINT_INSTANCE_URL=${SHAREPOINT_INSTANCE_URL:-}@WEB_OAUTH_CALLBACK=${WEB_OAUTH_CALLBACK}@QUALIFY_GCS_BUCKET=${QUALIFY_GCS_BUCKET}@PROJECT_NUMBER=${PROJECT_NUMBER}@A2A_AUTH_MODE=${A2A_AUTH_MODE}@A2A_AUDIENCES=${A2A_AUDIENCES}@SIGNIN_CARD=${SIGNIN_CARD}"
 
 SERVICE_URL=$(gcloud run services describe "$SERVICE_NAME" \
   --project="$PROJECT_ID" \

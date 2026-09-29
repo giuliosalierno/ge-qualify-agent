@@ -263,11 +263,11 @@ def load_review_record(
             return record
 
     try:
-        from qualify.connectors.sharepoint import (  # noqa: PLC0415
-            get_sharepoint_connector,
+        from qualify.connectors.storage import (  # noqa: PLC0415
+            get_storage_connector,
         )
 
-        record = get_sharepoint_connector().load_opportunity(
+        record = get_storage_connector().load_opportunity(
             record_id, delegated_token=None, context_id=context_id
         )
     except Exception as exc:
@@ -477,7 +477,9 @@ def _architect_review_focus(record: UseCaseRecord) -> str:
 
 
 def list_pending_reviews(
-    context_id: str | None = None, limit: int = PENDING_REVIEW_LIMIT
+    context_id: str | None = None,
+    limit: int = PENDING_REVIEW_LIMIT,
+    store: SessionStore | None = None,
 ) -> tuple[list[dict], bool]:
     """Opportunities in SharePoint that hold a brief and no dossier.
 
@@ -487,22 +489,40 @@ def list_pending_reviews(
     there is no work and stop. Only the connector can tell them apart, so the
     distinction has to survive the return.
 
+    If SharePoint is unreachable and `store` keeps a completion index (the GCS
+    and local record stores do), that index answers instead. It records every
+    finished intake and review, so it is a reachable, honest answer for users
+    who cannot sign in to Microsoft.
+
     Entries without a parsable record id are dropped. They are real folders and
     the listing will still show them, but they cannot be offered as a review
     target when we cannot say which record they are.
     """
     try:
-        from qualify.connectors.sharepoint import (  # noqa: PLC0415
-            get_sharepoint_connector,
+        from qualify.connectors.storage import (  # noqa: PLC0415
+            get_storage_connector,
         )
 
-        entries = get_sharepoint_connector().list_opportunities(
+        entries = get_storage_connector().list_opportunities(
             context_id=context_id,
             pending_technical_review=True,
             limit=limit,
         )
     except Exception as exc:
         log.warning("Handover: could not list pending reviews: %s", exc)
-        return [], False
+        list_completed = getattr(store, "list_completed", None)
+        if list_completed is None:
+            return [], False
+        try:
+            completed = list_completed()
+        except Exception as store_exc:
+            log.warning("Handover: record-store pending list failed: %s", store_exc)
+            return [], False
+        entries = [e for e in completed if e.get("hasBrief") and not e.get("hasDossier")][:limit]
+        entries = [e for e in entries if e.get("recordId")]
+        # The index can prove work *is* waiting, but not that none is: records
+        # finished before it existed, or saved only to SharePoint, are absent.
+        # So an empty fallback keeps "unreachable" rather than "nothing to do".
+        return entries, bool(entries)
 
     return [e for e in entries if e.get("recordId")], True

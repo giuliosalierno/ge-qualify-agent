@@ -175,9 +175,9 @@ def _consume_signin_banner(session: Session) -> str | None:
     if session.signin_confirmed:
         return None
 
-    from qualify.connectors.sharepoint import get_cached_delegated_token  # noqa: PLC0415
+    from qualify.connectors.storage import is_connected  # noqa: PLC0415
 
-    if not get_cached_delegated_token(session.context_id):
+    if not is_connected(session.context_id):
         return None
 
     session.signin_confirmed = True
@@ -438,12 +438,12 @@ def _handle_action_outcome(
             if outcome.ready_to_finalize:
                 # All stages committed/skipped: emit the complete Markdown Business Value Brief,
                 # render a new summary/completion card, and sync to optional Google Sheet + SharePoint.
-                from qualify.connectors.sharepoint import sync_to_optional_sharepoint  # noqa: PLC0415
+                from qualify.connectors.storage import sync_to_storage  # noqa: PLC0415
                 from qualify.sinks.sheets import sync_to_optional_sheet  # noqa: PLC0415
 
                 import os as _os  # noqa: PLC0415
                 sync_to_optional_sheet(session.record)
-                sp_res = sync_to_optional_sharepoint(
+                sp_res = sync_to_storage(
                     session.record,
                     skipped_stages=session.skipped,
                     context_id=session.context_id,
@@ -646,9 +646,9 @@ def _maybe_offer_signin(session: Session) -> TurnOutput | None:
         return None
 
     from qualify.a2ui.signin import build_signin_card  # noqa: PLC0415
-    from qualify.connectors.sharepoint import get_cached_delegated_token  # noqa: PLC0415
+    from qualify.connectors.storage import is_connected  # noqa: PLC0415
 
-    if get_cached_delegated_token(session.context_id):
+    if is_connected(session.context_id):
         return None
 
     base_url = _os.environ.get(
@@ -744,14 +744,14 @@ def _acknowledge_signin(session: Session) -> TurnOutput:
     vault — and silently carrying on would hand them a nasty surprise at save
     time. Either way the interview starts; only the wording changes.
     """
-    from qualify.connectors.sharepoint import get_cached_delegated_token  # noqa: PLC0415
+    from qualify.connectors.storage import is_connected  # noqa: PLC0415
 
     a2ui_messages: list[dict[str, Any]] = []
 
     # The card has served its purpose; make sure it cannot be offered again.
     session.signin_prompted = True
 
-    connected = bool(get_cached_delegated_token(session.context_id))
+    connected = is_connected(session.context_id)
     if connected:
         # `_consume_signin_banner` may have already said this in the same turn.
         # Saying it twice reads like a bug.
@@ -873,28 +873,35 @@ def _try_portfolio_review(
     import os as _os  # noqa: PLC0415
 
     from qualify.a2ui.signin import build_signin_card  # noqa: PLC0415
-    from qualify.connectors.sharepoint import get_sharepoint_connector  # noqa: PLC0415
+    from qualify.connectors.storage import get_storage_connector  # noqa: PLC0415
     from qualify.export.portfolio import render_portfolio_report  # noqa: PLC0415
     from qualify.scoring.portfolio import evaluate_portfolio  # noqa: PLC0415
 
-    connector = get_sharepoint_connector()
+    connector = get_storage_connector()
+    from_record_store = False
     try:
         items = connector.load_all_opportunities(context_id=session.context_id)
     except Exception:
-        base_url = _os.environ.get(
-            "AGENT_URL", "https://ge-qualify-agent-g22bhpwccq-uc.a.run.app"
-        ).rstrip("/")
-        auth_url = build_signin_url(base_url, session.context_id)
-        session.signin_prompted = True
-        return TurnOutput(
-            reply_text=(
-                "Happy to run the **AI CoE Portfolio Prioritization Review** — "
-                "but I couldn't reach SharePoint to load the qualified opportunities. "
-                "Please sign in with Microsoft below, then type `portfolio review` again."
-            ),
-            a2ui_messages=build_signin_card(auth_url),
-            session=session,
-        )
+        # No SharePoint session (or SharePoint is down). The record store holds
+        # every *finished* opportunity too, so the CoE view still works for
+        # users who cannot sign in to Microsoft — e.g. go/demo testers.
+        items = _portfolio_items_from_record_store(store)
+        from_record_store = True
+        if not items:
+            base_url = _os.environ.get(
+                "AGENT_URL", "https://ge-qualify-agent-g22bhpwccq-uc.a.run.app"
+            ).rstrip("/")
+            auth_url = build_signin_url(base_url, session.context_id)
+            session.signin_prompted = True
+            return TurnOutput(
+                reply_text=(
+                    "Happy to run the **AI CoE Portfolio Prioritization Review** — "
+                    "but I couldn't reach SharePoint to load the qualified opportunities. "
+                    "Please sign in with Microsoft below, then type `portfolio review` again."
+                ),
+                a2ui_messages=build_signin_card(auth_url),
+                session=session,
+            )
 
     if not items:
         return TurnOutput(
@@ -917,11 +924,14 @@ def _try_portfolio_review(
             except Exception:
                 pass
 
-    # Save Portfolio_Prioritization_Report.md to SharePoint and include its URL
+    # Save Portfolio_Prioritization_Report.md to SharePoint and include its URL.
+    # Skipped when SharePoint was unreachable a moment ago: it would fail again.
     initial_md = render_portfolio_report(summary)
-    report_url = connector.sync_portfolio_report(
-        initial_md, context_id=session.context_id
-    )
+    report_url = None
+    if not from_record_store:
+        report_url = connector.sync_portfolio_report(
+            initial_md, context_id=session.context_id
+        )
     final_md = render_portfolio_report(summary, report_url=report_url)
     if report_url:
         connector.sync_portfolio_report(final_md, context_id=session.context_id)
@@ -939,11 +949,36 @@ def _try_portfolio_review(
         for ev in summary.evaluations
     ]
 
+    if from_record_store:
+        final_md = (
+            "_Scored from the agent's record store (finished intakes only) — "
+            "SharePoint was not available for this conversation._\n\n" + final_md
+        )
+
     return TurnOutput(
         reply_text=final_md,
         a2ui_messages=[],
         session=session,
     )
+
+
+def _portfolio_items_from_record_store(
+    store: SessionStore,
+) -> list[tuple[Any, dict[str, Any]]]:
+    """Finished opportunities from the durable record store, or `[]`.
+
+    Only stores that keep a completion index (`GCSRecordStore`,
+    `LocalRecordStore`) can answer; the in-memory store cannot and returns
+    nothing, which sends the caller back to the SharePoint sign-in prompt.
+    """
+    loader = getattr(store, "load_portfolio_items", None)
+    if loader is None:
+        return []
+    try:
+        return list(loader())
+    except Exception as exc:
+        log.warning("Record-store portfolio fallback failed: %s", exc)
+        return []
 
 
 def _try_start_tech_review(
@@ -1016,7 +1051,7 @@ def _try_start_tech_review(
         return None
 
     if record_id is None:
-        pending, reachable = list_pending_reviews(session.context_id)
+        pending, reachable = list_pending_reviews(session.context_id, store=store)
         if reachable and pending:
             matched_id = resolve_pending_review_choice(user_text, pending)
             if matched_id:
@@ -1223,9 +1258,9 @@ def _try_load_from_sharepoint(user_text: str | None, session: Session) -> TurnOu
                 session=session,
             )
 
-        from qualify.connectors.sharepoint import sync_to_optional_sharepoint  # noqa: PLC0415
+        from qualify.connectors.storage import sync_to_storage  # noqa: PLC0415
 
-        sp_res = sync_to_optional_sharepoint(
+        sp_res = sync_to_storage(
             session.record,
             skipped_stages=session.skipped,
             context_id=session.context_id,
@@ -1273,11 +1308,11 @@ def _try_load_from_sharepoint(user_text: str | None, session: Session) -> TurnOu
     if not has_sp_keyword:
         return None
 
-    from qualify.connectors.sharepoint import get_sharepoint_connector  # noqa: PLC0415
+    from qualify.connectors.storage import get_storage_connector  # noqa: PLC0415
 
     # Check if user wants to list / search all SharePoint opportunities
     if any(k in text_lower for k in ("list sharepoint", "search sharepoint", "show sharepoint", "sharepoint opportunities")):
-        connector = get_sharepoint_connector()
+        connector = get_storage_connector()
         # `list_opportunities`, not `search_opportunities` — the latter never
         # existed, so this command raised AttributeError into the executor's
         # guard from the day it was written. `tests/test_turn.py` now calls it.
@@ -1350,12 +1385,12 @@ def _try_load_from_sharepoint(user_text: str | None, session: Session) -> TurnOu
     if not query:
         return None
 
-    from qualify.connectors.sharepoint import SharePointAuthRequired  # noqa: PLC0415
+    from qualify.connectors.storage import StorageAuthRequired  # noqa: PLC0415
 
-    connector = get_sharepoint_connector()
+    connector = get_storage_connector()
     try:
         loaded = connector.load_opportunity(query, context_id=session.context_id)
-    except SharePointAuthRequired:
+    except StorageAuthRequired:
         base_url = _os.environ.get(
             "AGENT_URL", "https://ge-qualify-agent-g22bhpwccq-uc.a.run.app"
         ).rstrip("/")

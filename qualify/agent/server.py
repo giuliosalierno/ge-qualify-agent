@@ -106,6 +106,13 @@ def build_app():
         ]
     )
 
+    # Only Gemini Enterprise may drive the agent. See ge_auth.py; the browser
+    # sign-in routes above are deliberately not covered.
+    from qualify.agent.ge_auth import GeminiEnterpriseAuthMiddleware, auth_mode
+
+    app.add_middleware(GeminiEnterpriseAuthMiddleware)
+    log.info("A2A caller verification mode: %s", auth_mode())
+
     # The web UI and sign-in page are same-origin and need no CORS. Only
     # origins listed explicitly may call cross-origin, and never with cookies.
     cors_origins = [

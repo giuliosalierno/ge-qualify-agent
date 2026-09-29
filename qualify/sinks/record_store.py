@@ -81,6 +81,42 @@ def _session_from_dict(data: dict[str, Any]) -> Session:
     )
 
 
+# ---------------------------------------------------------------------------
+# Portfolio index: which records are *finished*, not just started
+# ---------------------------------------------------------------------------
+#
+# `save()` writes the record on every turn, so `records/` also holds drafts
+# abandoned half way. The portfolio and the "awaiting technical review" list
+# must only show finished work, the same set SharePoint holds, because that is
+# where a record lands only on completion or an explicit save.
+#
+# One small marker per record (`portfolio/<id>.json`) rather than a single
+# index file, so two conversations finishing at once cannot overwrite each
+# other's entry. Markers are only ever set, never cleared: reopening a stage
+# of a finished brief does not un-qualify it.
+#
+# Visibility: like the shared SharePoint site, this index is shared by every
+# user of the deployment. That is intended for the CoE portfolio view.
+
+
+def _completion_entry(session: Session, existing: dict[str, Any] | None) -> dict[str, Any]:
+    entry = dict(existing or {})
+    record = session.record
+    entry["recordId"] = record.meta.record_id
+    entry["initiativeName"] = record.meta.initiative_name or entry.get("initiativeName") or ""
+    entry["name"] = f"{record.meta.record_id} - {entry['initiativeName']}".rstrip(" -")
+    if session.pack_name == "tech":
+        entry["hasDossier"] = True
+        entry.setdefault("hasBrief", True)
+    else:
+        entry["hasBrief"] = True
+        entry.setdefault("hasDossier", False)
+    entry["webUrl"] = None
+    entry["lastModifiedDateTime"] = datetime.now().astimezone().isoformat()
+    entry["source"] = "record_store"
+    return entry
+
+
 class LocalRecordStore(SessionStore, RecordStore):
     """Persists sessions and UseCaseRecords to local JSON files."""
 
@@ -88,8 +124,10 @@ class LocalRecordStore(SessionStore, RecordStore):
         self.root = Path(root_dir)
         self.sessions_dir = self.root / "sessions"
         self.records_dir = self.root / "records"
+        self.portfolio_dir = self.root / "portfolio"
         self.sessions_dir.mkdir(parents=True, exist_ok=True)
         self.records_dir.mkdir(parents=True, exist_ok=True)
+        self.portfolio_dir.mkdir(parents=True, exist_ok=True)
 
     def _session_path(self, context_id: str) -> Path:
         safe_id = context_id.replace("/", "_")
@@ -117,6 +155,36 @@ class LocalRecordStore(SessionStore, RecordStore):
         path.write_text(payload, encoding="utf-8")
         if session.record.meta.record_id:
             self.save_record(session.record)
+            if session.is_complete:
+                self._mark_completed(session)
+
+    def _portfolio_path(self, record_id: str) -> Path:
+        return self.portfolio_dir / f"{record_id.replace('/', '_')}.json"
+
+    def _mark_completed(self, session: Session) -> None:
+        path = self._portfolio_path(session.record.meta.record_id)
+        existing = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else None
+        path.write_text(json.dumps(_completion_entry(session, existing), indent=2), encoding="utf-8")
+
+    def list_completed(self, limit: int = 50) -> list[dict[str, Any]]:
+        """Finished opportunities, newest first."""
+        entries = []
+        for path in self.portfolio_dir.glob("*.json"):
+            try:
+                entries.append(json.loads(path.read_text(encoding="utf-8")))
+            except Exception as exc:
+                log.warning("Skipping unreadable portfolio marker %s: %s", path.name, exc)
+        entries.sort(key=lambda e: e.get("lastModifiedDateTime", ""), reverse=True)
+        return entries[:limit]
+
+    def load_portfolio_items(self, limit: int = 50) -> list[tuple[UseCaseRecord, dict[str, Any]]]:
+        """`(record, listing_entry)` pairs for finished opportunities."""
+        items = []
+        for entry in self.list_completed(limit):
+            record = self.load_record(entry["recordId"])
+            if record is not None:
+                items.append((record, entry))
+        return items
 
     def delete(self, context_id: str) -> None:
         path = self._session_path(context_id)
@@ -181,6 +249,44 @@ class GCSRecordStore(SessionStore, RecordStore):
         blob.upload_from_string(payload, content_type="application/json")
         if session.record.meta.record_id:
             self.save_record(session.record)
+            if session.is_complete:
+                self._mark_completed(session)
+
+    def _portfolio_blob(self, record_id: str) -> Any:
+        return self._bucket.blob(f"portfolio/{record_id.replace('/', '_')}.json")
+
+    def _mark_completed(self, session: Session) -> None:
+        blob = self._portfolio_blob(session.record.meta.record_id)
+        existing = None
+        if blob.exists():
+            try:
+                existing = json.loads(blob.download_as_text(encoding="utf-8"))
+            except Exception:
+                existing = None
+        blob.upload_from_string(
+            json.dumps(_completion_entry(session, existing), indent=2),
+            content_type="application/json",
+        )
+
+    def list_completed(self, limit: int = 50) -> list[dict[str, Any]]:
+        """Finished opportunities, newest first."""
+        entries = []
+        for blob in self._client.list_blobs(self.bucket_name, prefix="portfolio/", max_results=500):
+            try:
+                entries.append(json.loads(blob.download_as_text(encoding="utf-8")))
+            except Exception as exc:
+                log.warning("Skipping unreadable portfolio marker %s: %s", blob.name, exc)
+        entries.sort(key=lambda e: e.get("lastModifiedDateTime", ""), reverse=True)
+        return entries[:limit]
+
+    def load_portfolio_items(self, limit: int = 50) -> list[tuple[UseCaseRecord, dict[str, Any]]]:
+        """`(record, listing_entry)` pairs for finished opportunities."""
+        items = []
+        for entry in self.list_completed(limit):
+            record = self.load_record(entry["recordId"])
+            if record is not None:
+                items.append((record, entry))
+        return items
 
     def delete(self, context_id: str) -> None:
         blob = self._session_blob(context_id)
