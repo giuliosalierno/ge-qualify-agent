@@ -1,0 +1,31 @@
+# Python build & cache artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+build/
+dist/
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+
+# Local configuration & environment
+.env
+.env.*
+
+# Documentation and operator scripts (not needed in deployed container)
+doc/
+docs/
+scripts/
+
+# Skill sources & test suites. Only the capability grounding skill ships in
+# the container: the agent appends it to its system instruction.
+skills/*
+!skills/ge_capability_grounding/
+tests/
+*.zip
+
+# Git metadata
+.git/
+.gitignore

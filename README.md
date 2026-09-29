@@ -67,22 +67,51 @@ phase 2.
 - [`ge-intake-business`](https://github.com/giuliosalierno/ge-qualify-skills/releases/latest/download/ge_intake_business.zip) ([source](skills/ge_intake_business/SKILL.md))
 - [`ge-review-tech`](https://github.com/giuliosalierno/ge-qualify-skills/releases/latest/download/ge_tech_review.zip) ([source](skills/ge_tech_review/SKILL.md))
 
-Invoke either skill in Gemini Enterprise and describe the workflow. Connect a Drive folder whenever you have one ready.
-
-Today the skills produce the documents; the decisions stay with people.
+Invoke either skill in Gemini Enterprise and describe the workflow. Connect a datasource to bring your context whenever you have one ready.
 
 ---
 
 ## Development & Packaging
 
-To rebuild the distributable zip files from source:
+To rebuild the distributable zip files from source (written to the repo root,
+git-ignored):
 
 ```bash
-python3 tests/package_skills.py
+python3 skills/package_skills.py
 ```
 
-To run the verification tests:
+To run the skill verification tests:
 
 ```bash
-python3 tests/run_eval.py
+python3 skills/run_eval.py
 ```
+
+---
+
+## Qualification agent (A2A)
+
+The same interview also runs as an A2A agent with an A2UI living form
+(`qualify/`), deployed to Cloud Run and registered in Gemini Enterprise.
+
+```bash
+uv run pytest -q          # unit tests
+scripts/deploy.sh         # build and deploy to Cloud Run (reads .env)
+scripts/register_ge.sh    # first-time registration in Gemini Enterprise
+scripts/sync_ge_agent.sh  # push a changed agent card to the GE registration
+scripts/setup_lb.sh       # one-time Load Balancer + IAP provisioning
+scripts/smoke_test_auth.sh
+```
+
+Only the Gemini Enterprise and IAP service agents may invoke the Cloud Run
+service; see `scripts/deploy.sh` and `qualify/agent/ge_auth.py`.
+
+---
+
+## Documentation
+
+| Document | What it covers |
+| :--- | :--- |
+| [`docs/framework.md`](docs/framework.md) | The GE App Use Case Discovery Framework the agent and skills implement; code comments cite it by line |
+
+Design notes, implementation plans and integration findings live in a local,
+git-ignored `doc/` folder and are not published.

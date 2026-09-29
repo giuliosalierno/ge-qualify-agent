@@ -1,0 +1,408 @@
+[
+  {
+    "version": "v0.9",
+    "createSurface": {
+      "surfaceId": "qualify",
+      "catalogId": "https://www.gstatic.com/vertexaisearch/a2ui/v0_9/gemini_enterprise_composite_catalog.json"
+    }
+  },
+  {
+    "version": "v0.9",
+    "updateComponents": {
+      "surfaceId": "qualify",
+      "components": [
+        {
+          "id": "root",
+          "component": "Column",
+          "children": [
+            "stage-title",
+            "stage-caption",
+            "stage-rule",
+            "f-uc-technical-security-user-authentication",
+            "f-uc-technical-security-service-authentication",
+            "f-uc-technical-security-iam-least-privilege",
+            "f-uc-technical-security-data-classification-label",
+            "f-uc-technical-security-data-classification",
+            "f-uc-technical-security-residency-requirements",
+            "f-uc-technical-security-cloud-policy-status-label",
+            "f-uc-technical-security-cloud-policy-status",
+            "continue-button-security",
+            "skip-button-security"
+          ]
+        },
+        {
+          "id": "stage-title",
+          "component": "Text",
+          "text": "Technical architecture and security review",
+          "variant": "h3"
+        },
+        {
+          "id": "stage-caption",
+          "component": "Text",
+          "text": {
+            "path": "/ui/stage/caption"
+          },
+          "variant": "caption"
+        },
+        {
+          "id": "stage-rule",
+          "component": "Divider"
+        },
+        {
+          "id": "f-uc-technical-security-user-authentication",
+          "component": "MaterialSelect",
+          "options": [
+            {
+              "label": "Google Workspace SSO",
+              "value": "workspace_sso"
+            },
+            {
+              "label": "Microsoft Entra ID",
+              "value": "entra_id"
+            },
+            {
+              "label": "Okta",
+              "value": "okta"
+            },
+            {
+              "label": "SAML 2.0 (other)",
+              "value": "saml"
+            },
+            {
+              "label": "Multiple IdPs requiring federation",
+              "value": "multiple_idp"
+            },
+            {
+              "label": "Unmanaged or basic auth",
+              "value": "basic_auth"
+            },
+            {
+              "label": "Not yet confirmed",
+              "value": "unknown"
+            }
+          ],
+          "value": {
+            "path": "/uc/technical/security/user_authentication"
+          },
+          "label": "End-user identity provider * — Enterprise SSO / Identity Provider for end-user login.",
+          "placeholder": "Choose one"
+        },
+        {
+          "id": "f-uc-technical-security-service-authentication",
+          "component": "MaterialSelect",
+          "options": [
+            {
+              "label": "Workload Identity Federation",
+              "value": "wif"
+            },
+            {
+              "label": "Service account keys with vault rotation",
+              "value": "sa_keys_rotated"
+            },
+            {
+              "label": "OAuth client credentials",
+              "value": "oauth_client"
+            },
+            {
+              "label": "Long-lived static tokens",
+              "value": "static_tokens"
+            },
+            {
+              "label": "Not yet confirmed",
+              "value": "unknown"
+            }
+          ],
+          "value": {
+            "path": "/uc/technical/security/service_authentication"
+          },
+          "label": "Service authentication * — Machine-to-machine authentication and credential rotation.",
+          "placeholder": "Choose one"
+        },
+        {
+          "id": "f-uc-technical-security-iam-least-privilege",
+          "component": "MaterialSelect",
+          "options": [
+            {
+              "label": "Read-only, scoped service identities",
+              "value": "read_only_scoped"
+            },
+            {
+              "label": "Broad dataset reader role",
+              "value": "broad_reader"
+            },
+            {
+              "label": "Admin or owner role requested",
+              "value": "admin"
+            },
+            {
+              "label": "Not yet confirmed",
+              "value": "unknown"
+            }
+          ],
+          "value": {
+            "path": "/uc/technical/security/iam_least_privilege"
+          },
+          "label": "IAM scope requested — Minimum required access scope for connectors and agents.",
+          "placeholder": "Choose one"
+        },
+        {
+          "id": "f-uc-technical-security-data-classification-label",
+          "component": "Text",
+          "text": "Data classification * — Highest sensitivity tier of data accessed by this workflow.",
+          "variant": "caption"
+        },
+        {
+          "id": "f-uc-technical-security-data-classification",
+          "component": "MaterialRadioButton",
+          "options": [
+            {
+              "label": "Public",
+              "value": "public"
+            },
+            {
+              "label": "Internal",
+              "value": "internal"
+            },
+            {
+              "label": "Confidential",
+              "value": "confidential"
+            },
+            {
+              "label": "Regulated — PII, HIPAA or PCI",
+              "value": "regulated"
+            },
+            {
+              "label": "Mixed or unclear, review scheduled",
+              "value": "mixed"
+            },
+            {
+              "label": "Unclassified",
+              "value": "unclassified"
+            }
+          ],
+          "value": {
+            "path": "/uc/technical/security/data_classification"
+          }
+        },
+        {
+          "id": "f-uc-technical-security-residency-requirements",
+          "component": "MaterialSelect",
+          "options": [
+            {
+              "label": "No residency constraint",
+              "value": "none"
+            },
+            {
+              "label": "US only",
+              "value": "us_only"
+            },
+            {
+              "label": "EU only",
+              "value": "eu_only"
+            },
+            {
+              "label": "Other single-region requirement",
+              "value": "other_region"
+            },
+            {
+              "label": "Not yet confirmed",
+              "value": "unknown"
+            }
+          ],
+          "value": {
+            "path": "/uc/technical/security/residency_requirements"
+          },
+          "label": "Data residency",
+          "placeholder": "Choose one"
+        },
+        {
+          "id": "f-uc-technical-security-cloud-policy-status-label",
+          "component": "Text",
+          "text": "Cloud processing policy * — A corporate ban on cloud processing is a hard blocker.",
+          "variant": "caption"
+        },
+        {
+          "id": "f-uc-technical-security-cloud-policy-status",
+          "component": "MaterialRadioButton",
+          "options": [
+            {
+              "label": "Enterprise policy authorises GCP processing",
+              "value": "authorised"
+            },
+            {
+              "label": "Legal or risk review in flight",
+              "value": "review_in_flight"
+            },
+            {
+              "label": "Corporate policy bans cloud data processing",
+              "value": "banned"
+            },
+            {
+              "label": "Not yet confirmed",
+              "value": "unknown"
+            }
+          ],
+          "value": {
+            "path": "/uc/technical/security/cloud_policy_status"
+          }
+        },
+        {
+          "id": "continue-label-security",
+          "component": "Text",
+          "text": "Continue"
+        },
+        {
+          "id": "continue-button-security",
+          "component": "Button",
+          "child": "continue-label-security",
+          "variant": "primary",
+          "action": {
+            "event": {
+              "name": "commit_stage",
+              "context": {
+                "prompt": "Continue — Security, IAM and governance",
+                "pack": "tech",
+                "stage": "security",
+                "data": {
+                  "path": "/uc"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "skip-label-security",
+          "component": "Text",
+          "text": "Skip for now"
+        },
+        {
+          "id": "skip-button-security",
+          "component": "Button",
+          "child": "skip-label-security",
+          "variant": "default",
+          "action": {
+            "event": {
+              "name": "skip_stage",
+              "context": {
+                "prompt": "Skip — Security, IAM and governance",
+                "pack": "tech",
+                "stage": "security",
+                "data": {
+                  "path": "/uc"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "version": "v0.9",
+    "updateDataModel": {
+      "surfaceId": "qualify",
+      "path": "/",
+      "value": {
+        "uc": {
+          "meta": {
+            "record_id": "uc-0001",
+            "context_id": "ctx-abc",
+            "initiative_name": null,
+            "submission_date": null,
+            "submitter": null,
+            "department_bu": null,
+            "schema_version": "1.0"
+          },
+          "business": {
+            "user_profile": null,
+            "user_count": null,
+            "problem_description": null,
+            "user_stories": null,
+            "expected_impacts": null
+          },
+          "sizing": {
+            "task_frequency_weekly": null,
+            "baseline_minutes_per_task": null,
+            "target_minutes_saved_per_task": null
+          },
+          "technical": {
+            "data_sources": [],
+            "other_data_sources": null,
+            "systems": [],
+            "capability_level": null,
+            "capability_rationale": null,
+            "data_freshness": null,
+            "landing_zone_status": null,
+            "network": {
+              "hosting_environments": null,
+              "transit_path": null,
+              "firewall_proxy_status": null,
+              "transit_blocker_status": null
+            },
+            "security": {
+              "user_authentication": null,
+              "service_authentication": null,
+              "iam_least_privilege": null,
+              "data_classification": null,
+              "cloud_policy_status": null,
+              "residency_requirements": null
+            },
+            "grounding": {
+              "acl_preservation_required": null,
+              "model_profile": null,
+              "citation_policy": null,
+              "query_volume": null,
+              "latency_sla": null
+            }
+          },
+          "proposed": {
+            "business_owner": null,
+            "executive_sponsor": null,
+            "production_catcher_team": null,
+            "tech_owner": null,
+            "network_security_lead": null,
+            "domain_sme": null,
+            "adoption_kpi": null
+          },
+          "scoring": {
+            "feasibility_score": null,
+            "business_value_score": null,
+            "priority_status": null,
+            "category": null,
+            "scoping_document_url": null
+          },
+          "execution": {
+            "business_owner": null,
+            "executive_sponsor": null,
+            "tech_owner": null,
+            "target_mvp_date": null,
+            "production_catcher_team": null
+          },
+          "provenance": {},
+          "derived": {
+            "weekly_hours_saved_per_user": null,
+            "annual_hours_saved_per_user": null,
+            "total_annual_team_hours_saved": null,
+            "technical_readiness_pct": null,
+            "delivery_tier": null
+          }
+        },
+        "ui": {
+          "stage": {
+            "index": 2,
+            "count": 5,
+            "id": "security",
+            "caption": "Stage 3 of 5 — Security, IAM and governance"
+          },
+          "summary": {
+            "hours_line": "Fill in the three numbers above to see the estimate.",
+            "hours_basis": ""
+          },
+          "systems": {
+            "table": "No systems recorded yet. Name the backends this needs and I'll build the matrix."
+          }
+        }
+      }
+    }
+  }
+]

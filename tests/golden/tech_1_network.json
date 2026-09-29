@@ -1,0 +1,305 @@
+[
+  {
+    "version": "v0.9",
+    "createSurface": {
+      "surfaceId": "qualify",
+      "catalogId": "https://www.gstatic.com/vertexaisearch/a2ui/v0_9/gemini_enterprise_composite_catalog.json"
+    }
+  },
+  {
+    "version": "v0.9",
+    "updateComponents": {
+      "surfaceId": "qualify",
+      "components": [
+        {
+          "id": "root",
+          "component": "Column",
+          "children": [
+            "stage-title",
+            "stage-caption",
+            "stage-rule",
+            "f-uc-technical-network-hosting-environments",
+            "f-uc-technical-network-transit-path",
+            "f-uc-technical-network-firewall-proxy-status",
+            "f-uc-technical-network-transit-blocker-status-label",
+            "f-uc-technical-network-transit-blocker-status",
+            "continue-button-network",
+            "skip-button-network"
+          ]
+        },
+        {
+          "id": "stage-title",
+          "component": "Text",
+          "text": "Technical architecture and security review",
+          "variant": "h3"
+        },
+        {
+          "id": "stage-caption",
+          "component": "Text",
+          "text": {
+            "path": "/ui/stage/caption"
+          },
+          "variant": "caption"
+        },
+        {
+          "id": "stage-rule",
+          "component": "Divider"
+        },
+        {
+          "id": "f-uc-technical-network-hosting-environments",
+          "component": "TextField",
+          "label": "Hosting environments * — Cloud regions, VPCs, or on-premises data centres.",
+          "value": {
+            "path": "/uc/technical/network/hosting_environments"
+          },
+          "variant": "longText"
+        },
+        {
+          "id": "f-uc-technical-network-transit-path",
+          "component": "MaterialSelect",
+          "options": [
+            {
+              "label": "Cloud HA-VPN",
+              "value": "ha_vpn"
+            },
+            {
+              "label": "Dedicated or Partner Interconnect",
+              "value": "interconnect"
+            },
+            {
+              "label": "Private Service Connect",
+              "value": "psc"
+            },
+            {
+              "label": "Public HTTPS with IP allowlisting",
+              "value": "public_https"
+            },
+            {
+              "label": "Not yet defined",
+              "value": "undefined"
+            }
+          ],
+          "value": {
+            "path": "/uc/technical/network/transit_path"
+          },
+          "label": "Transit path to Google Cloud * — Network interconnect, VPN, or Private Service Connect path.",
+          "placeholder": "Choose one"
+        },
+        {
+          "id": "f-uc-technical-network-firewall-proxy-status",
+          "component": "MaterialSelect",
+          "options": [
+            {
+              "label": "TLS inspection and proxy ports already cleared",
+              "value": "cleared"
+            },
+            {
+              "label": "Corporate proxy in path, firewall ticket pending",
+              "value": "ticket_pending"
+            },
+            {
+              "label": "Inspecting proxy blocks gRPC or TLS",
+              "value": "blocked"
+            },
+            {
+              "label": "Not yet investigated",
+              "value": "unknown"
+            }
+          ],
+          "value": {
+            "path": "/uc/technical/network/firewall_proxy_status"
+          },
+          "label": "Egress proxy and firewall status — Whether TLS inspection or proxy ports are cleared.",
+          "placeholder": "Choose one"
+        },
+        {
+          "id": "f-uc-technical-network-transit-blocker-status-label",
+          "component": "Text",
+          "text": "Transit approval * — An airgapped system without cloud transit is a hard blocker.",
+          "variant": "caption"
+        },
+        {
+          "id": "f-uc-technical-network-transit-blocker-status",
+          "component": "MaterialRadioButton",
+          "options": [
+            {
+              "label": "Transit to Google Cloud is approved",
+              "value": "approved"
+            },
+            {
+              "label": "Exception process required",
+              "value": "exception_required"
+            },
+            {
+              "label": "Airgapped — cloud transit is barred",
+              "value": "airgapped"
+            },
+            {
+              "label": "Not yet confirmed",
+              "value": "unknown"
+            }
+          ],
+          "value": {
+            "path": "/uc/technical/network/transit_blocker_status"
+          }
+        },
+        {
+          "id": "continue-label-network",
+          "component": "Text",
+          "text": "Continue"
+        },
+        {
+          "id": "continue-button-network",
+          "component": "Button",
+          "child": "continue-label-network",
+          "variant": "primary",
+          "action": {
+            "event": {
+              "name": "commit_stage",
+              "context": {
+                "prompt": "Continue — Infrastructure and network",
+                "pack": "tech",
+                "stage": "network",
+                "data": {
+                  "path": "/uc"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "skip-label-network",
+          "component": "Text",
+          "text": "Skip for now"
+        },
+        {
+          "id": "skip-button-network",
+          "component": "Button",
+          "child": "skip-label-network",
+          "variant": "default",
+          "action": {
+            "event": {
+              "name": "skip_stage",
+              "context": {
+                "prompt": "Skip — Infrastructure and network",
+                "pack": "tech",
+                "stage": "network",
+                "data": {
+                  "path": "/uc"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "version": "v0.9",
+    "updateDataModel": {
+      "surfaceId": "qualify",
+      "path": "/",
+      "value": {
+        "uc": {
+          "meta": {
+            "record_id": "uc-0001",
+            "context_id": "ctx-abc",
+            "initiative_name": null,
+            "submission_date": null,
+            "submitter": null,
+            "department_bu": null,
+            "schema_version": "1.0"
+          },
+          "business": {
+            "user_profile": null,
+            "user_count": null,
+            "problem_description": null,
+            "user_stories": null,
+            "expected_impacts": null
+          },
+          "sizing": {
+            "task_frequency_weekly": null,
+            "baseline_minutes_per_task": null,
+            "target_minutes_saved_per_task": null
+          },
+          "technical": {
+            "data_sources": [],
+            "other_data_sources": null,
+            "systems": [],
+            "capability_level": null,
+            "capability_rationale": null,
+            "data_freshness": null,
+            "landing_zone_status": null,
+            "network": {
+              "hosting_environments": null,
+              "transit_path": null,
+              "firewall_proxy_status": null,
+              "transit_blocker_status": null
+            },
+            "security": {
+              "user_authentication": null,
+              "service_authentication": null,
+              "iam_least_privilege": null,
+              "data_classification": null,
+              "cloud_policy_status": null,
+              "residency_requirements": null
+            },
+            "grounding": {
+              "acl_preservation_required": null,
+              "model_profile": null,
+              "citation_policy": null,
+              "query_volume": null,
+              "latency_sla": null
+            }
+          },
+          "proposed": {
+            "business_owner": null,
+            "executive_sponsor": null,
+            "production_catcher_team": null,
+            "tech_owner": null,
+            "network_security_lead": null,
+            "domain_sme": null,
+            "adoption_kpi": null
+          },
+          "scoring": {
+            "feasibility_score": null,
+            "business_value_score": null,
+            "priority_status": null,
+            "category": null,
+            "scoping_document_url": null
+          },
+          "execution": {
+            "business_owner": null,
+            "executive_sponsor": null,
+            "tech_owner": null,
+            "target_mvp_date": null,
+            "production_catcher_team": null
+          },
+          "provenance": {},
+          "derived": {
+            "weekly_hours_saved_per_user": null,
+            "annual_hours_saved_per_user": null,
+            "total_annual_team_hours_saved": null,
+            "technical_readiness_pct": null,
+            "delivery_tier": null
+          }
+        },
+        "ui": {
+          "stage": {
+            "index": 1,
+            "count": 5,
+            "id": "network",
+            "caption": "Stage 2 of 5 — Infrastructure and network"
+          },
+          "summary": {
+            "hours_line": "Fill in the three numbers above to see the estimate.",
+            "hours_basis": ""
+          },
+          "systems": {
+            "table": "No systems recorded yet. Name the backends this needs and I'll build the matrix."
+          }
+        }
+      }
+    }
+  }
+]
