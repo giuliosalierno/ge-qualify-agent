@@ -64,8 +64,8 @@ phase 2.
 
 ## Getting started
 
-- [`ge-intake-business`](https://github.com/giuliosalierno/ge-qualify-skills/releases/latest/download/ge_intake_business.zip) ([source](skills/ge_intake_business/SKILL.md))
-- [`ge-review-tech`](https://github.com/giuliosalierno/ge-qualify-skills/releases/latest/download/ge_tech_review.zip) ([source](skills/ge_tech_review/SKILL.md))
+- [`ge-intake-business`](https://github.com/giuliosalierno/ge-qualify-agent/releases/latest/download/ge_intake_business.zip) ([source](skills/ge_intake_business/SKILL.md))
+- [`ge-review-tech`](https://github.com/giuliosalierno/ge-qualify-agent/releases/latest/download/ge_tech_review.zip) ([source](skills/ge_tech_review/SKILL.md))
 
 Invoke either skill in Gemini Enterprise and describe the workflow. Connect a datasource to bring your context whenever you have one ready.
 
