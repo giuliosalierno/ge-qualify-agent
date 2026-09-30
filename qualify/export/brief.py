@@ -63,7 +63,7 @@ def render_business_brief(
     classification = (tech.security.data_classification or "Unspecified").capitalize()
 
     # Capability & Delivery Tier
-    cap_level = f"Level {tech.capability_level.value}: {tech.capability_level.label}" if tech.capability_level else "Pending Assessment"
+    cap_level = f"Level {tech.capability_level.value} — {tech.capability_level.label}" if tech.capability_level else "Pending Assessment"
     tier = derived.delivery_tier.label if derived.delivery_tier else "To Be Determined by CoE"
     rationale = tech.capability_rationale or _default_tier_guidance(cap_level, tier)
 
@@ -133,7 +133,7 @@ def render_business_brief(
         f"| **Weekly Frequency ($T$)** | `{freq:g}` / wk | Runs per user each week |",
         f"| **Baseline Duration ($M$)** | `{base_min:g}` min | Current manual time per run |",
         f"| **Target Time Saved ($S$)** | `{saved_min:g}` min | Estimated reduction per run |",
-        f"| **Weekly Hours Saved / User** | `{weekly_user_hrs:,.1f}` hrs/wk | $(T \\times S) / 60$ |",
+        f"| **Weekly Hours Saved / User** | `{weekly_user_hrs:,.2f}` hrs/wk | $(T \\times S) / 60$ |",
         f"| **Annual Hours Saved / User** | `{annual_user_hrs:,.0f}` hrs/yr | $\\text{{Weekly}} \\times {WORK_WEEKS_PER_YEAR}$ |",
         f"| **Total Annual Team Hours Saved** | **`{total_team_hrs:,.0f}` hrs/yr** | $U \\times \\text{{Annual Hours / User}}$ |",
         "",
@@ -156,10 +156,10 @@ def render_business_brief(
         "",
         "---",
         "",
-        "## 4. Recommended Delivery Tier & Next Steps",
+        "## 4. Recommended Capability Level & Next Steps",
         "",
-        f"- **Recommended Capability Level:** `{cap_level}`",
-        f"- **Delivery Ladder Tier:** `{tier}`",
+        f"- **GE App Capability Level:** `{cap_level}`",
+        f"- **Delivery Tier (derived from the level):** `{tier}`",
         "",
         "### Implementation Guidance",
         rationale,

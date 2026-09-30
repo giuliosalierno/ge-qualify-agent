@@ -215,3 +215,19 @@ def test_score_can_be_injected_so_one_turn_reports_one_number() -> None:
 
     assert "100% (44/44)" in out
     assert "Critical blockers found" not in out
+
+
+def test_brief_and_dossier_lead_with_the_capability_level() -> None:
+    from qualify.export.brief import render_business_brief
+    from qualify.schema.capability import CapabilityLevel
+
+    record = perfect_record()
+    record.technical.capability_level = CapabilityLevel.WORKFLOW_BUILDER_CHAT_AGENT
+
+    dossier = render_technical_dossier(record, score_technical(record))
+    assert "Capability Level (Phase 1):** Level 3 — Workflow Builder — chat agent (Tier 2: Low-Code)" in dossier
+    assert "Recommended Delivery Tier" not in dossier
+
+    brief = render_business_brief(record)
+    assert "## 4. Recommended Capability Level & Next Steps" in brief
+    assert "Delivery Tier (derived from the level)" in brief

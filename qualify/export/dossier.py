@@ -106,9 +106,11 @@ def render_technical_dossier(
         f"> **Key 2 Authorisation:** "
         f"{'**APPROVED**' if score.key2_ready else '**PENDING**'}  "
     )
-    if record.derived.delivery_tier:
+    level = record.technical.capability_level
+    if level is not None:
         parts.append(
-            f"> **Recommended Delivery Tier:** {record.derived.delivery_tier.label}  "
+            f"> **GE App Capability Level (Phase 1):** Level {level.value} — "
+            f"{level.label} ({level.delivery_tier.label})  "
         )
     parts.append("")
 
