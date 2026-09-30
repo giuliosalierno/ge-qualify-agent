@@ -50,8 +50,7 @@ the chat for the full list of commands.
   written to a shared folder under their own identity. Set `SIGNIN_CARD=0` to
   hide the sign-in prompt where testers have no account in the tenant; saving
   stays available by typing `save to sharepoint`.
-- A Google Drive connector exists (`qualify/connectors/gdrive.py`) but is not
-  wired to sign-in yet.
+- A Google Drive connector(WIP).
 
 ### Architecture
 
