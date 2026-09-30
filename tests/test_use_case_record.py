@@ -110,6 +110,19 @@ def test_hours_saved_matches_skill_md_formula():
     assert d.total_annual_team_hours_saved == 1000.0  # * 20 users
 
 
+def test_rounding_does_not_compound():
+    """10 users x 10/wk x 1 min: 5,000 min = 83.33 h, not 85 (seen in GE)."""
+    r = make_record()
+    r.business.user_count = 10
+    r.sizing.task_frequency_weekly = 10
+    r.sizing.target_minutes_saved_per_task = 1
+
+    d = r.derived
+    assert d.weekly_hours_saved_per_user == 0.17
+    assert d.annual_hours_saved_per_user == 8.33
+    assert d.total_annual_team_hours_saved == 83.33
+
+
 def test_missing_inputs_yield_none_not_zero():
     """Zero would read as "we measured no saving". None reads as "not sized"."""
     r = make_record()

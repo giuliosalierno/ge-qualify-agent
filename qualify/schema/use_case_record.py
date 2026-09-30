@@ -324,14 +324,15 @@ def compute_derived(record: UseCaseRecord) -> Derived:
     users = record.business.user_count
 
     if freq is not None and saved is not None:
-        d.weekly_hours_saved_per_user = round(freq * saved / 60, 2)
-        d.annual_hours_saved_per_user = round(
-            d.weekly_hours_saved_per_user * WORK_WEEKS_PER_YEAR, 2
-        )
+        # Round only what is stored. Chaining rounded intermediates inflates
+        # the totals: 10/wk x 1 min is 0.1667 h/wk, which rounded to 0.17
+        # made 10 users come out at 85 h/yr instead of 83.33.
+        weekly = freq * saved / 60
+        annual = weekly * WORK_WEEKS_PER_YEAR
+        d.weekly_hours_saved_per_user = round(weekly, 2)
+        d.annual_hours_saved_per_user = round(annual, 2)
         if users is not None:
-            d.total_annual_team_hours_saved = round(
-                d.annual_hours_saved_per_user * users, 2
-            )
+            d.total_annual_team_hours_saved = round(annual * users, 2)
 
     if record.technical.capability_level is not None:
         d.delivery_tier = record.technical.capability_level.delivery_tier
