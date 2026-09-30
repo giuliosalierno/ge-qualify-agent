@@ -118,8 +118,8 @@ case on this ladder, and asking invites a guess you will then treat as fact.
 
 | Level | Meaning | Tier |
 | :--- | :--- | :--- |
-| 1 | Default assistant | Out of the box |
-| 2 | Assistant with custom skill | Low code |
+| 1 | Default assistant | No code |
+| 2 | Assistant with custom skill | No code |
 | 3 | Workflow Builder — chat agent | Low code |
 | 4 | Workflow Builder — workflow agent | Low code |
 | 5 | Workflow agent with custom MCP server | Pro code |

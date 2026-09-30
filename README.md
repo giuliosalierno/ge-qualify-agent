@@ -133,14 +133,18 @@ from phase 1 is the input to phase 2.
 
 ### `ge-intake-business` — business intake and value qualification
 
-1. **Business needs & user stories** — problem description, as-is workflow, user
-   personas and BU, data sources and integrations needed.
-2. **Value realization & hours-saved sizing** — users (U), weekly task frequency
-   (T), baseline minutes per task (M), annualized at a 60% acceleration
-   benchmark over 50 work weeks.
-3. **GE App agentic capabilities needed** — Three-Tier Delivery Ladder fit:
-   Tier 1 out-of-the-box, Tier 2 low-code, Tier 3 pro-code.
-4. **Execution & sponsorship** — business owner, executive sponsor, production
+Same four stages as the agent's Phase 1:
+
+1. **Problem & users** — problem description, as-is workflow, user personas
+   and BU.
+2. **Effort & value** — users (U), weekly task frequency (T), baseline minutes
+   per task (M) and the customer's own minutes saved per task (S), annualised
+   over 50 work weeks. No invented benchmarks.
+3. **Data & systems → capability level** — data sources, read vs. write-back,
+   data classification, document-level permissions. The skill then assesses
+   the least complex **GE App capability level (1–6)** with anti-overcommitment
+   rules; the tier (No-Code / Low-Code / Pro-Code) is derived from the level.
+4. **Ownership & next steps** — business owner, executive sponsor, production
    catcher team, primary adoption KPI.
 
 ### `ge-review-tech` — technical architecture and security review
@@ -157,8 +161,23 @@ from phase 1 is the input to phase 2.
    landing zone status, Sprint #1 prerequisites.
 
 Output: a Technical Readiness Score (0–100%), a Feasibility Profile of **Pure GE
-App**, **Custom Agent in GE App** or **Blockers / High Risk**, and an Access
-Checklist.
+App**, **Custom Agent in GE App** or **Blockers / High Risk**, the Phase 1
+capability level confirmed or revised against the technical findings, and an
+Access Checklist.
+
+### Capability levels
+
+| Level | Capability | Tier |
+| :--- | :--- | :--- |
+| 1 | Default assistant | Tier 1: No-Code |
+| 2 | Assistant with custom skill | Tier 1: No-Code |
+| 3 | Workflow Builder — chat agent | Tier 2: Low-Code |
+| 4 | Workflow Builder — workflow agent | Tier 2: Low-Code |
+| 5 | Workflow agent with custom MCP server | Tier 3: Pro-Code |
+| 6 | Custom high-code agent (ADK / A2A) | Tier 3: Pro-Code |
+
+The agent, both skills and the grounding skill share this table;
+`tests/test_capability_tiers.py` fails if they drift apart.
 
 ### Packaging and evaluation
 

@@ -67,11 +67,15 @@ class CapabilityLevel(IntEnum):
     def delivery_tier(self) -> "DeliveryTier":
         """Roll-up to the coarse three-tier ladder.
 
-        design_plan.md 4.2 and both SKILL.md files speak in three tiers. That
-        is too coarse to drive Activity 2 routing — it cannot tell a user to
-        use a workflow agent rather than a chat agent — but it is the right
-        granularity for an executive brief. So the agent picks a level and the
-        tier is derived, never assigned.
+        design_plan.md 4.2 speaks in three tiers. That is too coarse to drive
+        Activity 2 routing — it cannot tell a user to use a workflow agent
+        rather than a chat agent — but it is the right granularity for an
+        executive brief. So the agent picks a level and the tier is derived,
+        never assigned.
+
+        Levels 1-2 are No-Code: a custom skill is instructions and templates,
+        no build. This must match the matrix in
+        `skills/ge_capability_grounding/SKILL.md` (enforced by a test).
         """
         return _TIER_ROLLUP[self]
 
@@ -79,7 +83,7 @@ class CapabilityLevel(IntEnum):
 class DeliveryTier(IntEnum):
     """Coarse delivery tier for executive summaries. Always derived."""
 
-    OUT_OF_THE_BOX = 1
+    NO_CODE = 1
     LOW_CODE = 2
     PRO_CODE = 3
 
@@ -107,8 +111,8 @@ _LEGACY_LABELS = {
 }
 
 _TIER_ROLLUP = {
-    CapabilityLevel.DEFAULT_ASSISTANT: DeliveryTier.OUT_OF_THE_BOX,
-    CapabilityLevel.CUSTOM_SKILL: DeliveryTier.LOW_CODE,
+    CapabilityLevel.DEFAULT_ASSISTANT: DeliveryTier.NO_CODE,
+    CapabilityLevel.CUSTOM_SKILL: DeliveryTier.NO_CODE,
     CapabilityLevel.WORKFLOW_BUILDER_CHAT_AGENT: DeliveryTier.LOW_CODE,
     CapabilityLevel.WORKFLOW_BUILDER_WORKFLOW_AGENT: DeliveryTier.LOW_CODE,
     CapabilityLevel.WORKFLOW_AGENT_WITH_CUSTOM_MCP: DeliveryTier.PRO_CODE,
@@ -116,7 +120,7 @@ _TIER_ROLLUP = {
 }
 
 _TIER_LABELS = {
-    DeliveryTier.OUT_OF_THE_BOX: "Tier 1: Out-of-the-Box",
+    DeliveryTier.NO_CODE: "Tier 1: No-Code",
     DeliveryTier.LOW_CODE: "Tier 2: Low-Code",
     DeliveryTier.PRO_CODE: "Tier 3: Pro-Code",
 }

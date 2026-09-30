@@ -2,7 +2,7 @@
 """
 Evaluation Runner for ge_qualify skill.
 Validates skill frontmatter format, token limits, trigger classification,
-and scoring execution against test scenarios in tests/eval_cases.json.
+and scoring execution against test scenarios in skills/eval_cases.json.
 """
 
 import json
@@ -12,7 +12,7 @@ import sys
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 SKILL_MD_PATH = os.path.join(BASE_DIR, "skills", "ge_qualify", "SKILL.md")
-EVAL_CASES_PATH = os.path.join(BASE_DIR, "tests", "eval_cases.json")
+EVAL_CASES_PATH = os.path.join(BASE_DIR, "skills", "eval_cases.json")
 
 
 def extract_frontmatter(file_path: str):
@@ -131,7 +131,7 @@ def validate_skill_metadata():
 def validate_eval_cases():
     print("\n[2/3] Validating Evaluation Cases Schema...")
     if not os.path.exists(EVAL_CASES_PATH):
-        print("  [!] FAIL: tests/eval_cases.json does not exist.")
+        print("  [!] FAIL: skills/eval_cases.json does not exist.")
         return False
 
     with open(EVAL_CASES_PATH, "r", encoding="utf-8") as f:
