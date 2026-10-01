@@ -30,6 +30,7 @@ from qualify.a2ui.actions import (
     parse_action,
 )
 from qualify.a2ui.canvas_probe import PROBE_CANVAS_ECHO, build_canvas_probe
+from qualify.a2ui.views.events import VIEW_EVENTS
 from qualify.a2ui.canvas_probe import describe_echo as describe_canvas_echo
 from qualify.a2ui.canvas_probe import is_probe_trigger as is_canvas_probe_trigger
 from qualify.a2ui.compiler import (
@@ -45,7 +46,7 @@ from qualify.a2ui.patcher import (
     extract_drafts,
 )
 from qualify.a2ui.provenance import missing_required
-from qualify.config import agent_base_url
+from qualify.config import agent_base_url, interactive_views_enabled
 from qualify.connectors.oauth_state import build_signin_url
 from qualify.a2ui.systems_extractor import (
     SYSTEMS_STAGE_ID,
@@ -218,10 +219,18 @@ def _run_turn(
                 a2ui_messages=[],
                 session=session,
             )
+        if event is not None and event.name in VIEW_EVENTS:
+            view_output = _try_view_event(store, event, session)
+            if view_output is not None:
+                return view_output
         if event is not None:
             outcome = dispatch(session, event)
             output = _handle_action_outcome(
-                session, outcome, chat_client, turn_input.conversation_history
+                session,
+                outcome,
+                chat_client,
+                turn_input.conversation_history,
+                store=store,
             )
             store.save(session)
             return output
@@ -419,6 +428,8 @@ def _handle_action_outcome(
     outcome: ActionOutcome,
     chat_client: ChatClient | None,
     conversation_history: str,
+    *,
+    store: SessionStore | None = None,
 ) -> TurnOutput:
     """Produces the TurnOutput for an action dispatch."""
     a2ui_messages: list[dict[str, Any]] = []
@@ -466,8 +477,13 @@ def _handle_action_outcome(
                     context_id=session.context_id,
                     pack_name=session.pack_name,
                 )
-                reply_text = render_deliverable(
-                    session.pack_name, session.record, skipped_stages=session.skipped
+                use_view = _use_brief_view(session)
+                reply_text = (
+                    _brief_view_headline(session)
+                    if use_view
+                    else render_deliverable(
+                        session.pack_name, session.record, skipped_stages=session.skipped
+                    )
                 )
                 base_url = agent_base_url()
                 auth_link = build_signin_url(base_url, session.context_id)
@@ -488,7 +504,9 @@ def _handle_action_outcome(
                     )
                 sid = session.next_surface_id("complete")
                 a2ui_messages.extend(
-                    build_completion_surface(
+                    _brief_view_messages(session, sid, store)
+                    if use_view
+                    else build_completion_surface(
                         session.pack,
                         session.record,
                         surface_id=sid,
@@ -557,11 +575,15 @@ def _handle_action_outcome(
 
     elif outcome.action == FINALIZE:
         if outcome.ready_to_finalize:
-            reply_text = render_deliverable(session.pack_name, session.record)
             sid = session.next_surface_id("complete")
-            a2ui_messages.extend(
-                build_completion_surface(session.pack, session.record, surface_id=sid)
-            )
+            if _use_brief_view(session):
+                reply_text = _brief_view_headline(session)
+                a2ui_messages.extend(_brief_view_messages(session, sid, store))
+            else:
+                reply_text = render_deliverable(session.pack_name, session.record)
+                a2ui_messages.extend(
+                    build_completion_surface(session.pack, session.record, surface_id=sid)
+                )
         else:
             reply_text = f"Cannot finalize yet: {outcome.message}"
 
@@ -914,6 +936,108 @@ def _try_a2ui_probe(user_text: str | None, session: Session) -> TurnOutput | Non
     )
 
 
+def _use_brief_view(session: Session) -> bool:
+    """The brief panel covers the business pack; tech keeps its card for now."""
+    return interactive_views_enabled() and session.pack_name == "business"
+
+
+def _brief_view_headline(session: Session) -> str:
+    from qualify.a2ui.views.portfolio import QUADRANT_ICONS  # noqa: PLC0415
+    from qualify.scoring.portfolio import evaluate_opportunity  # noqa: PLC0415
+
+    record = session.record
+    ev = evaluate_opportunity(record, apply_to_record=False)
+    hours = ev.annual_hours_saved
+    return (
+        f"✅ **Business Value Brief ready** — opened in the side panel.\n\n"
+        f"`{record.meta.record_id}` · {QUADRANT_ICONS[ev.quadrant]} {ev.quadrant} · "
+        + (f"{hours:,.0f} hrs/yr" if hours else "hours unsized")
+        + f"\n\n➡️ {ev.recommended_next_step}"
+    )
+
+
+def _portfolio_evaluations(store: SessionStore | None) -> list[Any]:
+    """Scored finished opportunities, for context in charts. `[]` on any failure."""
+    if store is None:
+        return []
+    items = _portfolio_items_from_record_store(store)
+    if not items:
+        return []
+    from qualify.scoring.portfolio import evaluate_portfolio  # noqa: PLC0415
+
+    try:
+        return list(evaluate_portfolio(items).evaluations)
+    except Exception as exc:
+        log.warning("Portfolio context for the brief chart failed: %s", exc)
+        return []
+
+
+def _brief_view_messages(
+    session: Session, surface_id: str, store: SessionStore | None
+) -> list[dict[str, Any]]:
+    from qualify.a2ui.views.brief import build_brief_view  # noqa: PLC0415
+
+    return build_brief_view(
+        session.record,
+        surface_id,
+        pack=session.pack,
+        skipped_stages=session.skipped,
+        portfolio=_portfolio_evaluations(store),
+    )
+
+
+def _try_view_event(
+    store: SessionStore, event: ActionEvent, session: Session
+) -> TurnOutput | None:
+    """Routes a view button onto the handler for the equivalent chat command.
+
+    A click and a typed command take the same path, so the buttons cannot
+    drift from what the chat understands.
+    """
+    from qualify.a2ui.views.events import (  # noqa: PLC0415
+        OPEN_BRIEF,
+        OPEN_PORTFOLIO,
+        START_TECH_REVIEW,
+    )
+
+    record_id = str(event.context.get("recordId") or "").strip()
+
+    if event.name == OPEN_PORTFOLIO:
+        output = _try_portfolio_review(store, "portfolio review", session)
+        if output is not None:
+            store.save(output.session)
+        return output
+
+    if event.name == START_TECH_REVIEW and record_id:
+        return _try_start_tech_review(store, f"technical review {record_id}", session)
+
+    if event.name == OPEN_BRIEF and record_id:
+        from qualify.a2ui.views.brief import build_brief_view  # noqa: PLC0415
+        from qualify.agent.handover import load_review_record  # noqa: PLC0415
+
+        record = load_review_record(store, record_id, session.context_id)
+        if record is None:
+            return TurnOutput(
+                reply_text=f"I couldn't find `{record_id}` in the record store.",
+                a2ui_messages=[],
+                session=session,
+            )
+        name = record.meta.initiative_name or record_id
+        messages = build_brief_view(
+            record,
+            session.next_surface_id("brief"),
+            portfolio=_portfolio_evaluations(store),
+        )
+        store.save(session)
+        return TurnOutput(
+            reply_text=f"📄 Opened the brief for **{name}** (`{record_id}`) in the side panel.",
+            a2ui_messages=messages,
+            session=session,
+        )
+
+    return None
+
+
 _PORTFOLIO_TRIGGERS = (
     "portfolio review",
     "analyze portfolio",
@@ -1059,10 +1183,41 @@ def _render_portfolio(
         for ev in summary.evaluations
     ]
 
+    source_note = None
     if from_record_store and storage_enabled():
-        final_md = (
-            "_Scored from the agent's record store (finished intakes only) — "
-            "SharePoint was not available for this conversation._\n\n" + final_md
+        source_note = (
+            "Scored from the agent's record store (finished intakes only) — "
+            "SharePoint was not available for this conversation."
+        )
+        final_md = f"_{source_note}_\n\n" + final_md
+
+    if interactive_views_enabled():
+        from qualify.a2ui.views.portfolio import (  # noqa: PLC0415
+            build_portfolio_view,
+            headline,
+        )
+
+        reply = (
+            f"📊 **Portfolio prioritization** opened in the side panel: {headline(summary)}."
+        )
+        top = [ev for ev in summary.evaluations if ev.quadrant == "Quick Wins"][:3]
+        if top:
+            reply += "\n\nTop Quick Wins: " + ", ".join(
+                f"**{ev.initiative_name}** (`{ev.record_id}`)" for ev in top
+            )
+        if report_url:
+            reply += f"\n\n[Full report in SharePoint]({report_url})"
+        reply += (
+            "\n\nUse the **Actions** tab, or type `technical review <name or ID>`."
+        )
+        return TurnOutput(
+            reply_text=reply,
+            a2ui_messages=build_portfolio_view(
+                summary,
+                session.next_surface_id("portfolio"),
+                source_note=source_note,
+            ),
+            session=session,
         )
 
     return TurnOutput(

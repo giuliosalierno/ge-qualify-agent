@@ -40,3 +40,15 @@ def agent_base_url() -> str:
             os.environ.get("K_SERVICE"),
         )
     return f"http://localhost:{os.environ.get('PORT', '8080')}"
+
+
+def interactive_views_enabled() -> bool:
+    """Whether to send side-panel views instead of long markdown replies.
+
+    On unless ``INTERACTIVE_VIEWS`` is ``0``/``false``/``off``. The switch
+    exists because the views depend on GE rendering components (``Canvas``,
+    ``VegaChart``, ...) that are not part of the A2UI base catalog; if a GE
+    release stops drawing them, this restores the markdown replies without a
+    code change.
+    """
+    return os.environ.get("INTERACTIVE_VIEWS", "1").strip().lower() not in ("0", "false", "off")

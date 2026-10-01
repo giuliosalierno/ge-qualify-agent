@@ -117,6 +117,19 @@ GE_RENDER_VERIFIED = frozenset(
         # its `action` was a client-side `openUrl`, never an `event`, so this
         # says nothing about whether it dispatches to the server.
         "MaterialButton",
+        # Canvas probe, 2026-10-01 (`probe canvas`, qualify/a2ui/canvas_probe.py).
+        # All drawn in GE, including inside a Canvas side panel and its Tabs.
+        # `VegaChart.spec` was passed by data binding: the catalog types it as
+        # a DynamicValue, which does not admit an inline object. The Save
+        # button's event reached the agent, but the slider's write-back type
+        # was not recorded, so nothing here is added to GE_BIND_VERIFIED.
+        "Canvas",
+        "Tabs",
+        "VegaChart",
+        "GcbpTable",
+        "MaterialExpansionPanel",
+        "MaterialBadge",
+        "MaterialSlider",
     }
 )
 
