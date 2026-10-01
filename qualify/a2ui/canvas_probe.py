@@ -243,10 +243,10 @@ def _full_canvas() -> list[dict[str, Any]]:
             "component": "GcbpTable",
             "caption": "Ranked portfolio",
             "columns": [
-                {"header": "Initiative", "field": "name", "sortable": True},
-                {"header": "Value", "field": "value", "sortable": True},
-                {"header": "Feasibility", "field": "feasibility", "sortable": True},
-                {"header": "Hours / yr", "field": "hours", "sortable": True},
+                {"header": "Initiative", "field": "name", "sortable": False},
+                {"header": "Value", "field": "value", "sortable": False},
+                {"header": "Feasibility", "field": "feasibility", "sortable": False},
+                {"header": "Hours / yr", "field": "hours", "sortable": False},
                 {"header": "Quadrant", "field": "quadrant"},
             ],
             # The catalog types every cell as a string.

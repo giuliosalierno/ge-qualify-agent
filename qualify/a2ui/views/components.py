@@ -121,11 +121,16 @@ def table(
     caption: str | None = None,
 ) -> Component:
     """``columns`` is ``[(header, field), ...]``. Cells are sent as strings,
-    which is what the catalog requires."""
+    which is what the catalog requires.
+
+    Columns are deliberately not sortable: in GE a header click sends a
+    ``fetchData`` action to the agent (server-side sort), which turns into a
+    chat turn. Rows are already sent in the intended order.
+    """
     node: Component = {
         "id": cid,
         "component": "GcbpTable",
-        "columns": [{"header": h, "field": f, "sortable": True} for h, f in columns],
+        "columns": [{"header": h, "field": f, "sortable": False} for h, f in columns],
         "rows": [{k: "" if v is None else str(v) for k, v in r.items()} for r in rows],
     }
     if caption:
