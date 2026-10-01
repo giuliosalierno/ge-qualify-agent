@@ -84,6 +84,9 @@ class Session:
     #: Pending opportunities offered to the reviewer when they ask to start a
     #: technical review without specifying a record ID.
     pending_review_choices: list[dict[str, str]] = field(default_factory=list)
+    #: Links to files the storage provider wrote for this opportunity, for the
+    #: workspace panel: ``folder``, plus one per pack (``business``, ``tech``).
+    document_links: dict[str, str] = field(default_factory=dict)
     created_at: datetime = field(default_factory=_now)
     updated_at: datetime = field(default_factory=_now)
 
@@ -95,6 +98,16 @@ class Session:
         if suffix is None:
             self.stage_surface_ids[self.active_stage] = self.current_surface_id
         return self.current_surface_id
+
+    def panel_surface_id(self, suffix: str) -> str:
+        """A fresh surfaceId for a side panel opened mid-interview.
+
+        Unlike :meth:`next_surface_id`, leaves ``current_surface_id`` alone,
+        so the values the agent extracts from chat keep patching the open
+        stage card rather than the panel.
+        """
+        self.surface_seq += 1
+        return f"qualify-{suffix}-{self.surface_seq}"
 
     @property
     def pack(self) -> Pack:

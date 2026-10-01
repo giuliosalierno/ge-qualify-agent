@@ -311,3 +311,99 @@ def describe_echo(context: dict[str, Any]) -> str:
     if extra:
         lines.append(f"- other keys: {', '.join(f'`{k}`' for k in extra)}")
     return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Probe 4: live refresh and rich text (``probe live``)
+# ---------------------------------------------------------------------------
+#
+# Answers two questions the workspace panel depends on:
+#
+# * Does an ``updateDataModel`` sent in a *later* message reach a canvas that
+#   is already open? If so, the workspace can refresh in place after each
+#   stage instead of opening a fresh copy.
+# * How much markdown does ``Text`` render: headings, tables, quotes, links?
+#   Decides whether document previews can show tables as-is.
+
+LIVE_TRIGGERS = ("probe live", "a2ui probe live")
+LIVE_SURFACE_ID = "probe-canvas-live"
+PROBE_LIVE_BUMP = "probe_live_bump"
+
+_LIVE_ROOT = "/ui/probe/live"
+
+_RICH_MARKDOWN = """#### Heading 4
+
+Body with **bold**, _italic_, `code` and a [link to google.com](https://www.google.com).
+
+- bullet one
+- bullet two
+
+| Check | Verdict |
+| :--- | :--- |
+| 2.4 Transit approval | ✅ PASS |
+| 3.5 Cloud policy | ❌ FAIL |
+
+> A blockquote line.
+
+- [x] done checkbox
+- [ ] open checkbox"""
+
+
+def build_live_probe() -> list[dict[str, Any]]:
+    components: list[dict[str, Any]] = [
+        {
+            "id": "root",
+            "component": "Canvas",
+            "children": ["p4-title", "p4-count", "p4-bar", "p4-bump", "p4-rule", "p4-md"],
+            "autoOpen": True,
+            "cardTitle": "Probe 4 — live refresh and rich text",
+            "cardDescription": "Press Refresh, keep this panel open, watch the counter.",
+            "cardIcon": "science",
+        },
+        {"id": "p4-title", "component": "Text", "text": "Probe 4", "variant": "h3"},
+        {"id": "p4-count", "component": "Text", "text": {"path": f"{_LIVE_ROOT}/count"}, "variant": "h4"},
+        {
+            "id": "p4-bar",
+            "component": "MaterialProgressBar",
+            "value": {"path": f"{_LIVE_ROOT}/pct"},
+            "mode": "determinate",
+            "color": "primary",
+            "ariaLabel": "Probe progress",
+        },
+        {"id": "p4-bump-label", "component": "Text", "text": "Refresh this panel"},
+        {
+            "id": "p4-bump",
+            "component": "Button",
+            "child": "p4-bump-label",
+            "variant": "primary",
+            "action": {
+                "event": {
+                    "name": PROBE_LIVE_BUMP,
+                    "context": {"prompt": "Refresh — live probe", "n": {"path": f"{_LIVE_ROOT}/n"}},
+                }
+            },
+        },
+        {"id": "p4-rule", "component": "Divider"},
+        {"id": "p4-md", "component": "Text", "text": _RICH_MARKDOWN, "variant": "body"},
+    ]
+    data = {"ui": {"probe": {"live": {"count": "Refreshed 0 times", "pct": 20, "n": 0}}}}
+    return _surface(LIVE_SURFACE_ID, components, data)
+
+
+def build_live_bump(context: dict[str, Any]) -> list[dict[str, Any]]:
+    """Data-only update to the already-open probe panel: no createSurface."""
+    try:
+        n = int(context.get("n") or 0) + 1
+    except (TypeError, ValueError):
+        n = 1
+    return [
+        build_patch(
+            _LIVE_ROOT,
+            {"count": f"Refreshed {n} time{'s' if n != 1 else ''}", "pct": min(100, 20 + 20 * n), "n": n},
+            LIVE_SURFACE_ID,
+        )
+    ]
+
+
+def is_live_trigger(user_text: str | None) -> bool:
+    return bool(user_text) and user_text.strip().lower() in LIVE_TRIGGERS
