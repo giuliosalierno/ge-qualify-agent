@@ -37,6 +37,11 @@ QUADRANT_COLOURS = {
     "Deprioritized": "#80868b",
 }
 
+#: Overall chart size in pixels, axes and labels included ("fit" autosize).
+#: Sized for GE's default side-panel width.
+CHART_WIDTH = 600
+CHART_HEIGHT = 420
+
 _LO, _HI = 0.5, 5.5
 #: Largest offset from the cell centre. Below 0.5, so a spread point stays in
 #: its cell and therefore in its quadrant.
@@ -113,8 +118,17 @@ def quadrant_regions() -> list[dict[str, Any]]:
     ]
 
 
-def quadrant_matrix_spec(points: list[dict[str, Any]]) -> dict[str, Any]:
-    """Value x feasibility bubble chart with shaded, labelled quadrants."""
+def quadrant_matrix_spec(
+    points: list[dict[str, Any]], width: int = CHART_WIDTH, height: int = CHART_HEIGHT
+) -> dict[str, Any]:
+    """Value x feasibility bubble chart with shaded, labelled quadrants.
+
+    Fixed size on purpose. With ``"width": "container"`` Vega measures its
+    parent once, at first draw. GE draws the chart while the side panel is
+    still opening, so the first render came out narrow and only corrected
+    itself when a tab switch forced a redraw. A fixed width that fits the
+    default panel renders the same every time.
+    """
     region_labels = [
         {"x": _HI - 0.08, "y": _HI - 0.12, "label": "QUICK WINS", "quadrant": "Quick Wins", "align": "right"},
         {"x": STRATEGIC_LINE + 0.08, "y": _HI - 0.12, "label": "STRATEGIC BETS", "quadrant": "Strategic Bets", "align": "left"},
@@ -149,7 +163,9 @@ def quadrant_matrix_spec(points: list[dict[str, Any]]) -> dict[str, Any]:
 
     return {
         "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
-        "width": "container",
+        "width": width,
+        "height": height,
+        "autosize": {"type": "fit", "contains": "padding"},
         "config": {
             "view": {"stroke": None},
             "axis": {"labelFontSize": 12, "titleFontSize": 13, "titleFontWeight": "normal", "titleColor": "#5f6368"},

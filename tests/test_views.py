@@ -343,3 +343,10 @@ def test_views_use_only_components_seen_rendering_in_ge() -> None:
     ]
     used = {c["component"] for msgs in surfaces for c in _components(msgs).values()}
     assert used <= GE_RENDER_VERIFIED, used - GE_RENDER_VERIFIED
+
+
+def test_chart_has_a_fixed_size() -> None:
+    """`width: container` rendered narrow on first open in GE's side panel."""
+    spec = quadrant_matrix_spec(matrix_points(_summary().evaluations))
+    assert isinstance(spec["width"], int) and isinstance(spec["height"], int)
+    assert spec["autosize"]["type"] == "fit"

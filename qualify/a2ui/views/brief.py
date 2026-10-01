@@ -162,7 +162,7 @@ def _scores_tab(ev: OpportunityEvaluation) -> list[ui.Component]:
             f"**Feasibility {ev.feasibility_score}/5**{feas_note}. {ev.feasibility_rationale}",
             "body",
         ),
-        ui.chart("br-chart", f"{_DATA_ROOT}/chart", height=380),
+        ui.chart("br-chart", f"{_DATA_ROOT}/chart", height=440),
     ]
 
 
