@@ -192,6 +192,22 @@ def test_portfolio_table_cells_are_strings_in_rank_order() -> None:
     assert all(isinstance(v, str) for r in rows for v in r.values())
 
 
+def test_portfolio_table_headers_are_not_sortable() -> None:
+    # In GE a sortable header sends a `fetchData` action, i.e. a chat turn.
+    columns = _components(build_portfolio_view(_summary(), "s"))["pf-table"]["columns"]
+    assert columns and not any(c["sortable"] for c in columns)
+
+
+def test_table_fetch_data_from_an_old_panel_is_handled_quietly() -> None:
+    store = InMemorySessionStore(quiet=True)
+    out = execute_turn(
+        store,
+        TurnInput(context_id="ctx-v6", action_data={"name": "fetchData", "context": {}}),
+    )
+    assert "sorting" in out.reply_text
+    assert out.a2ui_messages == []
+
+
 def test_portfolio_actions_offer_brief_and_review_buttons() -> None:
     by_id = _components(build_portfolio_view(_summary(), "s"))
     events = [

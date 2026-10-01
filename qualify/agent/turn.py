@@ -219,6 +219,15 @@ def _run_turn(
                 a2ui_messages=[],
                 session=session,
             )
+        if event is not None and event.name == "fetchData":
+            # GcbpTable's server-side sort/paging request. Our tables are not
+            # sortable; this only arrives from panels rendered by older builds.
+            log.info("Ignoring table fetchData from %s", event.surface_id)
+            return TurnOutput(
+                reply_text="The list is already ranked by priority; column sorting isn't supported.",
+                a2ui_messages=[],
+                session=session,
+            )
         if event is not None and event.name in VIEW_EVENTS:
             view_output = _try_view_event(store, event, session)
             if view_output is not None:
