@@ -110,6 +110,14 @@ scripts/smoke_test_auth.sh
 `deploy.sh` reads `.env`. Useful overrides: `A2A_AUTH_MODE=enforce|log`,
 `SIGNIN_CARD=0|1`, `MAX_INSTANCES`.
 
+### One-click demo (go/demos)
+
+[`click-to-deploy/`](click-to-deploy/README.md) holds the Terraform that
+go/demos runs to deploy the agent into an Argolis project: Cloud Run, a GCS
+record store with synthetic seed data, and a Gemini Enterprise app with the
+agent registered. It runs with `STORAGE_PROVIDER=none` (no SharePoint, no Load
+Balancer).
+
 ---
 
 ## The standalone skills

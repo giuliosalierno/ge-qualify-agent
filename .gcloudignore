@@ -29,3 +29,6 @@ tests/
 # Git metadata
 .git/
 .gitignore
+
+# Click-to-Deploy Terraform (state holds generated secrets: never upload)
+click-to-deploy/

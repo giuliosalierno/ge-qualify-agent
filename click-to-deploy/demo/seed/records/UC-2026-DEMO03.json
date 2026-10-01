@@ -1,0 +1,87 @@
+{
+  "meta": {
+    "record_id": "UC-2026-DEMO03",
+    "context_id": null,
+    "initiative_name": "KYC document pre-check",
+    "submission_date": null,
+    "submitter": "Priya Nair (demo persona)",
+    "department_bu": "Cymbal Bank - Onboarding",
+    "schema_version": "1.0"
+  },
+  "business": {
+    "user_profile": "Onboarding analysts",
+    "user_count": 60,
+    "problem_description": "Analysts check every onboarding pack for missing or expired documents before the compliance review, and packs bounce back often.",
+    "user_stories": "As an onboarding analyst I want missing documents flagged before review.",
+    "expected_impacts": "Fewer rejected onboarding packs; faster account opening"
+  },
+  "sizing": {
+    "task_frequency_weekly": 25.0,
+    "baseline_minutes_per_task": 20.0,
+    "target_minutes_saved_per_task": 10.0
+  },
+  "technical": {
+    "data_sources": [
+      "gcs",
+      "internal_api"
+    ],
+    "other_data_sources": null,
+    "systems": [],
+    "capability_level": 6,
+    "capability_rationale": "Document AI extraction plus checks against an internal API.",
+    "data_freshness": null,
+    "landing_zone_status": null,
+    "network": {
+      "hosting_environments": null,
+      "transit_path": null,
+      "firewall_proxy_status": null,
+      "transit_blocker_status": null
+    },
+    "security": {
+      "user_authentication": null,
+      "service_authentication": null,
+      "iam_least_privilege": null,
+      "data_classification": null,
+      "cloud_policy_status": null,
+      "residency_requirements": null
+    },
+    "grounding": {
+      "acl_preservation_required": null,
+      "model_profile": null,
+      "citation_policy": null,
+      "query_volume": null,
+      "latency_sla": null
+    }
+  },
+  "proposed": {
+    "business_owner": "Head of Onboarding",
+    "executive_sponsor": "Chief Operating Officer",
+    "production_catcher_team": null,
+    "tech_owner": null,
+    "network_security_lead": null,
+    "domain_sme": null,
+    "adoption_kpi": "First-time-right rate of onboarding packs"
+  },
+  "scoring": {
+    "feasibility_score": null,
+    "business_value_score": null,
+    "priority_status": null,
+    "category": null,
+    "scoping_document_url": null
+  },
+  "execution": {
+    "business_owner": null,
+    "executive_sponsor": null,
+    "tech_owner": null,
+    "target_mvp_date": null,
+    "production_catcher_team": null
+  },
+  "provenance": {},
+  "derived": {
+    "weekly_hours_saved_per_user": 4.17,
+    "annual_hours_saved_per_user": 208.33,
+    "total_annual_team_hours_saved": 12500.0,
+    "technical_readiness_pct": null,
+    "delivery_tier": 3
+  }
+}

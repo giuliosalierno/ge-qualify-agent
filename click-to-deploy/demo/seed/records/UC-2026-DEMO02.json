@@ -1,0 +1,96 @@
+{
+  "meta": {
+    "record_id": "UC-2026-DEMO02",
+    "context_id": null,
+    "initiative_name": "Store policy assistant",
+    "submission_date": null,
+    "submitter": "Sam Okafor (demo persona)",
+    "department_bu": "Cymbal Retail - Store Operations",
+    "schema_version": "1.0"
+  },
+  "business": {
+    "user_profile": "Store managers",
+    "user_count": 450,
+    "problem_description": "Store managers search several intranet sites for returns, staffing and safety policies and often call the regional office instead.",
+    "user_stories": "As a store manager I want a cited answer to a policy question in seconds.",
+    "expected_impacts": "Fewer calls to the regional office; consistent policy answers"
+  },
+  "sizing": {
+    "task_frequency_weekly": 15.0,
+    "baseline_minutes_per_task": 10.0,
+    "target_minutes_saved_per_task": 8.0
+  },
+  "technical": {
+    "data_sources": [
+      "google_drive"
+    ],
+    "other_data_sources": null,
+    "systems": [
+      {
+        "name": "Policy library (Google Drive)",
+        "function": "Policy documents",
+        "hosting_location": "Google Workspace",
+        "interface": "Native Gemini Enterprise connector",
+        "data_format": "Google Docs and PDF",
+        "schema_status": "Unstructured documents",
+        "system_owner": "Retail Operations Excellence"
+      }
+    ],
+    "capability_level": 2,
+    "capability_rationale": "Read-only Q&A over documents already in Google Drive.",
+    "data_freshness": "Policies updated monthly",
+    "landing_zone_status": "Existing Google Cloud organisation with Gemini Enterprise",
+    "network": {
+      "hosting_environments": "SaaS (Google Workspace)",
+      "transit_path": "Google-native, no network transit",
+      "firewall_proxy_status": "Not applicable",
+      "transit_blocker_status": "None"
+    },
+    "security": {
+      "user_authentication": "Google identity (Cloud Identity)",
+      "service_authentication": "Native connector, no service credentials",
+      "iam_least_privilege": "Document permissions inherited from Drive",
+      "data_classification": "internal",
+      "cloud_policy_status": "Approved for Gemini Enterprise",
+      "residency_requirements": "None"
+    },
+    "grounding": {
+      "acl_preservation_required": true,
+      "model_profile": "Flash",
+      "citation_policy": "Every answer cites the source policy",
+      "query_volume": "About 7,000 queries per week",
+      "latency_sla": "Interactive, under 5 seconds"
+    }
+  },
+  "proposed": {
+    "business_owner": "VP Store Operations",
+    "executive_sponsor": "Chief Retail Officer",
+    "production_catcher_team": "Workplace Technology",
+    "tech_owner": "Workplace Technology lead",
+    "network_security_lead": null,
+    "domain_sme": null,
+    "adoption_kpi": "Weekly active store managers"
+  },
+  "scoring": {
+    "feasibility_score": null,
+    "business_value_score": null,
+    "priority_status": null,
+    "category": null,
+    "scoping_document_url": null
+  },
+  "execution": {
+    "business_owner": null,
+    "executive_sponsor": null,
+    "tech_owner": null,
+    "target_mvp_date": null,
+    "production_catcher_team": null
+  },
+  "provenance": {},
+  "derived": {
+    "weekly_hours_saved_per_user": 2.0,
+    "annual_hours_saved_per_user": 100.0,
+    "total_annual_team_hours_saved": 45000.0,
+    "technical_readiness_pct": null,
+    "delivery_tier": 1
+  }
+}

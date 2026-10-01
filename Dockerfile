@@ -3,7 +3,8 @@ FROM python:3.12-slim
 WORKDIR /app
 
 # Install uv package manager
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+# Pinned by digest (uv 0.9.25) so builds are reproducible; bump deliberately.
+COPY --from=ghcr.io/astral-sh/uv:0.9.25@sha256:13e233d08517abdafac4ead26c16d881cd77504a2c40c38c905cf3a0d70131a6 /uv /uvx /bin/
 
 # Copy dependency definitions first for Docker layer caching
 COPY pyproject.toml uv.lock ./

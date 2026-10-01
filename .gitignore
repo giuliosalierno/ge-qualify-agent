@@ -23,3 +23,11 @@ doc/
 # Generated skill zip archives
 *.zip
 .data/
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+.terraform.lock.hcl.bak
+crash.log

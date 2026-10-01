@@ -1,8 +1,10 @@
 """Redirect handler for GET / behind Google Cloud IAP.
 
-When a user accesses https://8.233.121.252.nip.io/, Google Cloud IAP authenticates
-their Google Identity first, and GET / immediately 302-redirects them to the native
-Gemini Enterprise Web App.
+When a user opens the Load Balancer URL, Google Cloud IAP authenticates their
+Google Identity first, and GET / immediately 302-redirects them to the native
+Gemini Enterprise Web App configured in ``GE_WEB_APP_URL``. Deployments without
+that variable (e.g. go/demos Click-to-Deploy, which has no Load Balancer)
+answer 404 rather than redirecting to another deployment's app.
 """
 
 from __future__ import annotations
@@ -11,12 +13,7 @@ import hashlib
 import os
 
 from starlette.requests import Request
-from starlette.responses import JSONResponse, RedirectResponse
-
-DEFAULT_GE_WEB_APP_URL = (
-    "https://vertexaisearch.cloud.google.com/home/cid/"
-    "53514d2f-4bc9-479d-9489-9503a5bf8332?hl=en_US"
-)
+from starlette.responses import JSONResponse, PlainTextResponse, RedirectResponse
 
 
 def _extract_iap_email(request: Request) -> str:
@@ -40,7 +37,9 @@ async def handle_whoami(request: Request) -> JSONResponse:
     )
 
 
-async def handle_web_ui(request: Request) -> RedirectResponse:
+async def handle_web_ui(request: Request) -> RedirectResponse | PlainTextResponse:
     """Redirects authenticated IAP visitors directly to the native Gemini Enterprise Web App."""
-    target_url = os.environ.get("GE_WEB_APP_URL", DEFAULT_GE_WEB_APP_URL)
+    target_url = os.environ.get("GE_WEB_APP_URL", "").strip()
+    if not target_url.startswith("https://"):
+        return PlainTextResponse("Not found", status_code=404)
     return RedirectResponse(url=target_url, status_code=302)

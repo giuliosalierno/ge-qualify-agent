@@ -4,6 +4,10 @@ One storage provider is active per deployment, chosen by ``STORAGE_PROVIDER``:
 
 - ``sharepoint`` (default): Microsoft SharePoint via Microsoft Graph.
 - ``gdrive``: Google Drive, in the signed-in user's My Drive (``drive.file``).
+- ``none``: no document storage. Deliverables are rendered in chat only and
+  the durable record store (``QUALIFY_GCS_BUCKET``) is the single source of
+  truth for portfolio and handover. Used by the go/demos Click-to-Deploy
+  build, where testers have no Microsoft tenant or Drive consent.
 
 Callers in the agent (`turn.py`, `handover.py`) talk to
 :func:`get_storage_connector` and never import a provider module directly, so
@@ -31,8 +35,9 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 #: Providers this build knows how to construct.
-SUPPORTED_PROVIDERS = ("sharepoint", "gdrive")
+SUPPORTED_PROVIDERS = ("sharepoint", "gdrive", "none")
 DEFAULT_PROVIDER = "sharepoint"
+DISABLED_PROVIDER = "none"
 
 
 @dataclass
@@ -55,6 +60,10 @@ class StorageSyncResult:
 
 class StorageAuthRequired(RuntimeError):
     """A live storage call needs a signed-in user and this conversation has none."""
+
+
+class StorageDisabled(RuntimeError):
+    """This deployment runs with ``STORAGE_PROVIDER=none``."""
 
 
 @runtime_checkable
@@ -126,14 +135,26 @@ def storage_provider() -> str:
     return value
 
 
+def storage_enabled() -> bool:
+    """False when the deployment has no document storage (``none``)."""
+    return storage_provider() != DISABLED_PROVIDER
+
+
 def get_storage_connector() -> StorageConnector:
     """Returns the connector for the active provider.
 
     Resolves each provider's own singleton accessor through its module at call
     time, so tests that patch e.g. ``sharepoint.get_sharepoint_connector``
     keep working.
+
+    Raises:
+        StorageDisabled: ``STORAGE_PROVIDER=none``. Callers already treat a
+            raising connector as "use the record store", which is exactly the
+            behaviour wanted when there is no document storage.
     """
     provider = storage_provider()
+    if provider == DISABLED_PROVIDER:
+        raise StorageDisabled("Document storage is disabled (STORAGE_PROVIDER=none)")
     if provider == "gdrive":
         from qualify.connectors import gdrive  # noqa: PLC0415
 
@@ -146,6 +167,8 @@ def get_storage_connector() -> StorageConnector:
 
 def is_connected(context_id: str | None) -> bool:
     """True if this conversation currently holds a live access token."""
+    if not storage_enabled():
+        return False
     return bool(token_vault.get_access(context_id))
 
 
@@ -194,6 +217,8 @@ def sync_to_storage(
 ) -> StorageSyncResult | None:
     """Writes a record to the active provider. See :func:`sync_record`."""
     try:
+        if not storage_enabled():
+            return None
         connector = get_storage_connector()
     except Exception as exc:
         logger.warning("Storage connector unavailable: %s", exc)
