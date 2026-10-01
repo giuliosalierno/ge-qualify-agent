@@ -124,12 +124,13 @@ Download and add them to Gemini Enterprise:
 - [`ge-intake-business`](https://github.com/giuliosalierno/ge-qualify-agent/releases/latest/download/ge_intake_business.zip) ([source](skills/ge_intake_business/SKILL.md))
 - [`ge-review-tech`](https://github.com/giuliosalierno/ge-qualify-agent/releases/latest/download/ge_tech_review.zip) ([source](skills/ge_tech_review/SKILL.md))
 
-Both run as a consultative interview, **one stage per turn**. On turn 1 the
-skill transfers a working draft to the Canvas agent and starts questioning;
-every unverified field stays a literal `⚠️ [Pending Stage X Discovery]`
-placeholder until the customer confirms it. The final turn replaces every
-placeholder with verified facts. Run them in order: the Business Value Brief
-from phase 1 is the input to phase 2.
+Both run as a consultative interview, **one stage per turn**, entirely in
+chat: no Canvas or Google Doc is created mid-interview, because each Canvas
+hand-off creates a document and can take minutes. Every unverified field stays
+a literal `⚠️ [Pending Stage X Discovery]` placeholder until the customer
+confirms it. The final turn renders the finished deliverable as markdown in
+chat and offers to create a Google Doc only on request. Run them in order: the
+Business Value Brief from phase 1 is the input to phase 2.
 
 ### `ge-intake-business` — business intake and value qualification
 
