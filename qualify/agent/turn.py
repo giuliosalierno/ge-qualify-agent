@@ -29,6 +29,9 @@ from qualify.a2ui.actions import (
     dispatch,
     parse_action,
 )
+from qualify.a2ui.canvas_probe import PROBE_CANVAS_ECHO, build_canvas_probe
+from qualify.a2ui.canvas_probe import describe_echo as describe_canvas_echo
+from qualify.a2ui.canvas_probe import is_probe_trigger as is_canvas_probe_trigger
 from qualify.a2ui.compiler import (
     build_completion_surface,
     build_patch,
@@ -206,6 +209,15 @@ def _run_turn(
     # -----------------------------------------------------------------------
     if turn_input.action_data:
         event = parse_action(turn_input.action_data)
+        if event is not None and event.name == PROBE_CANVAS_ECHO:
+            # Diagnostic only: report what the canvas inputs wrote back and
+            # leave the session record untouched.
+            log.info("Canvas probe echo: %r", event.context)
+            return TurnOutput(
+                reply_text=describe_canvas_echo(event.context),
+                a2ui_messages=[],
+                session=session,
+            )
         if event is not None:
             outcome = dispatch(session, event)
             output = _handle_action_outcome(
@@ -858,6 +870,23 @@ def _try_a2ui_probe(user_text: str | None, session: Session) -> TurnOutput | Non
     """
     if not user_text:
         return None
+
+    if is_canvas_probe_trigger(user_text):
+        return TurnOutput(
+            reply_text=(
+                "**A2UI canvas probe**\n\n"
+                "Three test surfaces below. Please report:\n\n"
+                "1. **Probe 1** card: does clicking it open a side panel with text?\n"
+                "2. **Probe 2** (should open by itself): do the tabs switch? On "
+                "*Edit*, do you see the collapsible panel, text field, slider and "
+                "**QW** badge? Change the name, drag the slider, press **Save** "
+                "and tell me what I reply. On *Portfolio chart* and *Table*, "
+                "does anything draw?\n"
+                "3. **Probe 3**: does the chart draw inline in the chat?"
+            ),
+            a2ui_messages=build_canvas_probe(),
+            session=session,
+        )
 
     if user_text.strip().lower() not in ("a2ui probe openurl", "probe openurl"):
         return None
