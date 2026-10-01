@@ -14,6 +14,7 @@ from starlette.routing import Route
 import uvicorn
 
 from qualify.agent.card import build_agent_card
+from qualify.config import agent_base_url
 from qualify.agent.executor import QualifyAgentExecutor
 from qualify.agent.task_store import ReopenableTaskStore
 from qualify.agent.turn import GeminiChatClient
@@ -61,7 +62,7 @@ def build_app():
     """Builds the Starlette application with A2A protocol routes, SharePoint MCP routes, and CORS."""
     host = os.environ.get("HOST", "0.0.0.0")
     port = int(os.environ.get("PORT", 8080))
-    base_url = os.environ.get("AGENT_URL", f"http://localhost:{port}")
+    base_url = agent_base_url()
     model_name = os.environ.get("MODEL", "gemini-3.8-flash")
 
     # Use Gemini extraction and chat clients if credentials / environment permits

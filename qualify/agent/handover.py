@@ -274,6 +274,11 @@ def load_review_record(
             log.info("Handover: record %s came from the record store", record_id)
             return record
 
+    from qualify.connectors.storage import storage_enabled  # noqa: PLC0415
+
+    if not storage_enabled():
+        return None
+
     try:
         from qualify.connectors.storage import (  # noqa: PLC0415
             get_storage_connector,
@@ -510,6 +515,26 @@ def list_pending_reviews(
     the listing will still show them, but they cannot be offered as a review
     target when we cannot say which record they are.
     """
+    from qualify.connectors.storage import storage_enabled  # noqa: PLC0415
+
+    if not storage_enabled():
+        # No document storage: the record store is the only source of truth,
+        # so its answer is complete and an empty list really means "none".
+        list_completed = getattr(store, "list_completed", None)
+        if list_completed is None:
+            return [], False
+        try:
+            completed = list_completed()
+        except Exception as store_exc:
+            log.warning("Handover: record-store pending list failed: %s", store_exc)
+            return [], False
+        entries = [
+            e
+            for e in completed
+            if e.get("hasBrief") and not e.get("hasDossier") and e.get("recordId")
+        ]
+        return entries[:limit], True
+
     try:
         from qualify.connectors.storage import (  # noqa: PLC0415
             get_storage_connector,

@@ -29,6 +29,9 @@ from qualify.a2ui.actions import (
     dispatch,
     parse_action,
 )
+from qualify.a2ui.canvas_probe import PROBE_CANVAS_ECHO, build_canvas_probe
+from qualify.a2ui.canvas_probe import describe_echo as describe_canvas_echo
+from qualify.a2ui.canvas_probe import is_probe_trigger as is_canvas_probe_trigger
 from qualify.a2ui.compiler import (
     build_completion_surface,
     build_patch,
@@ -42,6 +45,7 @@ from qualify.a2ui.patcher import (
     extract_drafts,
 )
 from qualify.a2ui.provenance import missing_required
+from qualify.config import agent_base_url
 from qualify.connectors.oauth_state import build_signin_url
 from qualify.a2ui.systems_extractor import (
     SYSTEMS_STAGE_ID,
@@ -205,6 +209,15 @@ def _run_turn(
     # -----------------------------------------------------------------------
     if turn_input.action_data:
         event = parse_action(turn_input.action_data)
+        if event is not None and event.name == PROBE_CANVAS_ECHO:
+            # Diagnostic only: report what the canvas inputs wrote back and
+            # leave the session record untouched.
+            log.info("Canvas probe echo: %r", event.context)
+            return TurnOutput(
+                reply_text=describe_canvas_echo(event.context),
+                a2ui_messages=[],
+                session=session,
+            )
         if event is not None:
             outcome = dispatch(session, event)
             output = _handle_action_outcome(
@@ -390,7 +403,7 @@ def _run_turn(
     )
     if is_first_stage_open and not session.welcome_shown:
         session.welcome_shown = True
-        reply_text = f"{_WELCOME_BANNER}\n\n---\n\n{reply_text}"
+        reply_text = f"{_welcome_banner()}\n\n---\n\n{reply_text}"
 
     store.save(session)
     return TurnOutput(
@@ -456,9 +469,13 @@ def _handle_action_outcome(
                 reply_text = render_deliverable(
                     session.pack_name, session.record, skipped_stages=session.skipped
                 )
-                base_url = _os.environ.get("AGENT_URL", "https://ge-qualify-agent-g22bhpwccq-uc.a.run.app").rstrip("/")
+                base_url = agent_base_url()
                 auth_link = build_signin_url(base_url, session.context_id)
-                if sp_res and sp_res.auth_mode == "delegated":
+                from qualify.connectors.storage import storage_enabled  # noqa: PLC0415
+
+                if not storage_enabled():
+                    reply_text += _record_store_saved_note(session)
+                elif sp_res and sp_res.auth_mode == "delegated":
                     reply_text += (
                         f"\n\n---\n✅ **Saved to SharePoint**: "
                         f"[Open SharePoint Folder]({sp_res.folder_url})"
@@ -641,6 +658,11 @@ def _maybe_offer_signin(session: Session) -> TurnOutput | None:
     if _os.environ.get("SIGNIN_CARD") == "0":
         return None
 
+    from qualify.connectors.storage import storage_enabled  # noqa: PLC0415
+
+    if not storage_enabled():
+        return None
+
     if session.signin_prompted or session.signin_dismissed:
         return None
 
@@ -655,9 +677,7 @@ def _maybe_offer_signin(session: Session) -> TurnOutput | None:
     if is_connected(session.context_id):
         return None
 
-    base_url = _os.environ.get(
-        "AGENT_URL", "https://ge-qualify-agent-g22bhpwccq-uc.a.run.app"
-    ).rstrip("/")
+    base_url = agent_base_url()
     auth_url = build_signin_url(base_url, session.context_id)
 
     session.signin_prompted = True
@@ -670,7 +690,7 @@ def _maybe_offer_signin(session: Session) -> TurnOutput | None:
     )
     if not session.welcome_shown:
         session.welcome_shown = True
-        reply_text = f"{_WELCOME_BANNER}\n\n---\n\n{signin_prompt_body}"
+        reply_text = f"{_welcome_banner()}\n\n---\n\n{signin_prompt_body}"
     else:
         reply_text = signin_prompt_body
 
@@ -691,6 +711,42 @@ _WELCOME_BANNER = (
     "3. **📊 CoE Portfolio Prioritization (Activity 3 — CoE Leads)**\n"
     "   Type **`portfolio review`** to score all SharePoint opportunities on Business Value (1–5) & Feasibility (1–5), segment them into quadrants (*Quick Wins*, *Strategic Bets*, *Departmental Niche*, *Deprioritized*), and publish the **Portfolio Prioritization Report** to SharePoint."
 )
+
+#: Banner for deployments without document storage (``STORAGE_PROVIDER=none``),
+#: e.g. the go/demos Click-to-Deploy build.
+_WELCOME_BANNER_NO_STORAGE = (
+    "### 👋 Welcome to the Gemini Enterprise AI Qualification & CoE Agent\n"
+    "I support three workflows. Every finished intake and review is saved to the agent's record store:\n\n"
+    "1. **📋 Business Value Intake (Phase 1 — Business Owners)**\n"
+    "   Describe a new use case idea below (or fill in the **Stage 1** card) to size annual hours saved, match the right Gemini Enterprise capability (Levels 1–6), and produce the **Business Value Brief**.\n"
+    "2. **🏗️ Technical Architecture Review (Phase 2 — Solution Architects)**\n"
+    "   Type **`technical review`** to list qualified opportunities waiting for review, pick one by name or ID, and generate a 22-point **Technical Architecture Dossier**.\n"
+    "3. **📊 CoE Portfolio Prioritization (Activity 3 — CoE Leads)**\n"
+    "   Type **`portfolio review`** to score every qualified opportunity on Business Value (1–5) & Feasibility (1–5) and segment them into quadrants (*Quick Wins*, *Strategic Bets*, *Departmental Niche*, *Deprioritized*)."
+)
+
+
+def _welcome_banner() -> str:
+    """The welcome text matching this deployment's storage configuration."""
+    from qualify.connectors.storage import storage_enabled  # noqa: PLC0415
+
+    return _WELCOME_BANNER if storage_enabled() else _WELCOME_BANNER_NO_STORAGE
+
+
+def _record_store_saved_note(session: Session) -> str:
+    """Footer for a finished deliverable when there is no document storage."""
+    rec_id = session.record.meta.record_id
+    if session.pack_name == "tech":
+        nxt = "Type `portfolio review` to see where it ranks."
+    else:
+        nxt = (
+            f"A solution architect can now type `technical review {rec_id}` "
+            "to start Phase 2."
+        )
+    return (
+        f"\n\n---\n✅ **Saved** to the agent's record store as `{rec_id}`. {nxt}"
+    )
+
 
 _HELP_PHRASES = (
     "what can you do",
@@ -714,7 +770,7 @@ def _try_help_command(user_text: str | None, session: Session) -> TurnOutput | N
     ):
         session.welcome_shown = True
         return TurnOutput(
-            reply_text=_WELCOME_BANNER,
+            reply_text=_welcome_banner(),
             a2ui_messages=[],
             session=session,
         )
@@ -815,6 +871,23 @@ def _try_a2ui_probe(user_text: str | None, session: Session) -> TurnOutput | Non
     if not user_text:
         return None
 
+    if is_canvas_probe_trigger(user_text):
+        return TurnOutput(
+            reply_text=(
+                "**A2UI canvas probe**\n\n"
+                "Three test surfaces below. Please report:\n\n"
+                "1. **Probe 1** card: does clicking it open a side panel with text?\n"
+                "2. **Probe 2** (should open by itself): do the tabs switch? On "
+                "*Edit*, do you see the collapsible panel, text field, slider and "
+                "**QW** badge? Change the name, drag the slider, press **Save** "
+                "and tell me what I reply. On *Portfolio chart* and *Table*, "
+                "does anything draw?\n"
+                "3. **Probe 3**: does the chart draw inline in the chat?"
+            ),
+            a2ui_messages=build_canvas_probe(),
+            session=session,
+        )
+
     if user_text.strip().lower() not in ("a2ui probe openurl", "probe openurl"):
         return None
 
@@ -822,9 +895,7 @@ def _try_a2ui_probe(user_text: str | None, session: Session) -> TurnOutput | Non
 
     from qualify.a2ui.signin import build_openurl_probe  # noqa: PLC0415
 
-    base_url = _os.environ.get(
-        "AGENT_URL", "https://ge-qualify-agent-g22bhpwccq-uc.a.run.app"
-    ).rstrip("/")
+    base_url = agent_base_url()
     auth_url = build_signin_url(base_url, session.context_id)
 
     reply_text = (
@@ -877,9 +948,24 @@ def _try_portfolio_review(
     import os as _os  # noqa: PLC0415
 
     from qualify.a2ui.signin import build_signin_card  # noqa: PLC0415
-    from qualify.connectors.storage import get_storage_connector  # noqa: PLC0415
-    from qualify.export.portfolio import render_portfolio_report  # noqa: PLC0415
-    from qualify.scoring.portfolio import evaluate_portfolio  # noqa: PLC0415
+    from qualify.connectors.storage import (  # noqa: PLC0415
+        get_storage_connector,
+        storage_enabled,
+    )
+
+    if not storage_enabled():
+        items = _portfolio_items_from_record_store(store)
+        if not items:
+            return TurnOutput(
+                reply_text=(
+                    "No qualified opportunities yet.\n\n"
+                    "Complete at least one **Business Value Intake** (Phase 1), "
+                    "then run `portfolio review` again."
+                ),
+                a2ui_messages=[],
+                session=session,
+            )
+        return _render_portfolio(store, session, items, connector=None)
 
     connector = get_storage_connector()
     from_record_store = False
@@ -892,9 +978,7 @@ def _try_portfolio_review(
         items = _portfolio_items_from_record_store(store)
         from_record_store = True
         if not items:
-            base_url = _os.environ.get(
-                "AGENT_URL", "https://ge-qualify-agent-g22bhpwccq-uc.a.run.app"
-            ).rstrip("/")
+            base_url = agent_base_url()
             auth_url = build_signin_url(base_url, session.context_id)
             session.signin_prompted = True
             return TurnOutput(
@@ -918,6 +1002,28 @@ def _try_portfolio_review(
             session=session,
         )
 
+    return _render_portfolio(
+        store, session, items, connector=None if from_record_store else connector
+    )
+
+
+def _render_portfolio(
+    store: SessionStore,
+    session: Session,
+    items: list[tuple[Any, dict[str, Any]]],
+    *,
+    connector: Any | None,
+) -> TurnOutput:
+    """Scores `items` and renders the report.
+
+    `connector` is None when the items came from the record store; the report
+    is then not published anywhere and says where its data came from.
+    """
+    from qualify.connectors.storage import storage_enabled  # noqa: PLC0415
+    from qualify.export.portfolio import render_portfolio_report  # noqa: PLC0415
+    from qualify.scoring.portfolio import evaluate_portfolio  # noqa: PLC0415
+
+    from_record_store = connector is None
     summary = evaluate_portfolio(items)
 
     # Persist updated CoE scoring fields back to RecordStore if configured
@@ -953,7 +1059,7 @@ def _try_portfolio_review(
         for ev in summary.evaluations
     ]
 
-    if from_record_store:
+    if from_record_store and storage_enabled():
         final_md = (
             "_Scored from the agent's record store (finished intakes only) — "
             "SharePoint was not available for this conversation._\n\n" + final_md
@@ -1144,9 +1250,7 @@ def _offer_pending_reviews(
         import os as _os  # noqa: PLC0415
         from qualify.a2ui.signin import build_signin_card  # noqa: PLC0415
 
-        base_url = _os.environ.get(
-            "AGENT_URL", "https://ge-qualify-agent-g22bhpwccq-uc.a.run.app"
-        ).rstrip("/")
+        base_url = agent_base_url()
         auth_url = build_signin_url(base_url, session.context_id)
         cards = (
             build_signin_card(auth_url)
@@ -1216,6 +1320,23 @@ def _try_load_from_sharepoint(user_text: str | None, session: Session) -> TurnOu
     import re  # noqa: PLC0415
 
     text_lower = user_text.strip().lower()
+
+    from qualify.connectors.storage import storage_enabled  # noqa: PLC0415
+
+    if not storage_enabled():
+        if "sharepoint" not in text_lower:
+            return None
+        return TurnOutput(
+            reply_text=(
+                "SharePoint isn't connected in this deployment. Every finished "
+                "intake and review is saved automatically to the agent's record "
+                "store, and the documents are shown in full in this chat.\n\n"
+                "Type `technical review` to see what is waiting for review, or "
+                "`portfolio review` to rank every qualified use case."
+            ),
+            a2ui_messages=[],
+            session=session,
+        )
 
     # Case B0: the user is telling us they finished signing in.
     #
@@ -1294,7 +1415,7 @@ def _try_load_from_sharepoint(user_text: str | None, session: Session) -> TurnOu
                 session=session,
             )
 
-        base_url = _os.environ.get("AGENT_URL", "https://ge-qualify-agent-g22bhpwccq-uc.a.run.app").rstrip("/")
+        base_url = agent_base_url()
         auth_link = build_signin_url(base_url, session.context_id)
         reply_text = (
             f"🔐 **Microsoft SharePoint Sign-In Required**\n\n"
@@ -1327,9 +1448,7 @@ def _try_load_from_sharepoint(user_text: str | None, session: Session) -> TurnOu
         except Exception:
             from qualify.a2ui.signin import build_signin_card  # noqa: PLC0415
 
-            base_url = _os.environ.get(
-                "AGENT_URL", "https://ge-qualify-agent-g22bhpwccq-uc.a.run.app"
-            ).rstrip("/")
+            base_url = agent_base_url()
             auth_url = build_signin_url(base_url, session.context_id)
             cards = (
                 build_signin_card(auth_url)
@@ -1397,9 +1516,7 @@ def _try_load_from_sharepoint(user_text: str | None, session: Session) -> TurnOu
     try:
         loaded = connector.load_opportunity(query, context_id=session.context_id)
     except StorageAuthRequired:
-        base_url = _os.environ.get(
-            "AGENT_URL", "https://ge-qualify-agent-g22bhpwccq-uc.a.run.app"
-        ).rstrip("/")
+        base_url = agent_base_url()
         return TurnOutput(
             reply_text=(
                 "🔐 Please **[sign in with Microsoft ↗]"
