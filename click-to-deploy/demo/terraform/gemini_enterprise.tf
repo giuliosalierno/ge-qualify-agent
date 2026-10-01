@@ -76,8 +76,11 @@ resource "null_resource" "register_agent" {
   triggers = {
     engine_id = local.ge_engine_id
     agent_url = local.service_url
-    # Re-sync the card snapshot GE stores whenever a new revision ships.
-    revision = google_cloud_run_v2_service.agent.latest_ready_revision
+    # Re-sync the card snapshot GE stores whenever new code ships. The image
+    # tag is a hash of the source and is known at plan time; the service's
+    # latest_ready_revision is not (it changes mid-apply, which Terraform
+    # rejects as an inconsistent final plan).
+    image = local.image
   }
 
   provisioner "local-exec" {
