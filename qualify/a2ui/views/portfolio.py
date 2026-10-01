@@ -123,12 +123,13 @@ def build_portfolio_view(
     # --- Matrix tab -----------------------------------------------------------
     nodes += [
         ui.column("pf-matrix", ["pf-chart", "pf-chart-note"]),
-        ui.chart("pf-chart", f"{_DATA_ROOT}/chart", height=380),
+        ui.chart("pf-chart", f"{_DATA_ROOT}/chart", height=440),
         ui.text(
             "pf-chart-note",
-            "Bubble size = hours saved per year. Dashed lines are the Quick Win "
-            "thresholds (value ≥ 3, feasibility ≥ 4). Hover a bubble for details. "
-            "\\* Feasibility is indicative until the technical review.",
+            "Bubble size = hours saved per year · ⛔ = hard blocker · "
+            "Quick Win = value ≥ 3 and feasibility ≥ 4 · Hover a bubble for details. "
+            "Feasibility marked * in the ranked list is indicative until the "
+            "technical review.",
             "caption",
         ),
     ]
