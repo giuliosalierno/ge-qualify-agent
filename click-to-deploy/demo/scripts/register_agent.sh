@@ -6,6 +6,7 @@
 # stored snapshot of the agent card is kept current.
 #
 # Required env: PROJECT_ID, ENGINE_ID, AGENT_URL, DISPLAY_NAME.
+# Optional env: ACCESS_TOKEN (OAuth token for the Discovery Engine API).
 # Called by click-to-deploy/demo/terraform/gemini_enterprise.tf.
 
 set -euo pipefail
@@ -51,7 +52,8 @@ PY
 
 # --- 3. Create or update ----------------------------------------------------
 BASE="https://discoveryengine.googleapis.com/v1alpha/projects/${PROJECT_ID}/locations/global/collections/default_collection/engines/${ENGINE_ID}/assistants/default_assistant/agents"
-ACCESS="$(gcloud auth print-access-token)"
+# Terraform passes the runner's token (google_client_config); fall back to gcloud.
+ACCESS="${ACCESS_TOKEN:-$(gcloud auth print-access-token)}"
 H=(-H "Authorization: Bearer $ACCESS" -H "x-goog-user-project: ${PROJECT_ID}" -H "Content-Type: application/json")
 
 EXISTING="$(curl -sf "${H[@]}" "$BASE?pageSize=100" | python3 -c '

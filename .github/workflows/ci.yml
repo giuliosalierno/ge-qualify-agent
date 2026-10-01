@@ -31,3 +31,14 @@ jobs:
       - run: terraform fmt -check -recursive
       - run: terraform init -backend=false -input=false
       - run: terraform validate
+
+  org-policy:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: click-to-deploy/org_policy
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+      - run: terraform init -backend=false -input=false
+      - run: terraform validate

@@ -43,6 +43,8 @@ resource "google_discovery_engine_search_engine" "demo" {
   }
 }
 
+data "google_client_config" "current" {}
+
 resource "null_resource" "register_agent" {
   count = var.register_agent ? 1 : 0
 
@@ -57,6 +59,7 @@ resource "null_resource" "register_agent" {
     command     = "${path.module}/../scripts/register_agent.sh"
     interpreter = ["/bin/bash", "-c"]
     environment = {
+      ACCESS_TOKEN = data.google_client_config.current.access_token
       PROJECT_ID   = var.project_id
       ENGINE_ID    = local.ge_engine_id
       AGENT_URL    = local.service_url

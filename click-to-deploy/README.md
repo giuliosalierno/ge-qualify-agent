@@ -51,13 +51,16 @@ terraform apply \
   -var project_id=YOUR_PROJECT -var project_name=YOUR_PROJECT \
   -var project_number=$(gcloud projects describe YOUR_PROJECT --format='value(projectNumber)') \
   -var org_id=YOUR_ORG -var gcp_account_name=you@your-argolis-domain \
-  -var deployment_service_account_name=unused -var data_location=US \
+  -var deployment_service_account_name=unused -var data_location=unused \
   -var secret_stored_project=unused
 terraform destroy   # same -var flags; leaves the project clean
 ```
 
 Requires `gcloud`, `curl` and `python3` on the machine running Terraform
-(image build and Gemini Enterprise registration run as `local-exec`).
+(image build and Gemini Enterprise registration run as `local-exec`, the same
+pattern the CDP Sample_Standard_Demos template uses). In go/demos the
+`org_policy/` stage runs first and enables the APIs; by hand, the demo
+Terraform enables them itself.
 
 Useful variables: `ge_engine_id` (reuse an existing GE app),
 `container_image` (skip the build), `model`, `seed_demo_data`,
@@ -69,6 +72,11 @@ Useful variables: `ge_engine_id` (reuse an existing GE app),
   service agent, and the app checks the caller again (`A2A_AUTH_MODE=enforce`).
 - The link-signing key is generated per deployment and stored in Secret
   Manager. Terraform state therefore contains it: keep state private.
+- Dependencies are pinned with hashes (`requirements.txt`) and installed with
+  `pip --require-hashes` (go/pip-install-remediation). The container runs as
+  a non-root user.
+- The only org policy override (`iam.disableServiceAccountCreation`) is
+  restored after deployment.
 - Synthetic data only. Do not paste customer data into a demo deployment.
 
 ## Optional: SharePoint
@@ -81,8 +89,11 @@ out of scope for the one-click demo. See `scripts/` and the main README.
 
 | Path | Contents |
 | :--- | :--- |
-| `demo/terraform/` | Click-to-Deploy Terraform (8 mandatory go/demos variables in `variables.tf`) |
+| `demo/terraform/base_variables.tf` | The 8 mandatory go/demos variables (from the CDP template) |
+| `demo/terraform/variables.tf` | Demo settings with go/demos defaults |
+| `demo/terraform/*.tf` | Demo infrastructure |
 | `demo/cloudbuild.yaml` | Image build used by `build.tf` |
 | `demo/scripts/register_agent.sh` | Idempotent Gemini Enterprise registration |
 | `demo/seed/` | Synthetic records and their generator |
-| `org_policy/project_config.json` | APIs and org policy notes for the CDP pipeline |
+| `org_policy/project_config.json` | APIs and org policy overrides (the only file to edit there) |
+| `org_policy/project_resource.tf` | CDP template, applies the JSON. **Do not edit.** |

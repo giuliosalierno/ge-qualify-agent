@@ -1,22 +1,24 @@
 {
-  "_comment": "Draft. Align field names with the go/demos C2D template the CDP team provides with the listing repo before merging.",
-  "apis": [
-    "aiplatform.googleapis.com",
-    "artifactregistry.googleapis.com",
-    "cloudbuild.googleapis.com",
-    "cloudresourcemanager.googleapis.com",
-    "discoveryengine.googleapis.com",
-    "iam.googleapis.com",
-    "logging.googleapis.com",
-    "run.googleapis.com",
-    "secretmanager.googleapis.com",
-    "serviceusage.googleapis.com",
-    "storage.googleapis.com"
-  ],
-  "org_policy_overrides": [],
-  "_org_policy_notes": [
-    "No overrides expected: no external IP, no load balancer, no allUsers IAM binding.",
-    "Cloud Run uses ingress=all with IAM; only the Discovery Engine service agent is an invoker, which satisfies iam.allowedPolicyMemberDomains.",
-    "If Argolis enforces run.allowedIngress=internal, the demo needs an override, because Gemini Enterprise calls the service over its public run.app URL."
-  ]
+    "constraints": [
+        {
+            "constraint": "iam.disableServiceAccountCreation",
+            "policy_type": "boolean",
+            "enforced": false,
+            "restore_post_deployment": true
+        }
+    ],
+    "apis_to_enable": [
+        "aiplatform.googleapis.com",
+        "artifactregistry.googleapis.com",
+        "cloudbuild.googleapis.com",
+        "cloudresourcemanager.googleapis.com",
+        "discoveryengine.googleapis.com",
+        "iam.googleapis.com",
+        "logging.googleapis.com",
+        "orgpolicy.googleapis.com",
+        "run.googleapis.com",
+        "secretmanager.googleapis.com",
+        "serviceusage.googleapis.com",
+        "storage.googleapis.com"
+    ]
 }

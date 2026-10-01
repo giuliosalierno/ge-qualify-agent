@@ -6,7 +6,7 @@
 resource "google_storage_bucket" "records" {
   project                     = var.project_id
   name                        = local.bucket_name
-  location                    = var.data_location
+  location                    = var.region
   uniform_bucket_level_access = true
   public_access_prevention    = "enforced"
   # Demo bucket: destroy must leave a clean project.
