@@ -43,3 +43,15 @@ def _isolate_sharepoint_mock_dir(
     # exporting STORAGE_PROVIDER must not silently switch the suite's provider.
     monkeypatch.setenv("GDRIVE_MOCK_DIR", str(tmp_path / "gdrive_mock"))
     monkeypatch.delenv("STORAGE_PROVIDER", raising=False)
+
+
+@pytest.fixture(autouse=True)
+def _disable_interactive_views_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keeps the existing suite on the markdown replies it asserts against.
+
+    The side-panel views replace long chat replies with a short headline, so
+    every test that checks report text would need rewriting. They stay on the
+    markdown path here; `test_views.py` switches the views on explicitly, the
+    same arrangement as the sign-in card above.
+    """
+    monkeypatch.setenv("INTERACTIVE_VIEWS", "0")
