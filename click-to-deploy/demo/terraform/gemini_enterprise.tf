@@ -45,6 +45,31 @@ resource "google_discovery_engine_search_engine" "demo" {
 
 data "google_client_config" "current" {}
 
+# A fresh project has no Gemini Enterprise licence, and the registration API
+# rejects unlicensed callers. Start the free trial if needed and license the
+# demo users. Not undone on destroy: licence configs have no delete API and the
+# free trial expires on its own after one month.
+resource "null_resource" "ge_license" {
+  count = var.ensure_ge_license ? 1 : 0
+
+  triggers = {
+    users = join(" ", distinct(concat([var.gcp_account_name], var.ge_license_users)))
+  }
+
+  provisioner "local-exec" {
+    command     = "${path.module}/../scripts/ensure_ge_license.sh"
+    interpreter = ["/bin/bash", "-c"]
+    environment = {
+      ACCESS_TOKEN   = data.google_client_config.current.access_token
+      PROJECT_ID     = var.project_id
+      PROJECT_NUMBER = var.project_number
+      LICENSE_USERS  = self.triggers.users
+    }
+  }
+
+  depends_on = [google_discovery_engine_search_engine.demo]
+}
+
 resource "null_resource" "register_agent" {
   count = var.register_agent ? 1 : 0
 
@@ -67,5 +92,8 @@ resource "null_resource" "register_agent" {
     }
   }
 
-  depends_on = [google_cloud_run_v2_service_iam_member.ge_invoker]
+  depends_on = [
+    google_cloud_run_v2_service_iam_member.ge_invoker,
+    null_resource.ge_license,
+  ]
 }

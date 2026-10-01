@@ -55,6 +55,18 @@ variable "register_agent" {
   default     = true
 }
 
+variable "ensure_ge_license" {
+  description = "Start the Gemini Enterprise free trial if the project has no active licence, and assign licences to the demo users. Agent registration fails without a licence."
+  type        = bool
+  default     = true
+}
+
+variable "ge_license_users" {
+  description = "Extra users (emails) to license, in addition to gcp_account_name."
+  type        = list(string)
+  default     = []
+}
+
 variable "seed_demo_data" {
   description = "Upload synthetic qualified use cases so portfolio and technical review work on the first conversation."
   type        = bool
