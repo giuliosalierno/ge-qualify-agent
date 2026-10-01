@@ -288,7 +288,7 @@ def _run_turn(
             session = fresh
         else:
             rec_id = session.record.meta.record_id
-            init_name = session.record.business.initiative_name or "this initiative"
+            init_name = session.record.meta.initiative_name or "this initiative"
             deliverable_name = (
                 "Technical Architecture Dossier"
                 if session.pack_name == "tech"
@@ -1011,7 +1011,9 @@ def _try_start_tech_review(
 
     # Already in a technical review: let the normal interview handle the turn
     # rather than restarting it and throwing away the reviewer's answers.
-    if session.pack_name == "tech" and not record_id:
+    # Once that review is finished there is nothing left to protect, so a
+    # "what is pending?" must list the queue rather than fall through.
+    if session.pack_name == "tech" and not session.is_complete and not record_id:
         return None
 
     # Check if the user is replying to an active pending-review picker list

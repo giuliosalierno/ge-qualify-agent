@@ -93,12 +93,24 @@ def parse_tech_review_intent(user_text: str | None) -> tuple[bool, str | None]:
     text = user_text.strip()
     lowered = text.lower()
 
-    wants = any(t in lowered for t in _TRIGGERS)
+    wants = any(t in lowered for t in _TRIGGERS) or bool(_PENDING_QUERY_RE.search(lowered))
     if not wants:
         return False, None
 
     match = RECORD_ID_RE.search(text)
     return True, match.group(0).upper() if match else None
+
+
+#: "What is pending?" asked loosely, typos included.
+#:
+#: The exact phrases in `_TRIGGERS` miss "what are the peding opportunites
+#: still to qualify?", which then reached the business interview as if it were
+#: an answer. Needs both a "pending" word and a thing that can be pending, so
+#: "I'm spending hours on this" or "pending approval from legal" stay ordinary
+#: conversation.
+_PENDING_QUERY_RE = re.compile(
+    r"\bpe\w{0,2}di?ng\b.*\b(?:opp?or?tun\w*|docs?|documents?|reviews?|initiatives?|use ?cases?)\b"
+)
 
 
 _CHOICE_PREFIXES = (

@@ -247,3 +247,23 @@ def test_full_business_intake_walkthrough_to_completion(store: InMemorySessionSt
     # Derived hours saved calculated automatically
     assert t5.session.record.derived.total_annual_team_hours_saved is not None
     assert t5.session.record.derived.total_annual_team_hours_saved > 0
+
+
+def test_free_text_after_completion_does_not_crash(store: InMemorySessionStore) -> None:
+    """Chat on a finished intake used to read `business.initiative_name`.
+
+    That field lives on `meta`; the bad read raised AttributeError, which the
+    executor surfaced as "I encountered a temporary issue" on every message.
+    """
+    ctx = "ctx-after-complete"
+    execute_turn(store, TurnInput(context_id=ctx, user_text="Claims triage"))
+    for payload in (NEEDS_PAYLOAD, SIZING_PAYLOAD, DATA_PAYLOAD, OWNERSHIP_PAYLOAD):
+        out = execute_turn(
+            store,
+            TurnInput(context_id=ctx, action_data={"name": COMMIT_STAGE, "context": payload}),
+        )
+    assert out.is_complete
+
+    nxt = execute_turn(store, TurnInput(context_id=ctx, user_text="anything else?"))
+    assert "Claims triage" in nxt.reply_text
+    assert "already complete" in nxt.reply_text

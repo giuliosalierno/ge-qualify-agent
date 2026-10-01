@@ -83,6 +83,32 @@ def test_parse_ignores_ordinary_conversation(text: str | None) -> None:
     assert record_id is None
 
 
+@pytest.mark.parametrize(
+    "text",
+    [
+        "what are the peding opportunites still to qualify?",
+        "what are the pending opportunities still to qualify?",
+        "any pendng use cases?",
+        "show me the pending initiatives",
+    ],
+)
+def test_parse_accepts_loose_pending_questions(text: str) -> None:
+    wants, record_id = parse_tech_review_intent(text)
+    assert wants is True
+    assert record_id is None
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "we are spending hours on these reviews",
+        "it is pending approval from legal",
+    ],
+)
+def test_parse_ignores_pending_without_a_queue_noun(text: str) -> None:
+    assert parse_tech_review_intent(text) == (False, None)
+
+
 # ---------------------------------------------------------------------------
 # Opening the review
 # ---------------------------------------------------------------------------
