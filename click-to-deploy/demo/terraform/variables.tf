@@ -9,9 +9,14 @@ variable "region" {
 }
 
 variable "service_name" {
-  description = "Cloud Run service name. Also prefixes the runtime service account."
+  description = "Cloud Run service name. Prefixes every other resource name (bucket, secret, service accounts, GE app)."
   type        = string
   default     = "ge-qualify-agent"
+
+  validation {
+    condition     = can(regex("^[a-z][a-z0-9-]{2,22}$", var.service_name))
+    error_message = "service_name: 3-23 chars, lowercase letters, digits and hyphens (service account IDs are limited to 30 chars)."
+  }
 }
 
 variable "model" {
@@ -24,6 +29,12 @@ variable "genai_location" {
   description = "Vertex AI location for Gemini calls. Gemini 3 models are served from global."
   type        = string
   default     = "global"
+}
+
+variable "agent_display_name" {
+  description = "Agent name in Gemini Enterprise. Registration updates an existing agent with this name, so it must be unique per GE app."
+  type        = string
+  default     = "GE Use Case Qualification Agent"
 }
 
 variable "container_image" {

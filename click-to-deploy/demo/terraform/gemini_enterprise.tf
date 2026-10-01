@@ -63,7 +63,7 @@ resource "null_resource" "register_agent" {
       PROJECT_ID   = var.project_id
       ENGINE_ID    = local.ge_engine_id
       AGENT_URL    = local.service_url
-      DISPLAY_NAME = "GE Use Case Qualification Agent"
+      DISPLAY_NAME = var.agent_display_name
     }
   }
 

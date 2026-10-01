@@ -9,7 +9,7 @@ resource "random_password" "oauth_state" {
 
 resource "google_secret_manager_secret" "oauth_state" {
   project   = var.project_id
-  secret_id = "oauth-state-secret"
+  secret_id = "${var.service_name}-oauth-state"
 
   replication {
     auto {}

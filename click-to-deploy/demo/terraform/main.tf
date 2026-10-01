@@ -7,7 +7,10 @@ locals {
   # without a second pass.
   service_url = "https://${var.service_name}-${var.project_number}.${var.region}.run.app"
 
-  bucket_name = "${var.project_id}-qualify-records"
+  # Every name derives from service_name, so a second deployment in a project
+  # that already runs the agent (e.g. a test next to production) cannot
+  # collide with or take over existing resources.
+  bucket_name = "${var.project_id}-${var.service_name}"
 
   ge_service_agent    = "service-${var.project_number}@gcp-sa-discoveryengine.iam.gserviceaccount.com"
   ge_engine_id        = var.ge_engine_id != "" ? var.ge_engine_id : google_discovery_engine_search_engine.demo[0].engine_id
