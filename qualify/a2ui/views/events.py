@@ -16,4 +16,8 @@ START_TECH_REVIEW = "start_tech_review"
 #: Opens the brief side panel for ``context.recordId`` from the record store.
 OPEN_BRIEF = "open_brief"
 
-VIEW_EVENTS = frozenset({OPEN_PORTFOLIO, START_TECH_REVIEW, OPEN_BRIEF})
+#: Opens this conversation's opportunity workspace. Same as typing
+#: ``open workspace``.
+OPEN_WORKSPACE = "open_workspace"
+
+VIEW_EVENTS = frozenset({OPEN_PORTFOLIO, START_TECH_REVIEW, OPEN_BRIEF, OPEN_WORKSPACE})

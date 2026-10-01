@@ -22,7 +22,7 @@ from qualify.a2ui.actions import REVISE_STAGE
 from qualify.a2ui.compiler import summary_strings
 from qualify.a2ui.views import components as ui
 from qualify.a2ui.views.charts import matrix_points, quadrant_matrix_spec
-from qualify.a2ui.views.events import OPEN_PORTFOLIO, START_TECH_REVIEW
+from qualify.a2ui.views.events import OPEN_PORTFOLIO, OPEN_WORKSPACE, START_TECH_REVIEW
 from qualify.a2ui.views.portfolio import QUADRANT_ICONS, needs_tech_review
 from qualify.packs.loader import Pack
 from qualify.schema.use_case_record import UseCaseRecord
@@ -187,6 +187,10 @@ def _next_steps_tab(
     nodes += ui.event_button("br-portfolio", "Open portfolio", OPEN_PORTFOLIO, {})
 
     if pack is not None:
+        ids.append("br-workspace")
+        nodes += ui.event_button(
+            "br-workspace", "🗂️ Open workspace", OPEN_WORKSPACE, {"recordId": ev.record_id}
+        )
         ids += ["br-reopen-rule", "br-reopen-caption"]
         nodes += [
             ui.divider("br-reopen-rule"),

@@ -29,7 +29,14 @@ from qualify.a2ui.actions import (
     dispatch,
     parse_action,
 )
-from qualify.a2ui.canvas_probe import PROBE_CANVAS_ECHO, build_canvas_probe
+from qualify.a2ui.canvas_probe import (
+    PROBE_CANVAS_ECHO,
+    PROBE_LIVE_BUMP,
+    build_canvas_probe,
+    build_live_bump,
+    build_live_probe,
+    is_live_trigger,
+)
 from qualify.a2ui.views.events import VIEW_EVENTS
 from qualify.a2ui.canvas_probe import describe_echo as describe_canvas_echo
 from qualify.a2ui.canvas_probe import is_probe_trigger as is_canvas_probe_trigger
@@ -219,6 +226,15 @@ def _run_turn(
                 a2ui_messages=[],
                 session=session,
             )
+        if event is not None and event.name == PROBE_LIVE_BUMP:
+            return TurnOutput(
+                reply_text=(
+                    "Sent a data-only update to the open **Probe 4** panel. If its "
+                    "counter went up and the bar moved, an open panel refreshes in place."
+                ),
+                a2ui_messages=build_live_bump(event.context),
+                session=session,
+            )
         if event is not None and event.name == "fetchData":
             # GcbpTable's server-side sort/paging request. Our tables are not
             # sortable; this only arrives from panels rendered by older builds.
@@ -271,6 +287,11 @@ def _run_turn(
     if help_output is not None:
         store.save(session)
         return help_output
+
+    workspace_output = _try_workspace_command(turn_input.user_text, session)
+    if workspace_output is not None:
+        store.save(session)
+        return workspace_output
 
     portfolio_output = _try_portfolio_review(store, turn_input.user_text, session)
     if portfolio_output is not None:
@@ -352,14 +373,7 @@ def _run_turn(
     if session.active_stage not in session.rendered_stages:
         sid = session.next_surface_id()
         a2ui_messages.extend(
-            build_surface(
-                session.pack,
-                session.record,
-                session.active_stage,
-                surface_id=sid,
-                committed_stages=session.committed,
-                skipped_stages=session.skipped,
-            )
+            _stage_card(session, sid)
         )
         session.rendered_stages.add(session.active_stage)
     else:
@@ -449,14 +463,7 @@ def _handle_action_outcome(
         sid = session.next_surface_id()
         session.rendered_stages.add(session.active_stage)
         a2ui_messages.extend(
-            build_surface(
-                session.pack,
-                session.record,
-                session.active_stage,
-                surface_id=sid,
-                committed_stages=session.committed,
-                skipped_stages=session.skipped,
-            )
+            _stage_card(session, sid)
         )
         return TurnOutput(
             reply_text=(
@@ -486,14 +493,17 @@ def _handle_action_outcome(
                     context_id=session.context_id,
                     pack_name=session.pack_name,
                 )
+                _remember_links(session, sp_res)
                 use_view = _use_brief_view(session)
-                reply_text = (
-                    _brief_view_headline(session)
-                    if use_view
-                    else render_deliverable(
+                use_ws = _use_tech_workspace(session)
+                if use_view:
+                    reply_text = _brief_view_headline(session)
+                elif use_ws:
+                    reply_text = _tech_view_headline(session)
+                else:
+                    reply_text = render_deliverable(
                         session.pack_name, session.record, skipped_stages=session.skipped
                     )
-                )
                 base_url = agent_base_url()
                 auth_link = build_signin_url(base_url, session.context_id)
                 from qualify.connectors.storage import storage_enabled  # noqa: PLC0415
@@ -515,6 +525,8 @@ def _handle_action_outcome(
                 a2ui_messages.extend(
                     _brief_view_messages(session, sid, store)
                     if use_view
+                    else _workspace_messages(session, focus="checklist", surface_id=sid)
+                    if use_ws
                     else build_completion_surface(
                         session.pack,
                         session.record,
@@ -528,14 +540,7 @@ def _handle_action_outcome(
                 sid = session.next_surface_id()
                 session.rendered_stages.add(session.active_stage)
                 a2ui_messages.extend(
-                    build_surface(
-                        session.pack,
-                        session.record,
-                        session.active_stage,
-                        surface_id=sid,
-                        committed_stages=session.committed,
-                        skipped_stages=session.skipped,
-                    )
+                    _stage_card(session, sid)
                 )
                 stage = session.pack.stages[session.active_stage]
                 if outcome.skipped and outcome.committed_stage_idx is not None:
@@ -565,14 +570,7 @@ def _handle_action_outcome(
             sid = session.next_surface_id()
             session.rendered_stages.add(session.active_stage)
             a2ui_messages.extend(
-                build_surface(
-                    session.pack,
-                    session.record,
-                    session.active_stage,
-                    surface_id=sid,
-                    committed_stages=session.committed,
-                    skipped_stages=session.skipped,
-                )
+                _stage_card(session, sid)
             )
             stage = session.pack.stages[session.active_stage]
             reply_text = f"Reopened **{stage.label}**. You can review or change your answers below."
@@ -867,14 +865,7 @@ def _acknowledge_signin(session: Session) -> TurnOutput:
         sid = session.next_surface_id()
         session.rendered_stages.add(session.active_stage)
         a2ui_messages.extend(
-            build_surface(
-                session.pack,
-                session.record,
-                session.active_stage,
-                surface_id=sid,
-                committed_stages=session.committed,
-                skipped_stages=session.skipped,
-            )
+            _stage_card(session, sid)
         )
         reply_text = f"{header}Let's begin."
     else:
@@ -916,6 +907,20 @@ def _try_a2ui_probe(user_text: str | None, session: Session) -> TurnOutput | Non
                 "3. **Probe 3**: does the chart draw inline in the chat?"
             ),
             a2ui_messages=build_canvas_probe(),
+            session=session,
+        )
+
+    if is_live_trigger(user_text):
+        return TurnOutput(
+            reply_text=(
+                "**A2UI live-refresh probe**\n\n"
+                "1. Does **Probe 4** open in the side panel, and does the progress bar draw?\n"
+                "2. Press **Refresh this panel** two or three times with the panel open. "
+                "Does *Refreshed N times* go up and the bar move, without a new panel?\n"
+                "3. In the text below the line: which of heading, bold, link, bullets, "
+                "**table**, quote and checkboxes look right?"
+            ),
+            a2ui_messages=build_live_probe(),
             session=session,
         )
 
@@ -1006,10 +1011,16 @@ def _try_view_event(
     from qualify.a2ui.views.events import (  # noqa: PLC0415
         OPEN_BRIEF,
         OPEN_PORTFOLIO,
+        OPEN_WORKSPACE,
         START_TECH_REVIEW,
     )
 
     record_id = str(event.context.get("recordId") or "").strip()
+
+    if event.name == OPEN_WORKSPACE:
+        output = _open_workspace(session, user_asked_for="progress")
+        store.save(output.session)
+        return output
 
     if event.name == OPEN_PORTFOLIO:
         output = _try_portfolio_review(store, "portfolio review", session)
@@ -1034,7 +1045,7 @@ def _try_view_event(
         name = record.meta.initiative_name or record_id
         messages = build_brief_view(
             record,
-            session.next_surface_id("brief"),
+            session.panel_surface_id("brief"),
             portfolio=_portfolio_evaluations(store),
         )
         store.save(session)
@@ -1045,6 +1056,145 @@ def _try_view_event(
         )
 
     return None
+
+
+def _stage_card(session: Session, sid: str) -> list[dict[str, Any]]:
+    """A stage form card, with an *Open workspace* button when views are on."""
+    messages = build_surface(
+        session.pack,
+        session.record,
+        session.active_stage,
+        surface_id=sid,
+        committed_stages=session.committed,
+        skipped_stages=session.skipped,
+    )
+    if not interactive_views_enabled():
+        return messages
+    from qualify.a2ui.views.workspace import add_open_workspace_button  # noqa: PLC0415
+
+    return add_open_workspace_button(messages, session.record.meta.record_id)
+
+
+def _remember_links(session: Session, res: Any) -> None:
+    """Keeps the storage links a sync returned, for the workspace panel.
+
+    Only real writes count: a mock or queued (unauthenticated) result has no
+    file behind its URL.
+    """
+    if res is None or not getattr(res, "success", False):
+        return
+    if getattr(res, "auth_mode", "") not in ("delegated", "client_credentials"):
+        return
+    if res.folder_url:
+        session.document_links["folder"] = res.folder_url
+    if res.brief_url:
+        session.document_links[session.pack_name] = res.brief_url
+
+
+def _storage_label() -> str | None:
+    """The storage product name for links, or None when storage is off."""
+    from qualify.connectors.storage import (  # noqa: PLC0415
+        get_storage_connector,
+        storage_enabled,
+    )
+
+    try:
+        if not storage_enabled():
+            return None
+        return get_storage_connector().display_name
+    except Exception as exc:  # a broken connector must not break the panel
+        log.warning("Storage label unavailable: %s", exc)
+        return None
+
+
+def _workspace_messages(
+    session: Session,
+    *,
+    focus: str = "progress",
+    expand_document: str | None = None,
+    surface_id: str | None = None,
+) -> list[dict[str, Any]]:
+    from qualify.a2ui.views.workspace import build_workspace_view  # noqa: PLC0415
+
+    return build_workspace_view(
+        pack=session.pack,
+        record=session.record,
+        committed=session.committed,
+        skipped=session.skipped,
+        active_stage=session.active_stage,
+        surface_id=surface_id or session.panel_surface_id("workspace"),
+        complete=session.is_complete,
+        links=session.document_links,
+        storage_label=_storage_label(),
+        focus=focus,
+        expand_document=expand_document,
+    )
+
+
+def _open_workspace(session: Session, *, user_asked_for: str) -> TurnOutput:
+    focus = "documents" if user_asked_for == "documents" else "progress"
+    name = session.record.meta.initiative_name or session.record.meta.record_id
+    where = "documents" if focus == "documents" else "progress and documents"
+    return TurnOutput(
+        reply_text=f"🗂️ Opened the workspace for **{name}** in the side panel ({where}).",
+        a2ui_messages=_workspace_messages(session, focus=focus),
+        session=session,
+    )
+
+
+_WORKSPACE_TRIGGERS = (
+    "workspace",
+    "open workspace",
+    "show workspace",
+    "open the workspace",
+    "show the workspace",
+    "show progress",
+    "show my progress",
+    "my progress",
+    "progress",
+    "where am i",
+)
+_DOCUMENT_TRIGGERS = (
+    "documents",
+    "my documents",
+    "show documents",
+    "show my documents",
+    "open documents",
+    "show the documents",
+)
+
+
+def _try_workspace_command(user_text: str | None, session: Session) -> TurnOutput | None:
+    """Exact short phrases only, so an interview answer cannot trip it."""
+    if not user_text or not interactive_views_enabled():
+        return None
+    phrase = user_text.strip().lower().rstrip("?.! ")
+    if phrase in _DOCUMENT_TRIGGERS:
+        return _open_workspace(session, user_asked_for="documents")
+    if phrase in _WORKSPACE_TRIGGERS:
+        return _open_workspace(session, user_asked_for="progress")
+    return None
+
+
+def _use_tech_workspace(session: Session) -> bool:
+    """Technical review completion shows the workspace on its Checklist tab."""
+    return interactive_views_enabled() and session.pack_name == "tech"
+
+
+def _tech_view_headline(session: Session) -> str:
+    from qualify.export.dossier import _next_step  # noqa: PLC0415
+    from qualify.scoring.technical import score_technical  # noqa: PLC0415
+
+    record = session.record
+    score = score_technical(record)
+    key2 = "Key 2 approved" if score.key2_ready else "Key 2 pending"
+    blockers = f" · ⛔ {len(score.blockers)} blocker(s)" if score.blockers else ""
+    return (
+        "✅ **Technical Architecture Dossier ready** — opened in the side panel.\n\n"
+        f"`{record.meta.record_id}` · readiness {score.readiness_pct}% · "
+        f"{score.feasibility_profile} · {key2}{blockers}\n\n"
+        f"➡️ {_next_step(score)}"
+    )
 
 
 _PORTFOLIO_TRIGGERS = (
@@ -1223,7 +1373,7 @@ def _render_portfolio(
             reply_text=reply,
             a2ui_messages=build_portfolio_view(
                 summary,
-                session.next_surface_id("portfolio"),
+                session.panel_surface_id("portfolio"),
                 source_note=source_note,
             ),
             session=session,
@@ -1352,15 +1502,17 @@ def _try_start_tech_review(
     sid = tech_session.next_surface_id()
     tech_session.rendered_stages.add(tech_session.active_stage)
     a2ui_messages = list(
-        build_surface(
-            tech_session.pack,
-            tech_session.record,
-            tech_session.active_stage,
-            surface_id=sid,
-            committed_stages=tech_session.committed,
-            skipped_stages=tech_session.skipped,
-        )
+        _stage_card(tech_session, sid)
     )
+    panel_note = ""
+    if interactive_views_enabled():
+        a2ui_messages += _workspace_messages(
+            tech_session, focus="documents", expand_document="brief"
+        )
+        panel_note = (
+            "\n\n🗂️ *The business brief is open in the side panel for reference. "
+            "Its **Progress** and **Checklist** tabs track this review.*"
+        )
     store.save(tech_session)
 
     stage = tech_session.pack.stages[tech_session.active_stage]
@@ -1373,6 +1525,7 @@ def _try_start_tech_review(
         "to produce the **Technical Architecture Dossier**.*\n\n"
         "---\n"
         f"{_stage_intro_text(stage, stage_index=tech_session.active_stage, total_stages=len(tech_session.pack.stages))}"
+        f"{panel_note}"
     )
 
     return TurnOutput(
@@ -1557,6 +1710,7 @@ def _try_load_from_sharepoint(user_text: str | None, session: Session) -> TurnOu
             context_id=session.context_id,
             pack_name=session.pack_name,
         )
+        _remember_links(session, sp_res)
         if sp_res and sp_res.auth_mode == "delegated":
             title = session.record.meta.initiative_name or session.record.meta.record_id or "Opportunity"
             deliverable_label = (
