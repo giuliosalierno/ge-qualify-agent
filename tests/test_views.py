@@ -14,6 +14,7 @@ from qualify.a2ui.views.charts import (
     VALUE_THRESHOLD,
     matrix_points,
     quadrant_matrix_spec,
+    quadrant_regions,
 )
 from qualify.a2ui.views.events import OPEN_BRIEF, OPEN_PORTFOLIO, START_TECH_REVIEW
 from qualify.a2ui.views.portfolio import build_portfolio_view
@@ -120,8 +121,38 @@ def test_points_sharing_a_cell_are_spread_deterministically() -> None:
     shared = [p for p in a if p["recordId"].startswith("UC-2026-QW")]
     assert len({(p["x"], p["y"]) for p in shared}) == len(shared)
     for p in a:
-        assert abs(p["x"] - p["feasibility"]) < 0.2
-        assert abs(p["y"] - p["value"]) < 0.2
+        # Inside its own cell, hence inside its own quadrant region.
+        assert abs(p["x"] - p["feasibility"]) < 0.5
+        assert abs(p["y"] - p["value"]) < 0.5
+
+
+def _region_at(x: float, y: float) -> str:
+    hits = [
+        r["quadrant"]
+        for r in quadrant_regions()
+        if r["x"] <= x <= r["x2"] and r["y"] <= y <= r["y2"]
+    ]
+    assert len(hits) == 1, (x, y, hits)
+    return hits[0]
+
+
+@pytest.mark.parametrize("feas", [1, 2, 3, 4, 5])
+@pytest.mark.parametrize("value", [1, 2, 3, 4, 5])
+def test_drawn_regions_match_the_scoring_for_every_cell(feas: int, value: int) -> None:
+    """The shading must say what the scoring says, for every score pair."""
+    assert _region_at(feas, value) == _assign_quadrant(value, feas, False)
+    # And for the furthest a spread point can sit from the cell centre.
+    for dx, dy in ((0.28, 0.28), (-0.28, -0.28), (0.28, -0.28), (-0.28, 0.28)):
+        assert _region_at(feas + dx, value + dy) == _assign_quadrant(value, feas, False)
+
+
+def test_blocked_points_are_labelled() -> None:
+    evs = evaluate_portfolio(
+        [(_record("UC-2026-BL0001", "Blocked one", blocker="blocked"), {"hasBrief": True})]
+    ).evaluations
+    (point,) = matrix_points(evs)
+    assert point["blocked"] is True
+    assert point["label"].startswith("⛔")
 
 
 def test_chart_thresholds_match_the_scoring() -> None:
@@ -134,7 +165,9 @@ def test_highlight_marks_exactly_one_point() -> None:
     evs = _summary().evaluations
     points = matrix_points(evs, highlight_id="UC-2026-SB0001")
     assert [p["recordId"] for p in points if p["highlight"]] == ["UC-2026-SB0001"]
-    assert quadrant_matrix_spec(points)["layer"][-1]["transform"] == [{"filter": "datum.highlight"}]
+    labels = quadrant_matrix_spec(points)["layer"][-1]
+    assert labels["encoding"]["text"] == {"field": "label"}
+    assert labels["encoding"]["fontWeight"]["condition"]["test"] == "datum.highlight"
 
 
 # ---------------------------------------------------------------------------
