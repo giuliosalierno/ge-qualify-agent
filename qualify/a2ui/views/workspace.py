@@ -24,6 +24,7 @@ Driven entirely by the pack, so a new pack gets a workspace with no code here.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
@@ -356,19 +357,31 @@ def _clean_markdown(body: str) -> str:
     """Strips what a plain ``Text`` is not promised to render.
 
     Blockquotes and GitHub alerts become plain lines with an icon; rules
-    disappear (the section boundaries already separate content).
+    disappear (the section boundaries already separate content). Sub-headings
+    (``###``…) become bold lines: the section title above them is an ``h5``,
+    and a markdown heading inside the body would render larger than it.
     """
     out: list[str] = []
+    prev_quote = False
     for raw in body.splitlines():
         line = raw.rstrip()
         if line.strip() == "---":
             continue
-        if line.startswith(">"):
+        heading = re.match(r"#{1,6}\s+(.+)", line)
+        if heading:
+            line = f"**{heading.group(1).strip()}**"
+        is_quote = line.startswith(">")
+        if is_quote:
             line = line.lstrip(">").strip()
             for marker, icon in _ALERTS.items():
                 if line.startswith(marker):
                     line = icon
                     break
+            # Without "> " the trailing-space hard break is gone, so back-to-
+            # back quote lines would merge into one paragraph.
+            if prev_quote and out and out[-1] not in _ALERTS.values():
+                out.append("")
+        prev_quote = is_quote
         out.append(line)
     # Join an alert icon with the line that follows it.
     merged: list[str] = []
@@ -522,9 +535,14 @@ def _documents_tab(
             for i, (title, body) in enumerate(markdown_sections(doc.markdown)):
                 if doc.key == "dossier" and "Audit Matrix" in title:
                     body = "The full 22-check matrix is in the **Checklist** tab."
+                # A divider and an h4 title per section; with h5 and no gap
+                # the sections read as one block.
+                if i:
+                    children.append(f"{pid}-s{i}-d")
+                    nodes.append(ui.divider(f"{pid}-s{i}-d"))
                 children += [f"{pid}-s{i}-h", f"{pid}-s{i}-b"]
                 nodes += [
-                    ui.text(f"{pid}-s{i}-h", title, "h5"),
+                    ui.text(f"{pid}-s{i}-h", title, "h4"),
                     ui.text(f"{pid}-s{i}-b", body, "body"),
                 ]
         nodes.append(

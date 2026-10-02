@@ -145,7 +145,7 @@ def test_documents_preview_in_sections_and_link_when_stored() -> None:
     assert "Open in Google Drive" in by_id["ws-doc-brief-link"]["text"]
     assert by_id["ws-doc-brief"]["description"].startswith("Draft")
     headings = [c["text"] for k, c in by_id.items() if k.startswith("ws-doc-brief-s") and k.endswith("-h")]
-    assert any("Executive Summary" in h for h in headings)
+    assert any("Summary" in h for h in headings)
     # The dossier does not exist before the technical review.
     assert by_id["ws-doc-dossier"]["description"].startswith("Not started")
 
@@ -334,3 +334,27 @@ def test_live_probe_turns() -> None:
     )
     assert not any("createSurface" in m for m in out.a2ui_messages)
     assert "refreshes in place" in out.reply_text
+
+
+def test_preview_markdown_keeps_a_readable_hierarchy() -> None:
+    """Sub-headings must not outsize the h5 section title; quote lines stay apart."""
+    from qualify.a2ui.views.workspace import _clean_markdown
+
+    out = _clean_markdown(
+        "> **Gate 1 Status:** ok  \n> **Record ID:** `UC-1`\n\n### User Stories\nAs an analyst…"
+    )
+    assert "**User Stories**" in out and "###" not in out
+    assert "**Gate 1 Status:** ok\n\n**Record ID:** `UC-1`" in out
+
+
+def test_brief_has_no_latex() -> None:
+    """GE's markdown renderer shows $…$ math as raw text."""
+    from qualify.export.brief import render_business_brief
+    from qualify.schema.use_case_record import Meta, UseCaseRecord
+
+    rec = UseCaseRecord(meta=Meta(record_id="UC-2026-TEX001", initiative_name="x"))
+    rec.business.user_count = 10
+    rec.sizing.task_frequency_weekly = 5
+    rec.sizing.target_minutes_saved_per_task = 6
+    md = render_business_brief(rec)
+    assert "\\times" not in md and "\\text" not in md and "$U$" not in md

@@ -414,9 +414,7 @@ def baseline_summary(session: Session) -> str:
     if record.business.user_stories:
         lines.append(f"- **Target Workflow / User Stories:** {record.business.user_stories}")
     if record.business.expected_impacts:
-        lines.append(
-            f"- **Expected Business Impacts:** {', '.join(record.business.expected_impacts)}"
-        )
+        lines.append(f"- **Expected Business Impacts:** {record.business.expected_impacts}")
 
     if record.meta.department_bu:
         owner_suffix = (

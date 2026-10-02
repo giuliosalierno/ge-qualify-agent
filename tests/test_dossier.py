@@ -229,5 +229,5 @@ def test_brief_and_dossier_lead_with_the_capability_level() -> None:
     assert "Recommended Delivery Tier" not in dossier
 
     brief = render_business_brief(record)
-    assert "## 4. Recommended Capability Level & Next Steps" in brief
-    assert "Delivery Tier (derived from the level)" in brief
+    assert "## Recommended approach" in brief
+    assert "(Level 3 of 6)" in brief

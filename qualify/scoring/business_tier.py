@@ -412,3 +412,145 @@ def _build_guidance(
         f"  1. **Mandatory Gate 2 Review:** Initiate **`technical review {record_id}`** (`ge-review-tech`) to evaluate the 22 technical subcriteria (network transit, WIF/IAM, data residency, and latency SLAs).\n"
         f"  2. **Safe Phase 0 No-Code Prototype:** Build a read-only **Level 2/3 Gemini Enterprise prototype** over sanitized sample documents to validate reasoning quality before committing engineering sprint capacity."
     )
+
+
+# ---------------------------------------------------------------------------
+# Business-audience summary
+# ---------------------------------------------------------------------------
+# The rationale above is written for Solution Architects (MCP, Cloud Run, IAM,
+# CLI commands) and belongs in the Technical Architecture Dossier. The Business
+# Value Brief gets this plain-language version instead, built from the same
+# connector check so the two never disagree.
+
+#: level -> (what we'd build, who builds it)
+_BUSINESS_APPROACH: dict[CapabilityLevel, tuple[str, str]] = {
+    CapabilityLevel.DEFAULT_ASSISTANT: (
+        "Use the standard Gemini Enterprise assistant — nothing to build.",
+        "Your team, starting today.",
+    ),
+    CapabilityLevel.CUSTOM_SKILL: (
+        "A shared Gemini Enterprise assistant set up with your team's "
+        "instructions and templates.",
+        "Your team, no coding needed.",
+    ),
+    CapabilityLevel.WORKFLOW_BUILDER_CHAT_AGENT: (
+        "A chat agent that answers from your connected systems, built in "
+        "Gemini Enterprise's low-code Workflow Builder.",
+        "Your team, with light support from the AI CoE.",
+    ),
+    CapabilityLevel.WORKFLOW_BUILDER_WORKFLOW_AGENT: (
+        "An agent that runs a step-by-step workflow across your connected "
+        "systems, built in the low-code Workflow Builder.",
+        "Your team, with support from the AI CoE.",
+    ),
+    CapabilityLevel.WORKFLOW_AGENT_WITH_CUSTOM_MCP: (
+        "A Gemini Enterprise agent plus a custom connector for the systems "
+        "that don't have a built-in one.",
+        "AI CoE developers, after a technical review.",
+    ),
+    CapabilityLevel.HIGH_CODE_AGENT: (
+        "A custom-built agent that coordinates several systems.",
+        "AI CoE developers, after a technical review.",
+    ),
+}
+
+
+#: Short form for summary lines.
+_SHORT_APPROACH: dict[CapabilityLevel, str] = {
+    CapabilityLevel.DEFAULT_ASSISTANT: "Standard Gemini Enterprise assistant",
+    CapabilityLevel.CUSTOM_SKILL: "Shared assistant with team instructions",
+    CapabilityLevel.WORKFLOW_BUILDER_CHAT_AGENT: "Low-code chat agent",
+    CapabilityLevel.WORKFLOW_BUILDER_WORKFLOW_AGENT: "Low-code workflow agent",
+    CapabilityLevel.WORKFLOW_AGENT_WITH_CUSTOM_MCP: "Agent plus a custom connector",
+    CapabilityLevel.HIGH_CODE_AGENT: "Custom-built multi-system agent",
+}
+
+
+def approach_label(level: CapabilityLevel | None) -> str:
+    """One-line approach for summaries, e.g. "Low-code chat agent (Level 3 of 6)"."""
+    if level is None:
+        return "To be assessed by the AI CoE"
+    return f"{_SHORT_APPROACH[level]} (Level {level.value} of 6)"
+
+
+def _names(matches: list[ConnectorMatch]) -> str:
+    labels = list(dict.fromkeys(m.label for m in matches))
+    if len(labels) <= 1:
+        return "".join(labels)
+    return ", ".join(labels[:-1]) + " and " + labels[-1]
+
+
+def business_summary(record: UseCaseRecord) -> str:
+    """Plain-language "what we'd build and why" for the Business Value Brief."""
+    level = record.technical.capability_level
+    if level is None:
+        return (
+            "- **Recommended approach:** to be assessed by the AI CoE once the "
+            "systems involved are known."
+        )
+
+    signals = _assess_gcp_grounding_signals(record)
+    matches: list[ConnectorMatch] = list(signals["matches"])  # type: ignore[arg-type]
+    native = [m for m in matches if m.native]
+    not_native = [m for m in matches if not m.native]
+    read_only = list(signals["read_only_mutation_sources"])  # type: ignore[arg-type]
+
+    why: list[str] = []
+    if native:
+        verb = "has" if len({m.label for m in native}) == 1 else "have"
+        why.append(f"{_names(native)} {verb} a built-in Gemini Enterprise connector.")
+    if not_native:
+        verb = "doesn't" if len({m.label for m in not_native}) == 1 else "don't"
+        why.append(
+            f"{_names(not_native)} {verb}, so a developer needs to build a "
+            "connector for it."
+        )
+    if signals["has_unknown_source"]:
+        why.append(
+            "Some systems aren't confirmed yet, so we plan for a custom "
+            "connector until the technical review confirms them."
+        )
+    if read_only:
+        why.append(
+            f"The work needs to update {', '.join(read_only)}, which the "
+            "built-in connector can only read."
+        )
+    if signals["has_complex_orchestration"]:
+        why.append("The process has branching or two-way syncing steps.")
+    if signals["classification"] == "restricted":
+        why.append("The data is classified Restricted, which needs extra security controls.")
+    if not why:
+        why.append("No external systems are needed beyond your documents and Google Workspace.")
+
+    what, who = _BUSINESS_APPROACH[level]
+    pro_code = level in (
+        CapabilityLevel.WORKFLOW_AGENT_WITH_CUSTOM_MCP,
+        CapabilityLevel.HIGH_CODE_AGENT,
+    )
+    lines = [
+        f"- **What we'd build:** {what} *(Level {level.value} of 6)*",
+        f"- **Who builds it:** {who}",
+        f"- **Why:** {' '.join(why)}",
+    ]
+    if pro_code:
+        lines.append(
+            "- **Meanwhile:** the team can try the core idea in the standard "
+            "Gemini Enterprise assistant with sample documents, read-only."
+        )
+        lines.append(
+            "- **Next step:** a technical review with a Solution Architect to "
+            "confirm how each system is reached."
+        )
+    elif level in (
+        CapabilityLevel.WORKFLOW_BUILDER_CHAT_AGENT,
+        CapabilityLevel.WORKFLOW_BUILDER_WORKFLOW_AGENT,
+    ):
+        lines.append(
+            "- **Next step:** ask your Gemini Enterprise admin to connect the "
+            "systems above, then build and pilot the agent with a small group."
+        )
+    else:
+        lines.append(
+            "- **Next step:** try it with a few colleagues and share what works."
+        )
+    return "\n".join(lines)

@@ -125,3 +125,27 @@ def test_unsized_single_user_record_scores_value_1() -> None:
         ),
     )
     assert evaluate_opportunity(rec).business_value_score == 1
+
+
+_ARCHITECT_TERMS = ("MCP", "Cloud Run", "agents-cli", "Workload Identity", "IAM", "Tier 3")
+
+
+def test_business_brief_speaks_business_and_dossier_keeps_the_design() -> None:
+    from qualify.export.brief import render_business_brief
+    from qualify.export.dossier import render_technical_dossier
+    from qualify.scoring.technical import score_technical
+
+    rec = _seed("UC-2026-DEMO03")
+    rec.technical.capability_level = None
+    rec.technical.capability_rationale = None
+
+    brief = render_business_brief(rec)
+    section4 = brief[brief.index("## Recommended approach") :]
+    for term in _ARCHITECT_TERMS:
+        assert term not in section4, term
+    assert "Internal REST API doesn't" in section4
+    assert "Who builds it" in section4
+
+    dossier = render_technical_dossier(rec, score_technical(rec))
+    assert "Solution guidance from the Phase 1 classification" in dossier
+    assert "MCP" in dossier

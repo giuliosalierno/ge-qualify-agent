@@ -182,6 +182,17 @@ def test_baseline_summary_omits_fields_phase_1_left_empty(
     assert "Unnamed initiative" in summary
 
 
+def test_baseline_summary_shows_impacts_as_written(store: LocalRecordStore) -> None:
+    """expected_impacts is free text; joining it split it into single letters."""
+    session = new_session("ctx-imp", pack_name="business", record_id="UC-2026-IMPACT")
+    session.record.business.expected_impacts = "Fewer rejected packs; faster opening"
+    store.save(session)
+    handed = start_tech_review(store, "ctx-phase2", "UC-2026-IMPACT")
+
+    summary = baseline_summary(handed)
+    assert "**Expected Business Impacts:** Fewer rejected packs; faster opening" in summary
+
+
 # ---------------------------------------------------------------------------
 # End to end through execute_turn
 # ---------------------------------------------------------------------------
