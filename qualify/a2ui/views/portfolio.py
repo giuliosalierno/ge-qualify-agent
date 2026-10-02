@@ -142,8 +142,10 @@ def _opportunity_block(ev: OpportunityEvaluation, idx: int) -> tuple[list[str], 
     """Description plus buttons for one opportunity in the Actions tab."""
     base = f"pf-op-{idx}"
     ids = [f"{base}-name", f"{base}-detail", f"{base}-next"]
+    # The name doubles as the text-link fallback for the open button below.
+    name = f"[{ev.initiative_name}]({ev.folder_url})" if ev.folder_url else ev.initiative_name
     nodes: list[ui.Component] = [
-        ui.text(ids[0], f"**{ev.initiative_name}** · `{ev.record_id}`", "body"),
+        ui.text(ids[0], f"**{name}** · `{ev.record_id}`", "body"),
         ui.text(
             ids[1],
             f"Value {ev.business_value_score}/5 · Feasibility {ev.feasibility_score}/5"
@@ -157,6 +159,15 @@ def _opportunity_block(ev: OpportunityEvaluation, idx: int) -> tuple[list[str], 
     brief_id = f"{base}-brief"
     ids.append(brief_id)
     nodes += ui.event_button(brief_id, "Open brief", OPEN_BRIEF, {"recordId": ev.record_id})
+
+    if ev.folder_url:
+        open_id = f"{base}-open"
+        ids.append(open_id)
+        nodes.append(
+            ui.open_url_button(
+                open_id, f"Open in {ui.storage_name(ev.folder_url)}", ev.folder_url, icon="folder_open"
+            )[0]
+        )
 
     if needs_tech_review(ev):
         review_id = f"{base}-review"

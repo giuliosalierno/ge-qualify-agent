@@ -1170,6 +1170,7 @@ def _brief_view_messages(
         pack=session.pack,
         skipped_stages=session.skipped,
         portfolio=_portfolio_evaluations(store),
+        links=session.document_links,
     )
 
 
@@ -1220,7 +1221,10 @@ def _try_view_event(
 
     if event.name == OPEN_BRIEF and record_id:
         from qualify.a2ui.views.brief import build_brief_view  # noqa: PLC0415
-        from qualify.agent.handover import load_review_record  # noqa: PLC0415
+        from qualify.agent.handover import (  # noqa: PLC0415
+            load_review_record,
+            review_document_links,
+        )
 
         record = load_review_record(store, record_id, session.context_id)
         if record is None:
@@ -1234,6 +1238,7 @@ def _try_view_event(
             record,
             session.panel_surface_id("brief"),
             portfolio=_portfolio_evaluations(store),
+            links=review_document_links(record_id, context_id=session.context_id),
         )
         store.save(session)
         return TurnOutput(
@@ -1608,6 +1613,7 @@ def _try_start_tech_review(
         list_pending_reviews,
         parse_tech_review_intent,
         resolve_pending_review_choice,
+        review_document_links,
         start_tech_review,
     )
 
@@ -1685,6 +1691,9 @@ def _try_start_tech_review(
     tech_session.signin_confirmed = session.signin_confirmed
     tech_session.signin_prompted = session.signin_prompted
     tech_session.signin_dismissed = session.signin_dismissed
+    tech_session.document_links.update(
+        review_document_links(record_id, context_id=session.context_id)
+    )
 
     sid = tech_session.next_surface_id()
     tech_session.rendered_stages.add(tech_session.active_stage)

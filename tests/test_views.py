@@ -414,3 +414,64 @@ def test_value_note_matches_the_scoring_cut_offs() -> None:
 
     for hours, expected in ((30, 1), (40, 2), (340, 2), (360, 3), (1_740, 3), (1_760, 4), (7_400, 4), (7_600, 5)):
         assert value_for(hours) == expected, hours
+
+
+# ---------------------------------------------------------------------------
+# Open-in-storage buttons
+# ---------------------------------------------------------------------------
+
+
+def _open_urls(by_id: dict[str, dict]) -> dict[str, str]:
+    return {
+        cid: c["action"]["functionCall"]["args"]["url"]
+        for cid, c in by_id.items()
+        if c["component"] == "MaterialButton" and "functionCall" in c.get("action", {})
+    }
+
+
+def test_portfolio_rows_open_their_sharepoint_folder(sharepoint) -> None:
+    store = InMemorySessionStore(quiet=True)
+    out = execute_turn(store, TurnInput(context_id="ctx-v-open", user_text="portfolio review"))
+    validate_surface(out.a2ui_messages)
+    by_id = _components(out.a2ui_messages)
+    urls = _open_urls(by_id)
+    assert len(urls) == 4
+    assert all("sharepoint" in u for u in urls.values())
+    assert all(by_id[cid]["label"] == "Open in SharePoint" for cid in urls)
+    # The opportunity name is the text-link fallback.
+    first = next(iter(urls))
+    assert urls[first] in by_id[first.replace("-open", "-name")]["text"]
+
+
+def test_portfolio_without_folder_urls_has_no_open_buttons() -> None:
+    assert _open_urls(_components(build_portfolio_view(_summary(), "s"))) == {}
+
+
+def test_brief_view_open_buttons_only_with_links() -> None:
+    rec = _record("UC-2026-BR0003", "Linked")
+    assert _open_urls(_components(build_brief_view(rec, "s"))) == {}
+    msgs = build_brief_view(
+        rec, "s", links={"folder": "https://t.sharepoint.com/f", "business": "https://t.sharepoint.com/f/b.md"}
+    )
+    validate_surface(msgs)
+    by_id = _components(msgs)
+    assert _open_urls(by_id) == {
+        "br-open-folder": "https://t.sharepoint.com/f",
+        "br-open-brief": "https://t.sharepoint.com/f/b.md",
+    }
+    assert by_id["br-open-folder"]["label"] == "Open folder in SharePoint"
+    assert "br-open-folder-link" in by_id["br-next"]["children"]
+
+
+def test_open_brief_event_adds_the_sharepoint_buttons(sharepoint) -> None:
+    store = InMemorySessionStore(quiet=True)
+    out = execute_turn(
+        store,
+        TurnInput(
+            context_id="ctx-v-brief",
+            action_data={"name": OPEN_BRIEF, "context": {"recordId": "UC-2026-SB0001"}},
+        ),
+    )
+    urls = _open_urls(_components(out.a2ui_messages))
+    assert "UC-2026-SB0001" in urls["br-open-folder"]
+    assert urls["br-open-brief"].startswith(urls["br-open-folder"])
