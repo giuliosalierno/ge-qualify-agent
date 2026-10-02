@@ -54,6 +54,52 @@ def needs_tech_review(ev: OpportunityEvaluation) -> bool:
     return not ev.has_dossier and not ev.has_hard_blocker
 
 
+#: How the Ranked list columns are computed. Mirrors
+#: ``scoring.portfolio._score_business_value``, ``_score_feasibility`` and
+#: ``_assign_quadrant``; change both together.
+_SCORING_NOTES: tuple[tuple[str, str], ...] = (
+    ("pf-how-title", "**How the scores are computed**"),
+    (
+        "pf-how-value",
+        "**Value (1–5)** grows with annual hours saved: about 40 hrs/yr = 2, "
+        "350 = 3, 1,750 = 4, 7,500+ = 5, plus up to +0.6 for 250+ users and "
+        "well-described expected impacts. If hours are unsized, the user "
+        "count is used instead.",
+    ),
+    (
+        "pf-how-feas",
+        "**Feasibility (1–5)** comes from the Technical Architecture Review "
+        "readiness: 85%+ = 5, 70%+ = 4, 50%+ = 3, 30%+ = 2, less = 1. Until "
+        "that review is done it is *indicative* (marked \\*), based on the "
+        "Gemini Enterprise capability level: Levels 1–2 = 5, Levels 3–4 = 4, "
+        "Level 5 = 3, Level 6 = 2. The level is set by checking each data "
+        "source against the official Gemini Enterprise connector catalog; a "
+        "source with no native connector needs a custom MCP server (Level 5+). "
+        "Any hard blocker sets feasibility to 1.",
+    ),
+    (
+        "pf-how-quadrant",
+        "**Quadrant**: Quick Win = value ≥ 3 and feasibility ≥ 4 · Strategic "
+        "Bet = value ≥ 3 and feasibility 2–3 · Departmental Niche = value < 3 "
+        "and feasibility ≥ 4 · otherwise, or with a hard blocker, Deprioritized.",
+    ),
+    (
+        "pf-how-rank",
+        "**Rank**: by quadrant (Quick Wins first), then composite score "
+        "(60% value + 40% feasibility, before rounding), then hours saved. "
+        "Thresholds and weights are CoE defaults, not industry benchmarks.",
+    ),
+)
+_SCORING_NOTE_IDS = [cid for cid, _ in _SCORING_NOTES]
+
+
+def _scoring_note() -> list[ui.Component]:
+    return [
+        ui.text(cid, value, "body" if cid == "pf-how-title" else "caption")
+        for cid, value in _SCORING_NOTES
+    ]
+
+
 def _ranked_rows(summary: PortfolioSummary) -> list[dict[str, Any]]:
     rows = []
     for rank, ev in enumerate(summary.evaluations, start=1):
@@ -135,6 +181,11 @@ def build_portfolio_view(
     ]
 
     # --- Ranked tab -----------------------------------------------------------
+    nodes += [
+        ui.column("pf-ranked", ["pf-table", "pf-how-rule", *_SCORING_NOTE_IDS]),
+        ui.divider("pf-how-rule"),
+        *_scoring_note(),
+    ]
     nodes.append(
         ui.table(
             "pf-table",
@@ -191,10 +242,16 @@ def build_portfolio_view(
     if source_note:
         header_ids.append("pf-source")
         nodes.append(ui.text("pf-source", source_note, "caption"))
+    # Matrix is deliberately NOT the first tab. GE's VegaChart takes its width
+    # from the panel when it first draws, ignoring the spec's fixed width, and
+    # the first tab draws while the panel is still sliding open — so the chart
+    # came out at about half width until a tab switch redrew it. A chart on a
+    # later tab draws on click, into the fully open panel (the brief's chart,
+    # on "Scores", never had the problem).
     nodes.append(
         ui.tabs(
             "pf-tabs",
-            [("Matrix", "pf-matrix"), ("Ranked list", "pf-table"), ("Actions", "pf-actions")],
+            [("Ranked list", "pf-ranked"), ("Matrix", "pf-matrix"), ("Actions", "pf-actions")],
         )
     )
     root = ui.canvas_root(
