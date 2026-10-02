@@ -26,6 +26,7 @@ from qualify.a2ui.views.events import OPEN_PORTFOLIO, OPEN_WORKSPACE, START_TECH
 from qualify.a2ui.views.portfolio import QUADRANT_ICONS, needs_tech_review
 from qualify.packs.loader import Pack
 from qualify.schema.use_case_record import UseCaseRecord
+from qualify.scoring.business_tier import business_summary
 from qualify.scoring.portfolio import OpportunityEvaluation, evaluate_opportunity
 
 _DATA_ROOT = "/ui/brief"
@@ -50,25 +51,18 @@ def _open_items(record: UseCaseRecord, pack: Pack, skipped: set[int]) -> list[st
 
 
 def _brief_sections(record: UseCaseRecord, open_items: list[str]) -> tuple[list[str], list[ui.Component]]:
-    meta, biz, sizing, tech, prop, derived = (
+    meta, biz, sizing, tech, prop = (
         record.meta,
         record.business,
         record.sizing,
         record.technical,
         record.proposed,
-        record.derived,
     )
     sums = summary_strings(record)
 
     sources = [s for s in tech.data_sources if s != "other"]
     if tech.other_data_sources:
         sources.append(tech.other_data_sources)
-    level = (
-        f"Level {tech.capability_level.value} — {tech.capability_level.label}"
-        if tech.capability_level
-        else "Pending assessment"
-    )
-    tier = derived.delivery_tier.label if derived.delivery_tier else "To be determined by the CoE"
 
     sections: list[tuple[str, str, str, bool]] = []  # (id, title, markdown, expanded)
     if open_items:
@@ -127,9 +121,8 @@ def _brief_sections(record: UseCaseRecord, open_items: list[str]) -> tuple[list[
         ),
         (
             "br-capability",
-            "Recommended capability",
-            f"- **Capability level:** {level}\n- **Delivery tier:** {tier}"
-            + (f"\n\n{tech.capability_rationale}" if tech.capability_rationale else ""),
+            "Recommended approach",
+            business_summary(record),
             False,
         ),
     ]

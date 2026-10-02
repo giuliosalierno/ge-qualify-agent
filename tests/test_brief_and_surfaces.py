@@ -95,8 +95,8 @@ def test_each_stage_renders_as_distinct_surface_id() -> None:
 
     # Verify the markdown Business Value Brief was generated
     assert "# Business Value Brief: AP Invoice Exception Assistant" in t5.reply_text
-    assert "## 1. Executive Summary & Governance" in t5.reply_text
-    assert "## 2. Value Realization & Sizing Scorecard" in t5.reply_text
+    assert "## Summary" in t5.reply_text
+    assert "## Value: 5,000 hours a year" in t5.reply_text
     assert "5,000" in t5.reply_text  # 25 users * 12/wk * 20m / 60 * 50 wks = 5,000 hrs/yr
 
     # Reopen Stage 1 -> renders yet another new surfaceId
@@ -223,8 +223,8 @@ def test_skip_stage_button_and_chat_flow() -> None:
         ),
     )
     assert t_final.is_complete
-    assert "## ⚠️ Open Discovery Items (Pending Follow-Up)" in t_final.reply_text
-    assert "CONDITIONAL QUALIFICATION" in t_final.reply_text
+    assert "## Open items" in t_final.reply_text
+    assert "Conditional qualification" in t_final.reply_text
     assert "Effort and value" in t_final.reply_text
 
 

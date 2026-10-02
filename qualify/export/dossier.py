@@ -204,6 +204,11 @@ def render_technical_dossier(
     parts.append("## 6. Preliminary Feasibility & Delivery Path\n")
     parts.append(f"- **Feasibility profile:** {score.feasibility_profile}")
     parts.append(f"- **Architectural rationale:** {_feasibility_rationale(record, score)}\n")
+    # The architect-level capability guidance (MCP, Cloud Run, IAM, CLI) lives
+    # here; the Business Value Brief carries the plain-language version.
+    if record.technical.capability_rationale:
+        parts.append("### Solution guidance from the Phase 1 classification\n")
+        parts.append(record.technical.capability_rationale + "\n")
 
     # -- 7. Access checklist ------------------------------------------------
     parts.append("## 7. Access Checklist & Sprint #1 Prerequisites\n")
