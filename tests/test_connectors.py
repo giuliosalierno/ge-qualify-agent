@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import pytest
@@ -65,15 +64,35 @@ def test_every_intake_option_is_in_the_catalog() -> None:
         assert value in cat.entries, value
 
 
-def _seed(record_id: str) -> UseCaseRecord:
-    data = json.loads((ROOT / f"click-to-deploy/demo/seed/records/{record_id}.json").read_text())
-    data.pop("derived", None)
-    return UseCaseRecord.model_validate(data)
+def _kyc() -> UseCaseRecord:
+    """The KYC demo record (UC-2026-DEMO03), built here rather than read from
+    the Click-to-Deploy seed so the test runs on every branch."""
+    rec = UseCaseRecord(
+        meta=Meta(
+            record_id="UC-2026-DEMO03",
+            initiative_name="KYC document pre-check",
+            department_bu="Cymbal Bank - Onboarding",
+        ),
+        business=Business(
+            problem_description=(
+                "Analysts check every onboarding pack for missing or expired "
+                "documents before the compliance review, and packs bounce back often."
+            ),
+            user_count=60,
+            user_profile="Onboarding analysts",
+            expected_impacts="Fewer rejected onboarding packs; faster account opening",
+        ),
+        technical=Technical(data_sources=["gcs", "internal_api"]),
+    )
+    rec.sizing.task_frequency_weekly = 25
+    rec.sizing.baseline_minutes_per_task = 20
+    rec.sizing.target_minutes_saved_per_task = 10
+    return rec
 
 
 def test_kyc_internal_api_is_not_a_native_connector() -> None:
     """Audit bug: gcs + internal_api was scored as all-native (L3, Quick Win)."""
-    rec = _seed("UC-2026-DEMO03")
+    rec = _kyc()
     rec.technical.capability_level = CapabilityLevel.WORKFLOW_BUILDER_CHAT_AGENT
     rec.technical.capability_rationale = "legacy rationale without a catalog marker"
 
@@ -135,7 +154,7 @@ def test_business_brief_speaks_business_and_dossier_keeps_the_design() -> None:
     from qualify.export.dossier import render_technical_dossier
     from qualify.scoring.technical import score_technical
 
-    rec = _seed("UC-2026-DEMO03")
+    rec = _kyc()
     rec.technical.capability_level = None
     rec.technical.capability_rationale = None
 

@@ -158,3 +158,26 @@ def test_hi_over_the_a2a_wire_shows_menu(monkeypatch: pytest.MonkeyPatch) -> Non
     blob = str(results)
     assert START_INTAKE in blob
     assert "Stage 1 of 4" not in blob
+
+
+def test_sharepoint_signin_moves_from_the_greeting_to_start_intake(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """With SharePoint storage, the menu answers the greeting and the intake
+    button is where the sign-in card is offered: business owners still get it
+    before Stage 1, architects and CoE leads aren't asked on a greeting."""
+    from qualify.a2ui.signin import SIGNIN_SURFACE_ID
+
+    monkeypatch.delenv("SIGNIN_CARD", raising=False)
+    store = InMemorySessionStore(quiet=True)
+
+    greet = execute_turn(store, TurnInput(context_id="ctx-wm-sp", user_text="hello"))
+    assert _events(greet.a2ui_messages) == {START_INTAKE, START_TECH_REVIEW, OPEN_PORTFOLIO}
+    assert greet.session.signin_prompted is False
+
+    intake = execute_turn(
+        store,
+        TurnInput(context_id="ctx-wm-sp", action_data={"name": START_INTAKE, "context": {}}),
+    )
+    assert "Microsoft SharePoint" in intake.reply_text
+    assert intake.a2ui_messages[0]["createSurface"]["surfaceId"] == SIGNIN_SURFACE_ID
