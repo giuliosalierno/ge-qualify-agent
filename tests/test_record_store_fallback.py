@@ -112,7 +112,7 @@ def test_portfolio_uses_record_store_when_sharepoint_unavailable(store: LocalRec
     assert "saved copies" in out.reply_text
     assert "Invoice Triage" in out.reply_text
     # Data is still shown, but the user is told they are signed out and how to fix it.
-    assert "not signed in" in out.reply_text and "sign in with Microsoft" in out.reply_text
+    assert "not signed in" in out.reply_text and "Sign in with Microsoft" in out.reply_text
     assert out.a2ui_messages == []  # views are off here: markdown only, no card
 
 

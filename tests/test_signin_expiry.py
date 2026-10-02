@@ -131,8 +131,8 @@ def test_reconnecting_shows_the_connected_banner_again() -> None:
     assert "connected" in out.reply_text.lower()
 
 
-def test_no_duplicate_card_when_the_reply_already_asks_to_sign_in(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The portfolio already offers sign-in when signed out; add the notice, not a second card."""
+def test_signed_out_portfolio_gets_one_notice_and_one_card(monkeypatch: pytest.MonkeyPatch) -> None:
+    """An expired session on `portfolio review`: one expiry line, one card, the scores still shown."""
     from qualify.connectors.storage import StorageAuthRequired
     from qualify.sinks.record_store import LocalRecordStore
     from tests.test_views import _portfolio
@@ -158,4 +158,92 @@ def test_no_duplicate_card_when_the_reply_already_asks_to_sign_in(monkeypatch: p
 
     out = execute_turn(store, TurnInput(context_id="ctx-pf", user_text="portfolio review"))
     assert out.reply_text.count("session has expired") == 1
+    assert _signin_surfaces(out.a2ui_messages) == 1
+    assert out.reply_text.count("/auth?t=") == 1
+
+
+# ---------------------------------------------------------------------------
+# One sign-in prompt, on the first reply; "signed in" resumes the command
+# ---------------------------------------------------------------------------
+
+
+class _GatedConnector:
+    """Raises 'sign in' until the conversation holds a token, then lists one record."""
+
+    display_name = "Microsoft SharePoint"
+    account_label = "Microsoft"
+
+    def __init__(self, items: list) -> None:
+        self.items = items
+
+    def load_all_opportunities(self, *, context_id: str | None = None, **_k):
+        from qualify.connectors.storage import StorageAuthRequired
+
+        if not token_vault.has_session(context_id):
+            raise StorageAuthRequired("sign in")
+        return self.items
+
+    def sync_portfolio_report(self, *_a, **_k):
+        return None
+
+
+@pytest.fixture
+def cards_on(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("SIGNIN_CARD", raising=False)
+    monkeypatch.setenv("WELCOME_MENU", "1")
+
+
+def test_first_reply_carries_the_only_sign_in_card(cards_on) -> None:
+    store = InMemorySessionStore(quiet=True)
+    out = execute_turn(store, TurnInput(context_id="ctx-first", user_text="hello"))
+    assert _signin_surfaces(out.a2ui_messages) == 1
+    comps = {c["id"] for m in out.a2ui_messages for c in m.get("updateComponents", {}).get("components", [])}
+    assert "signin-connect" in comps and "signin-skip" not in comps  # optional, not dismissible
+    assert sum(1 for m in out.a2ui_messages if "createSurface" in m) == 2  # the menu is still there
+
+    again = execute_turn(store, TurnInput(context_id="ctx-first", user_text="help"))
+    assert _signin_surfaces(again.a2ui_messages) == 0
+
+
+def test_signed_in_resumes_the_portfolio_instead_of_the_picker(cards_on, monkeypatch, tmp_path) -> None:
+    from qualify.sinks.record_store import LocalRecordStore
+    from qualify.sinks.session import Session
+    from tests.test_views import _portfolio
+
+    recs = _portfolio()
+    store = LocalRecordStore(tmp_path / "rs")
+    for r in recs:
+        s = Session(context_id=f"ctx-{r.meta.record_id}", pack_name="business", record=r)
+        s.committed = set(range(len(s.pack.stages)))
+        store.save(s)
+    connector = _GatedConnector([(r, {"recordId": r.meta.record_id, "webUrl": "https://t.sharepoint.com/f"}) for r in recs])
+    monkeypatch.setattr(sp_mod, "get_sharepoint_connector", lambda: connector)
+
+    first = execute_turn(store, TurnInput(context_id="ctx-pr", user_text="portfolio review"))
+    assert _signin_surfaces(first.a2ui_messages) == 1  # the central card, once
+    assert "/auth?t=" not in first.reply_text.split("---")[0]  # no second link in the body
+    assert first.session.resume_command == "portfolio review"
+    assert first.session.pending_review_choices  # the picker is armed
+
+    token_vault.save_tokens("ctx-pr", refresh_token="rt", access_token="tok")  # browser sign-in
+    out = execute_turn(store, TurnInput(context_id="ctx-pr", user_text="signed in"))
+    assert "couldn't match" not in out.reply_text
+    assert "connected" in out.reply_text.lower()
+    assert "portfolio prioritization" in out.reply_text.lower() and "not signed in" not in out.reply_text
+    assert out.session.resume_command is None
+
+
+def test_signed_in_with_nothing_to_resume_shows_the_menu(cards_on) -> None:
+    store = InMemorySessionStore(quiet=True)
+    execute_turn(store, TurnInput(context_id="ctx-ack", user_text="hello"))
+    token_vault.save_tokens("ctx-ack", refresh_token="rt", access_token="tok")
+    out = execute_turn(store, TurnInput(context_id="ctx-ack", user_text="signed in"))
+    assert "What would you like to do" in out.reply_text
     assert _signin_surfaces(out.a2ui_messages) == 0
+
+
+def test_save_words_are_not_a_sign_in_ack() -> None:
+    from qualify.agent.turn import _is_signin_ack
+
+    assert _is_signin_ack("signed in") and _is_signin_ack("Done!")
+    assert not _is_signin_ack("signed in, now save to sharepoint")

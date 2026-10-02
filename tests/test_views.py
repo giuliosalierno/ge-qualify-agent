@@ -520,7 +520,8 @@ def test_signed_out_portfolio_offers_sign_in_and_uses_remembered_folders(
 
     out = execute_turn(store, TurnInput(context_id="ctx-v-so", user_text="portfolio review"))
     validate_surface(out.a2ui_messages)
-    assert "not signed in" in out.reply_text and "sign in with Microsoft" in out.reply_text
+    assert "not signed in" in out.reply_text and "Sign in with Microsoft" in out.reply_text
+    assert out.session.resume_command == "portfolio review"
     by_id = _components(out.a2ui_messages)
     assert by_id["pf-signin"]["action"]["functionCall"]["call"] == "openUrl"
     assert "pf-signin" in by_id["root"]["children"]

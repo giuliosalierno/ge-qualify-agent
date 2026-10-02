@@ -53,6 +53,7 @@ def _session_to_dict(session: Session) -> dict[str, Any]:
         "welcome_shown": session.welcome_shown,
         "pending_review_choices": session.pending_review_choices,
         "document_links": session.document_links,
+        "resume_command": session.resume_command,
         "created_at": session.created_at.isoformat(),
         "updated_at": session.updated_at.isoformat(),
     }
@@ -78,6 +79,7 @@ def _session_from_dict(data: dict[str, Any]) -> Session:
         welcome_shown=bool(data.get("welcome_shown", False)),
         pending_review_choices=list(data.get("pending_review_choices", [])),
         document_links={str(k): str(v) for k, v in data.get("document_links", {}).items()},
+        resume_command=data.get("resume_command"),
         created_at=datetime.fromisoformat(data["created_at"]),
         updated_at=datetime.fromisoformat(data["updated_at"]),
     )

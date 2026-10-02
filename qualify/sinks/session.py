@@ -87,6 +87,9 @@ class Session:
     #: Links to files the storage provider wrote for this opportunity, for the
     #: workspace panel: ``folder``, plus one per pack (``business``, ``tech``).
     document_links: dict[str, str] = field(default_factory=dict)
+    #: A command that stopped for a sign-in (e.g. "portfolio review"); re-run
+    #: when the user reports they signed in.
+    resume_command: str | None = None
     created_at: datetime = field(default_factory=_now)
     updated_at: datetime = field(default_factory=_now)
 
