@@ -182,7 +182,68 @@ def execute_turn(
         # silently roll that back.
         store.save(output.session)
 
+    if _announce_lost_signin(output):
+        store.save(output.session)
+
     return output
+
+
+def _offers_signin(output: TurnOutput) -> bool:
+    """True when this reply already asks the user to sign in."""
+    from qualify.a2ui.signin import SIGNIN_SURFACE_ID  # noqa: PLC0415
+
+    if "/auth?t=" in (output.reply_text or ""):
+        return True
+    return any(
+        m.get("createSurface", {}).get("surfaceId") == SIGNIN_SURFACE_ID
+        for m in output.a2ui_messages
+    )
+
+
+def _announce_lost_signin(output: TurnOutput) -> bool:
+    """Tells the user, once, that their storage sign-in has ended.
+
+    Tokens live only in this process's memory, so a deploy or restart signs
+    everyone out; Entra or Google can also reject a refresh token (expired,
+    revoked, password changed) or an access token mid-call (the vault's 401
+    hook then clears it). Either way the session record still says
+    ``signin_confirmed``, and without this the agent would carry on as if
+    connected and fail quietly at the next SharePoint call.
+
+    Checked after the turn so a token rejected *during* this turn is caught
+    too. Returns True when the session changed.
+    """
+    session = output.session
+    if not session.signin_confirmed:
+        return False
+
+    from qualify.connectors import token_vault  # noqa: PLC0415
+    from qualify.connectors.storage import storage_enabled  # noqa: PLC0415
+
+    if not storage_enabled() or token_vault.has_session(session.context_id):
+        return False
+
+    # Re-arm the "connected" banner for the next sign-in, and keep the
+    # intake-start card from appearing on top of this notice.
+    session.signin_confirmed = False
+    session.signin_prompted = True
+
+    where = _storage_label() or "document storage"
+    note = f"🔐 **Your {where} session has expired.**"
+    if _offers_signin(output):
+        output.reply_text = f"{note}\n\n{output.reply_text}" if output.reply_text else note
+        return True
+
+    from qualify.a2ui.signin import build_signin_card  # noqa: PLC0415
+
+    auth_url = build_signin_url(agent_base_url(), session.context_id)
+    note += (
+        " Your answers are kept. Sign in again below to keep saving and opening files "
+        f"in {where}, or [open the sign-in page]({auth_url})."
+    )
+    output.reply_text = f"{note}\n\n---\n\n{output.reply_text}" if output.reply_text else note
+    output.a2ui_messages = [*output.a2ui_messages, *build_signin_card(auth_url)]
+    return True
 
 
 def _consume_signin_banner(session: Session) -> str | None:
@@ -1450,7 +1511,14 @@ def _try_portfolio_review(
     try:
         items = connector.load_all_opportunities(context_id=session.context_id)
     except Exception as exc:
-        if isinstance(exc, StorageAuthRequired):
+        from qualify.connectors import token_vault  # noqa: PLC0415
+
+        # A 401 mid-listing clears the token (see the vault's response hook)
+        # but surfaces here as a generic failure, so "no session left" counts
+        # as signed out too.
+        if isinstance(exc, StorageAuthRequired) or not token_vault.has_session(
+            session.context_id
+        ):
             # Not signed in (as opposed to an outage): say so and offer the
             # sign-in, instead of silently showing the record-store copy.
             signin_url = build_signin_url(agent_base_url(), session.context_id)

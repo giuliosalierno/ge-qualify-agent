@@ -326,7 +326,7 @@ class SharePointConnector:
         if self.client_secret:
             payload["client_secret"] = self.client_secret
         try:
-            with httpx.Client(timeout=8.0) as client:
+            with httpx.Client(timeout=8.0, event_hooks=token_vault.HTTP_HOOKS) as client:
                 resp = client.post(self._token_url(), data=payload)
             if resp.status_code != 200:
                 logger.warning("Refresh token rejected by Entra (%s); user must sign in again.", resp.status_code)
@@ -351,7 +351,7 @@ class SharePointConnector:
         if entry and time.time() < entry[1]:
             return entry[0]
         try:
-            with httpx.Client(timeout=8.0) as client:
+            with httpx.Client(timeout=8.0, event_hooks=token_vault.HTTP_HOOKS) as client:
                 resp = client.post(
                     self._token_url(),
                     data={
@@ -384,7 +384,7 @@ class SharePointConnector:
             self._guid_cache[cache_key] = target
             return target
 
-        with httpx.Client(timeout=8.0) as client:
+        with httpx.Client(timeout=8.0, event_hooks=token_vault.HTTP_HOOKS) as client:
             resp = client.get(
                 f"{GRAPH_BASE_URL}/sites?search={urllib.parse.quote(target)}",
                 headers=headers,
@@ -412,7 +412,7 @@ class SharePointConnector:
             self._guid_cache[cache_key] = target
             return target
 
-        with httpx.Client(timeout=8.0) as client:
+        with httpx.Client(timeout=8.0, event_hooks=token_vault.HTTP_HOOKS) as client:
             endpoint = f"{GRAPH_BASE_URL}/sites/{urllib.parse.quote(site_id)}/drives"
             resp = client.get(endpoint, headers=headers)
             resp.raise_for_status()
@@ -436,7 +436,7 @@ class SharePointConnector:
         if cache_key in self._guid_cache:
             return self._guid_cache[cache_key]
 
-        with httpx.Client(timeout=8.0) as client:
+        with httpx.Client(timeout=8.0, event_hooks=token_vault.HTTP_HOOKS) as client:
             endpoint = f"{GRAPH_BASE_URL}/sites/{urllib.parse.quote(site_id)}/lists"
             resp = client.get(endpoint, headers=headers)
             if resp.status_code != 200:
@@ -517,7 +517,7 @@ class SharePointConnector:
             parent_folder = sanitize_path_segment(self.folder_path)
             rel_folder_path = f"{parent_folder}/{folder_name}"
 
-            with httpx.Client(timeout=12.0) as client:
+            with httpx.Client(timeout=12.0, event_hooks=token_vault.HTTP_HOOKS) as client:
                 # 1. Upload the pack's deliverable
                 brief_endpoint = (
                     f"{GRAPH_BASE_URL}/drives/{urllib.parse.quote(drive_id)}"
@@ -562,6 +562,17 @@ class SharePointConnector:
                 message=f"Synced {record.meta.record_id} to SharePoint ({auth_mode} mode).",
             )
         except Exception as exc:
+            if auth_mode == "delegated" and context_id and not token_vault.has_session(context_id):
+                # The vault's 401 hook signed this conversation out mid-write.
+                logger.warning("SharePoint rejected the user token during sync; sign-in required.")
+                return SharePointSyncResult(
+                    success=False,
+                    record_id=record.meta.record_id,
+                    folder_url="",
+                    brief_url="",
+                    auth_mode="unauthenticated",
+                    message="Microsoft session expired; sign in again to save to SharePoint.",
+                )
             logger.warning("Live SharePoint Graph sync encountered error (%s), saving to local mock fallback.", exc)
             return self._sync_mock(
                 record_id, folder_name, brief_md, record_json, list_fields,
@@ -718,7 +729,7 @@ class SharePointConnector:
                 f"{GRAPH_BASE_URL}/drives/{urllib.parse.quote(drive_id)}"
                 f"/root:/{urllib.parse.quote(parent_folder)}:/children"
             )
-            with httpx.Client(timeout=10.0) as client:
+            with httpx.Client(timeout=10.0, event_hooks=token_vault.HTTP_HOOKS) as client:
                 resp = client.get(endpoint, headers=headers)
                 if resp.status_code != 200:
                     logger.warning(
@@ -850,7 +861,7 @@ class SharePointConnector:
                     f"{GRAPH_BASE_URL}/drives/{urllib.parse.quote(drive_id)}"
                     f"/root:/{urllib.parse.quote(parent_folder)}:/children"
                 )
-                with httpx.Client(timeout=10.0) as client:
+                with httpx.Client(timeout=10.0, event_hooks=token_vault.HTTP_HOOKS) as client:
                     resp = client.get(endpoint, headers=headers)
                     if resp.status_code == 200:
                         for item in resp.json().get("value", []):
@@ -910,7 +921,7 @@ class SharePointConnector:
             site_id = self.resolve_site_id(headers)
             drive_id = self.resolve_drive_id(headers, site_id=site_id)
             parent_folder = sanitize_path_segment(self.folder_path)
-            with httpx.Client(timeout=12.0) as client:
+            with httpx.Client(timeout=12.0, event_hooks=token_vault.HTTP_HOOKS) as client:
                 for entry in entries:
                     folder_name = entry.get("name", "")
                     if not folder_name:
@@ -973,7 +984,7 @@ class SharePointConnector:
                     **headers,
                     "Content-Type": "text/markdown; charset=utf-8",
                 }
-                with httpx.Client(timeout=12.0) as client:
+                with httpx.Client(timeout=12.0, event_hooks=token_vault.HTTP_HOOKS) as client:
                     resp = client.put(put_url, content=report_md.encode("utf-8"), headers=put_headers)
                     if resp.status_code in (200, 201):
                         return resp.json().get("webUrl")
@@ -1018,7 +1029,7 @@ class SharePointConnector:
             f"{GRAPH_BASE_URL}/drives/{urllib.parse.quote(drive_id)}"
             f"/items/{urllib.parse.quote(item_id)}/content"
         )
-        with httpx.Client(timeout=12.0) as client:
+        with httpx.Client(timeout=12.0, event_hooks=token_vault.HTTP_HOOKS) as client:
             resp = client.get(url, headers=headers, follow_redirects=True)
             resp.raise_for_status()
             content_type = resp.headers.get("content-type", "")

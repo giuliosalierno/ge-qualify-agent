@@ -156,7 +156,7 @@ class GoogleDriveConnector:
         if not (refresh_token and self.client_id and self.client_secret):
             return None
         try:
-            with httpx.Client(timeout=8.0) as client:
+            with httpx.Client(timeout=8.0, event_hooks=token_vault.HTTP_HOOKS) as client:
                 resp = client.post(
                     GOOGLE_TOKEN_URL,
                     data={
@@ -371,7 +371,7 @@ class GoogleDriveConnector:
             return self._sync_mock(record_id, folder_name, filename, brief_md, record_json)
 
         try:
-            with httpx.Client(timeout=12.0) as client:
+            with httpx.Client(timeout=12.0, event_hooks=token_vault.HTTP_HOOKS) as client:
                 root = self._root_folder(client, headers, create=True)
                 if root is None:
                     raise RuntimeError("Drive root folder could not be created")
@@ -445,7 +445,7 @@ class GoogleDriveConnector:
         context_id: str | None,
     ) -> list[dict[str, Any]]:
         try:
-            with httpx.Client(timeout=10.0) as client:
+            with httpx.Client(timeout=10.0, event_hooks=token_vault.HTTP_HOOKS) as client:
                 root = self._root_folder(client, headers, create=False)
                 if root is None:
                     return []
@@ -499,7 +499,7 @@ class GoogleDriveConnector:
             return None
 
         try:
-            with httpx.Client(timeout=10.0) as client:
+            with httpx.Client(timeout=10.0, event_hooks=token_vault.HTTP_HOOKS) as client:
                 root = self._root_folder(client, headers, create=False)
                 if root is None:
                     return None
@@ -549,7 +549,7 @@ class GoogleDriveConnector:
                         logger.warning("Skipping invalid mock record.json (%s).", type(exc).__name__)
             return loaded
 
-        with httpx.Client(timeout=12.0) as client:
+        with httpx.Client(timeout=12.0, event_hooks=token_vault.HTTP_HOOKS) as client:
             for entry in entries:
                 try:
                     rec_file = self._find_child(
@@ -592,7 +592,7 @@ class GoogleDriveConnector:
             return f"https://drive.mock/{urllib.parse.quote(self.folder_name)}/{urllib.parse.quote(safe_filename)}"
 
         try:
-            with httpx.Client(timeout=12.0) as client:
+            with httpx.Client(timeout=12.0, event_hooks=token_vault.HTTP_HOOKS) as client:
                 root = self._root_folder(client, headers, create=True)
                 if root is None:
                     raise RuntimeError("Drive root folder could not be created")
