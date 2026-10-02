@@ -113,7 +113,9 @@ def _completion_entry(session: Session, existing: dict[str, Any] | None) -> dict
     else:
         entry["hasBrief"] = True
         entry.setdefault("hasDossier", False)
-    entry["webUrl"] = None
+    # The storage folder, when this session saved one; else keep what an
+    # earlier save or a signed-in portfolio load recorded.
+    entry["webUrl"] = session.document_links.get("folder") or entry.get("webUrl")
     entry["lastModifiedDateTime"] = datetime.now().astimezone().isoformat()
     entry["source"] = "record_store"
     return entry
@@ -167,6 +169,16 @@ class LocalRecordStore(SessionStore, RecordStore):
         path = self._portfolio_path(session.record.meta.record_id)
         existing = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else None
         path.write_text(json.dumps(_completion_entry(session, existing), indent=2), encoding="utf-8")
+
+    def remember_folder_url(self, record_id: str, url: str) -> None:
+        """Records the storage folder address on an existing portfolio marker."""
+        path = self._portfolio_path(record_id)
+        if not path.is_file():
+            return
+        entry = json.loads(path.read_text(encoding="utf-8"))
+        if entry.get("webUrl") != url:
+            entry["webUrl"] = url
+            path.write_text(json.dumps(entry, indent=2), encoding="utf-8")
 
     def list_completed(self, limit: int = 50) -> list[dict[str, Any]]:
         """Finished opportunities, newest first."""
@@ -269,6 +281,16 @@ class GCSRecordStore(SessionStore, RecordStore):
             json.dumps(_completion_entry(session, existing), indent=2),
             content_type="application/json",
         )
+
+    def remember_folder_url(self, record_id: str, url: str) -> None:
+        """Records the storage folder address on an existing portfolio marker."""
+        blob = self._portfolio_blob(record_id)
+        if not blob.exists():
+            return
+        entry = json.loads(blob.download_as_text(encoding="utf-8"))
+        if entry.get("webUrl") != url:
+            entry["webUrl"] = url
+            blob.upload_from_string(json.dumps(entry, indent=2), content_type="application/json")
 
     def list_completed(self, limit: int = 50) -> list[dict[str, Any]]:
         """Finished opportunities, newest first."""

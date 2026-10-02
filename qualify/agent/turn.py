@@ -1238,7 +1238,7 @@ def _try_view_event(
             record,
             session.panel_surface_id("brief"),
             portfolio=_portfolio_evaluations(store),
-            links=review_document_links(record_id, context_id=session.context_id),
+            links=review_document_links(record_id, context_id=session.context_id, store=store),
         )
         store.save(session)
         return TurnOutput(
@@ -1442,11 +1442,19 @@ def _try_portfolio_review(
             )
         return _render_portfolio(store, session, items, connector=None)
 
+    from qualify.connectors.storage import StorageAuthRequired  # noqa: PLC0415
+
     connector = get_storage_connector()
     from_record_store = False
+    signin_url: str | None = None
     try:
         items = connector.load_all_opportunities(context_id=session.context_id)
-    except Exception:
+    except Exception as exc:
+        if isinstance(exc, StorageAuthRequired):
+            # Not signed in (as opposed to an outage): say so and offer the
+            # sign-in, instead of silently showing the record-store copy.
+            signin_url = build_signin_url(agent_base_url(), session.context_id)
+            session.signin_prompted = True
         # No SharePoint session (or SharePoint is down). The record store holds
         # every *finished* opportunity too, so the CoE view still works for
         # users who cannot sign in to Microsoft — e.g. go/demo testers.
@@ -1478,7 +1486,12 @@ def _try_portfolio_review(
         )
 
     return _render_portfolio(
-        store, session, items, connector=None if from_record_store else connector
+        store,
+        session,
+        items,
+        connector=None if from_record_store else connector,
+        signin_url=signin_url,
+        account_label=getattr(connector, "account_label", "Microsoft"),
     )
 
 
@@ -1488,11 +1501,15 @@ def _render_portfolio(
     items: list[tuple[Any, dict[str, Any]]],
     *,
     connector: Any | None,
+    signin_url: str | None = None,
+    account_label: str = "Microsoft",
 ) -> TurnOutput:
     """Scores `items` and renders the report.
 
     `connector` is None when the items came from the record store; the report
     is then not published anywhere and says where its data came from.
+    `signin_url` is set when that happened because the user is not signed in;
+    the reply and the panel then offer the sign-in.
     """
     from qualify.connectors.storage import storage_enabled  # noqa: PLC0415
     from qualify.export.portfolio import render_portfolio_report  # noqa: PLC0415
@@ -1508,6 +1525,17 @@ def _render_portfolio(
                 store.save_record(ev.record)  # type: ignore[attr-defined]
             except Exception:
                 pass
+
+    # Remember each folder's address in the record store, so the open buttons
+    # also work in conversations that are not signed in.
+    remember = getattr(store, "remember_folder_url", None)
+    if not from_record_store and remember is not None:
+        for ev in summary.evaluations:
+            if ev.folder_url:
+                try:
+                    remember(ev.record_id, ev.folder_url)
+                except Exception as exc:
+                    log.warning("Could not store folder URL for %s: %s", ev.record_id, exc)
 
     # Save Portfolio_Prioritization_Report.md to SharePoint and include its URL.
     # Skipped when SharePoint was unreachable a moment ago: it would fail again.
@@ -1537,10 +1565,19 @@ def _render_portfolio(
     source_note = None
     if from_record_store and storage_enabled():
         source_note = (
-            "Scored from the agent's record store (finished intakes only) — "
+            f"You're not signed in to {_storage_label() or 'document storage'}, so this is "
+            "scored from the agent's saved copies (finished intakes only)."
+            if signin_url
+            else "Scored from the agent's record store (finished intakes only) — "
             "SharePoint was not available for this conversation."
         )
         final_md = f"_{source_note}_\n\n" + final_md
+    signin_line = (
+        f"\n\n🔐 {source_note} To open the files and publish the report, "
+        f"**[sign in with {account_label} ↗]({signin_url})**, then type `portfolio review` again."
+        if signin_url
+        else ""
+    )
 
     if interactive_views_enabled():
         from qualify.a2ui.views.portfolio import (  # noqa: PLC0415
@@ -1561,18 +1598,20 @@ def _render_portfolio(
         reply += (
             "\n\nUse the **Actions** tab, or type `technical review <name or ID>`."
         )
+        reply += signin_line
         return TurnOutput(
             reply_text=reply,
             a2ui_messages=build_portfolio_view(
                 summary,
                 session.panel_surface_id("portfolio"),
                 source_note=source_note,
+                signin=(signin_url, account_label) if signin_url else None,
             ),
             session=session,
         )
 
     return TurnOutput(
-        reply_text=final_md,
+        reply_text=final_md + signin_line,
         a2ui_messages=[],
         session=session,
     )
@@ -1692,7 +1731,7 @@ def _try_start_tech_review(
     tech_session.signin_prompted = session.signin_prompted
     tech_session.signin_dismissed = session.signin_dismissed
     tech_session.document_links.update(
-        review_document_links(record_id, context_id=session.context_id)
+        review_document_links(record_id, context_id=session.context_id, store=store)
     )
 
     sid = tech_session.next_surface_id()

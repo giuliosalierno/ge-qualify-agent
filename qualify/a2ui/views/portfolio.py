@@ -191,8 +191,13 @@ def build_portfolio_view(
     surface_id: str,
     *,
     source_note: str | None = None,
+    signin: tuple[str, str] | None = None,
 ) -> list[dict[str, Any]]:
-    """The full message sequence for the portfolio side panel."""
+    """The full message sequence for the portfolio side panel.
+
+    ``signin`` is ``(url, account_label)`` when the user is not signed in to
+    document storage; the header then carries a sign-in button.
+    """
     nodes: list[ui.Component] = []
 
     # --- Matrix tab -----------------------------------------------------------
@@ -270,7 +275,19 @@ def build_portfolio_view(
     ]
     if source_note:
         header_ids.append("pf-source")
-        nodes.append(ui.text("pf-source", source_note, "caption"))
+        nodes.append(ui.text("pf-source", source_note, "body" if signin else "caption"))
+    if signin:
+        url, account = signin
+        header_ids += ["pf-signin", "pf-signin-link"]
+        nodes += ui.open_url_button(
+            "pf-signin",
+            f"Sign in with {account}",
+            url,
+            icon="login",
+            primary=True,
+            fallback=f"Sign in to open the files: [sign in with {account}]({url}), "
+            "then type `portfolio review` again.",
+        )
     # Matrix is deliberately NOT the first tab. GE's VegaChart takes its width
     # from the panel when it first draws, ignoring the spec's fixed width, and
     # the first tab draws while the panel is still sliding open — so the chart

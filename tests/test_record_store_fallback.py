@@ -109,9 +109,11 @@ def test_pending_list_without_store_still_reports_unreachable() -> None:
 def test_portfolio_uses_record_store_when_sharepoint_unavailable(store: LocalRecordStore) -> None:
     store.save(_finished("ctx-1", "Invoice Triage"))
     out = execute_turn(store, TurnInput(context_id="ctx-coe", user_text="portfolio review"))
-    assert "record store" in out.reply_text
+    assert "saved copies" in out.reply_text
     assert "Invoice Triage" in out.reply_text
-    assert out.a2ui_messages == []  # no sign-in card when there is data to show
+    # Data is still shown, but the user is told they are signed out and how to fix it.
+    assert "not signed in" in out.reply_text and "sign in with Microsoft" in out.reply_text
+    assert out.a2ui_messages == []  # views are off here: markdown only, no card
 
 
 def test_portfolio_still_offers_sign_in_when_nothing_is_finished(store: LocalRecordStore) -> None:

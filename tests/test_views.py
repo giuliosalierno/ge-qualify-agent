@@ -475,3 +475,87 @@ def test_open_brief_event_adds_the_sharepoint_buttons(sharepoint) -> None:
     urls = _open_urls(_components(out.a2ui_messages))
     assert "UC-2026-SB0001" in urls["br-open-folder"]
     assert urls["br-open-brief"].startswith(urls["br-open-folder"])
+
+
+# ---------------------------------------------------------------------------
+# Not signed in to storage: say so, and remember folder addresses
+# ---------------------------------------------------------------------------
+
+
+def _finished_in(store, record: UseCaseRecord, folder: str | None = None) -> None:
+    from qualify.sinks.session import Session
+
+    session = Session(context_id=f"ctx-{record.meta.record_id}", pack_name="business", record=record)
+    session.committed = set(range(len(session.pack.stages)))
+    if folder:
+        session.document_links["folder"] = folder
+    store.save(session)
+
+
+class _SignedOut:
+    display_name = "Microsoft SharePoint"
+    account_label = "Microsoft"
+
+    def load_all_opportunities(self, *a, **k):
+        from qualify.connectors.storage import StorageAuthRequired
+
+        raise StorageAuthRequired("sign in")
+
+    def list_opportunities(self, *a, **k):
+        from qualify.connectors.storage import StorageAuthRequired
+
+        raise StorageAuthRequired("sign in")
+
+
+def test_signed_out_portfolio_offers_sign_in_and_uses_remembered_folders(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from qualify.sinks.record_store import LocalRecordStore
+
+    monkeypatch.setattr("qualify.connectors.sharepoint.get_sharepoint_connector", lambda: _SignedOut())
+    store = LocalRecordStore(tmp_path / "rs")
+    recs = _portfolio()
+    _finished_in(store, recs[0], folder="https://t.sharepoint.com/sites/x/Q/UC-1")
+    _finished_in(store, recs[1])
+
+    out = execute_turn(store, TurnInput(context_id="ctx-v-so", user_text="portfolio review"))
+    validate_surface(out.a2ui_messages)
+    assert "not signed in" in out.reply_text and "sign in with Microsoft" in out.reply_text
+    by_id = _components(out.a2ui_messages)
+    assert by_id["pf-signin"]["action"]["functionCall"]["call"] == "openUrl"
+    assert "pf-signin" in by_id["root"]["children"]
+    # The folder saved with the first record still opens without a sign-in.
+    assert list(_open_urls(by_id).values()).count("https://t.sharepoint.com/sites/x/Q/UC-1") == 1
+
+
+def test_signed_in_portfolio_has_no_sign_in_button(sharepoint) -> None:
+    store = InMemorySessionStore(quiet=True)
+    out = execute_turn(store, TurnInput(context_id="ctx-v-si", user_text="portfolio review"))
+    assert "pf-signin" not in _components(out.a2ui_messages)
+    assert "not signed in" not in out.reply_text
+
+
+def test_signed_in_portfolio_backfills_folder_urls(sharepoint, tmp_path: Path) -> None:
+    from qualify.sinks.record_store import LocalRecordStore
+
+    store = LocalRecordStore(tmp_path / "rs2")
+    for r in _portfolio():
+        _finished_in(store, r)
+    execute_turn(store, TurnInput(context_id="ctx-v-bf", user_text="portfolio review"))
+    urls = {e["recordId"]: e["webUrl"] for e in store.list_completed()}
+    assert urls and all(u and "sharepoint" in u for u in urls.values())
+
+
+def test_signed_out_tech_review_links_come_from_the_record_store(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from qualify.agent.handover import review_document_links
+    from qualify.sinks.record_store import LocalRecordStore
+
+    monkeypatch.setattr("qualify.connectors.sharepoint.get_sharepoint_connector", lambda: _SignedOut())
+    store = LocalRecordStore(tmp_path / "rs3")
+    rec = _portfolio()[0]
+    _finished_in(store, rec, folder="https://t.sharepoint.com/sites/x/Q/F")
+    links = review_document_links(rec.meta.record_id, store=store)
+    assert links["folder"] == "https://t.sharepoint.com/sites/x/Q/F"
+    assert links["business"].startswith("https://t.sharepoint.com/sites/x/Q/F/")
