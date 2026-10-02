@@ -13,6 +13,7 @@ quadrants:
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import Literal
 
@@ -112,10 +113,12 @@ def _score_business_value(record: UseCaseRecord) -> tuple[int, float, str]:
         elif users >= 25:
             raw = 2.2
         else:
-            raw = 1.5
+            # Under 25 users with no hours sized: no evidence of more than
+            # minimal value, so stay at 1 even with the impacts bonus.
+            raw = 1.2
         notes.append(f"{users:,} users (hours unsized)")
     else:
-        raw = 1.5 if len(impacts) > 40 else 1.0
+        raw = 1.2 if len(impacts) > 40 else 1.0
         notes.append("sizing inputs incomplete")
 
     if users is not None and users >= 250 and hours is not None:
@@ -127,7 +130,9 @@ def _score_business_value(record: UseCaseRecord) -> tuple[int, float, str]:
     if len(impacts) >= 60:
         raw = min(5.0, raw + 0.2)
 
-    score_int = max(1, min(5, int(round(raw))))
+    # Halves round up (2.5 -> 3). Python's round() is half-to-even, which
+    # made 1.5 -> 2 but 2.5 -> 2, so equal margins scored differently.
+    score_int = max(1, min(5, int(math.floor(raw + 0.5))))
     return score_int, round(raw, 2), ", ".join(notes)
 
 

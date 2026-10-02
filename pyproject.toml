@@ -31,6 +31,7 @@ packages = ["qualify"]
 artifacts = [
     "qualify/a2ui/catalogs/*.json",
     "qualify/packs/*.yaml",
+    "qualify/scoring/*.yaml",
 ]
 
 [build-system]

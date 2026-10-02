@@ -268,7 +268,8 @@ def test_capability_grounding_anti_overcommitment_delegation() -> None:
     assert rec_unknown.technical.capability_level == CapabilityLevel.WORKFLOW_AGENT_WITH_CUSTOM_MCP
     assert "Not sure yet (`unknown`)" in (rec_unknown.technical.capability_rationale or "")
 
-    # 3. Write/mutation on read-only native connector (SharePoint) -> delegates to Pro-Code (Level 5)
+    # 3a. Writes to SharePoint: its GE connector documents end-user actions, so
+    #     this stays Low-Code (Level 4) and the rationale cites the doc page.
     rec_sp_write = UseCaseRecord(
         meta=Meta(record_id="UC-2026-SPWR02", initiative_name="SharePoint Mutator"),
         business=Business(
@@ -278,8 +279,23 @@ def test_capability_grounding_anti_overcommitment_delegation() -> None:
         technical=Technical(data_sources=["sharepoint"]),
     )
     classify_capability(rec_sp_write)
-    assert rec_sp_write.technical.capability_level == CapabilityLevel.WORKFLOW_AGENT_WITH_CUSTOM_MCP
-    assert "read/retrieval-scoped" in (rec_sp_write.technical.capability_rationale or "")
+    assert rec_sp_write.technical.capability_level == CapabilityLevel.WORKFLOW_BUILDER_WORKFLOW_AGENT
+    sp_rationale = rec_sp_write.technical.capability_rationale or ""
+    assert "end-user actions documented" in sp_rationale
+    assert "cloud.google.com/gemini/enterprise/docs/connectors/" in sp_rationale
+
+    # 3b. Writes to an ingest-only native connector (BigQuery) -> Level 5
+    rec_bq_write = UseCaseRecord(
+        meta=Meta(record_id="UC-2026-BQWR02", initiative_name="BigQuery Mutator"),
+        business=Business(
+            problem_description="Read sales tables and write corrected forecasts back.",
+            user_stories="Agent must update rows in BigQuery.",
+        ),
+        technical=Technical(data_sources=["bigquery"]),
+    )
+    classify_capability(rec_bq_write)
+    assert rec_bq_write.technical.capability_level == CapabilityLevel.WORKFLOW_AGENT_WITH_CUSTOM_MCP
+    assert "read/retrieval-scoped" in (rec_bq_write.technical.capability_rationale or "")
 
     # 4. Cross-system mutations across >=2 systems -> delegates to Pro-Code (Level 6 ADK)
     rec_multi_write = UseCaseRecord(
