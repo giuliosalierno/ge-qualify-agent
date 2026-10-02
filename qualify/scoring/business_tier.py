@@ -17,64 +17,23 @@ Enforces the **Anti-Overcommitment & Pro-Code Delegation Rule**:
 
 from __future__ import annotations
 
+import re
+
 from qualify.schema.capability import CapabilityLevel
 from qualify.schema.use_case_record import UseCaseRecord
+from qualify.scoring.connectors import (
+    ConnectorMatch,
+    catalog_marker,
+    load_catalog,
+    resolve,
+)
 
-# Official Gemini Enterprise (Agentspace) Native Data Store Connectors (Read / RAG Grounding)
-_NATIVE_READ_CONNECTORS = {
-    "google drive",
-    "drive",
-    "gmail",
-    "google docs",
-    "google calendar",
-    "bigquery",
-    "cloud storage",
-    "sharepoint",
-    "onedrive",
-    "jira",
-    "confluence",
-    "servicenow",
-    "salesforce",
-    "zendesk",
-    "hubspot",
-    "box",
-    "slack",
-    "github",
-}
-
-# Connectors with standard pre-built Connector Actions in Gemini Enterprise Workflow Builder
-# (Standard create/update ticket, send message, or basic record action when admin-enabled)
-_NATIVE_STANDARD_WRITE_CONNECTORS = {
-    "gmail",
-    "google calendar",
-    "google docs",
-    "jira",
-    "servicenow",
-    "salesforce",
-    "zendesk",
-    "slack",
-}
-
-# Systems that always require Pro-Code (Custom MCP Server on Cloud Run or ADK / A2A)
-_HIGH_CODE_SYSTEMS = {
-    "sap",
-    "oracle",
-    "workday",
-    "mainframe",
-    "snowflake",
-    "databricks",
-    "custom api",
-    "on-prem",
-    "sql",
-    "erp",
-    "postgres",
-    "mysql",
-    "mongodb",
-    "graphql",
-    "rest",
-    "soap",
-    "webhook",
-}
+# Which sources are native, which have documented actions, and which need a
+# custom MCP server is NOT decided here: it comes from the cited connector
+# catalog, qualify/scoring/connectors.yaml (see qualify/scoring/connectors.py).
+# The hard-coded lists that used to live here assumed any source not on a
+# deny list was native, which classified "Internal REST API" as a native
+# Gemini Enterprise connector.
 
 # Verbs indicating linear workflow / action execution
 _WORKFLOW_VERBS = (
@@ -125,59 +84,79 @@ _COMPLEX_ORCHESTRATION_MARKERS = (
 )
 
 
+def _source_matches(record: UseCaseRecord) -> list[ConnectorMatch]:
+    """Every named data source on the record, placed in the connector catalog.
+
+    "Other" ticked without a name is kept as an unverified placeholder, so it
+    still blocks a native-connector promise.
+    """
+    tech = record.technical
+    raw = [s.strip() for s in tech.data_sources if s.strip()]
+    names = [s for s in raw if s.lower() not in ("unknown", "other")]
+    other = (tech.other_data_sources or "").strip()
+    if other:
+        names += [p.strip() for p in re.split(r"[,;\n]| and ", other) if p.strip()]
+    elif any(s.lower() == "other" for s in raw):
+        names.append("custom/unlisted system")
+    return [resolve(n) for n in names]
+
+
+def _cite(m: ConnectorMatch) -> str:
+    return f"[{m.label}]({m.doc})" if m.doc else f"**{m.label}**"
+
+
 def _assess_gcp_grounding_signals(record: UseCaseRecord) -> dict[str, object]:
     """Evaluates the record against GCP reference capability boundaries."""
     tech = record.technical
     raw_sources = [s.strip().lower() for s in tech.data_sources if s.strip()]
     has_unknown_source = "unknown" in raw_sources
-    has_other_source = "other" in raw_sources or bool(
-        tech.other_data_sources and tech.other_data_sources.strip()
-    )
 
-    named_sources = [s for s in raw_sources if s not in ("unknown", "other")]
-    if tech.other_data_sources and tech.other_data_sources.strip():
-        named_sources.append(tech.other_data_sources.strip().lower())
+    matches = _source_matches(record)
+    named_sources = [m.id or m.source for m in matches]
+    custom = [m for m in matches if m.status == "custom"]
+    unverified = [m for m in matches if m.status == "unverified"]
+    has_other_source = bool(unverified)
 
     classification = (tech.security.data_classification or "internal").lower()
     problem = (record.business.problem_description or "").lower()
     stories = (record.business.user_stories or "").lower()
     text_corpus = f"{problem} {stories}"
 
-    has_high_code_sys = has_other_source or any(
-        any(hc in src for hc in _HIGH_CODE_SYSTEMS) for src in named_sources
-    )
+    # Custom and unverified sources both rule out a native-connector build.
+    has_high_code_sys = bool(custom) or bool(unverified)
     has_workflow_verbs = any(w in text_corpus for w in _WORKFLOW_VERBS)
     has_mutation_verbs = any(m in text_corpus for m in _MUTATION_VERBS)
     has_complex_orchestration = any(
         c in text_corpus for c in _COMPLEX_ORCHESTRATION_MARKERS
     )
 
-    # Check if any named source lacks native write support when mutations are requested
+    # Writes are only native where the connector page documents actions.
     read_only_mutation_sources = [
-        src
-        for src in named_sources
-        if has_mutation_verbs
-        and not any(w in src for w in _NATIVE_STANDARD_WRITE_CONNECTORS)
+        m.label for m in matches if has_mutation_verbs and m.native and not m.actions
     ]
 
-    # Anti-overcommitment uncertainty reasons
+    # Anti-overcommitment uncertainty reasons, each traceable to a source.
     delegation_reasons: list[str] = []
     if has_unknown_source:
         delegation_reasons.append(
             "Target data sources are marked **Not sure yet (`unknown`)** — native Gemini Enterprise connector coverage cannot be assumed without verification."
         )
-    if has_other_source:
-        other_label = (tech.other_data_sources or "custom/unlisted system").strip()
+    for m in unverified:
         delegation_reasons.append(
-            f"Involves unverified or custom system (**{other_label}**) outside the standard out-of-the-box Gemini Enterprise connector catalog."
+            f"Involves unverified or custom system (**{m.source}**) outside the standard out-of-the-box Gemini Enterprise connector catalog"
+            + (f" — {m.note}" if m.note and m.id else "")
+            + "."
         )
-    if has_high_code_sys and not has_other_source:
+    if custom:
+        catalog = load_catalog()
         delegation_reasons.append(
-            f"Touches enterprise backend(s) (**{', '.join(named_sources)}**) that require custom API/MCP tool adapters or VPC transit."
+            f"Touches enterprise backend(s) (**{', '.join(m.label for m in custom)}**) with no native Gemini Enterprise connector "
+            f"([connector catalog]({catalog.source_index}), reviewed {catalog.reviewed}); they require a "
+            f"[custom MCP server]({catalog.custom_mcp_doc}) or API adapter."
         )
     if read_only_mutation_sources:
         delegation_reasons.append(
-            f"Workflow implies state mutations/writes across **{', '.join(read_only_mutation_sources)}**, where native Gemini Enterprise connectors are primarily read/retrieval-scoped."
+            f"Workflow implies state mutations/writes across **{', '.join(read_only_mutation_sources)}**, whose native Gemini Enterprise connectors document no end-user actions (read/retrieval-scoped)."
         )
     if has_mutation_verbs and len(named_sources) >= 2:
         delegation_reasons.append(
@@ -194,6 +173,7 @@ def _assess_gcp_grounding_signals(record: UseCaseRecord) -> dict[str, object]:
 
     return {
         "named_sources": named_sources,
+        "matches": matches,
         "classification": classification,
         "has_unknown_source": has_unknown_source,
         "has_other_source": has_other_source,
@@ -207,13 +187,37 @@ def _assess_gcp_grounding_signals(record: UseCaseRecord) -> dict[str, object]:
     }
 
 
+def _evidence(matches: list[ConnectorMatch]) -> str:
+    """The "where does this come from" block appended to every rationale."""
+    lines = [f"- **Grounding ({catalog_marker()}):**"]
+    if not matches:
+        lines.append("  - No external data sources named.")
+    for m in matches:
+        if m.status == "native":
+            what = "native connector" + (
+                ", end-user actions documented" if m.actions else ", read / ingest only"
+            )
+        elif m.status == "custom":
+            what = "not in the GE connector catalog — custom MCP server needed"
+        else:
+            what = "not confirmed in the GE connector catalog — treated as custom"
+        note = f" ({m.note})" if m.note and m.id else ""
+        lines.append(f"  - {_cite(m)}: {what}{note}.")
+    return "\n".join(lines)
+
+
 def classify_capability(record: UseCaseRecord, *, force_refresh: bool = False) -> None:
-    """Assigns `capability_level` and GCP-grounded `capability_rationale` without overcommitting."""
+    """Assigns `capability_level` and GCP-grounded `capability_rationale` without overcommitting.
+
+    A stored classification is reused only if it was made against the current
+    connector catalog. Bumping ``reviewed`` in connectors.yaml therefore
+    re-classifies every record the next time it is scored — which is how a
+    catalog correction reaches records saved before it.
+    """
     tech = record.technical
     is_legacy_rationale = bool(
         tech.capability_rationale
-        and "GCP Reference" not in tech.capability_rationale
-        and "Proposed Solution" not in tech.capability_rationale
+        and catalog_marker() not in tech.capability_rationale
     )
     if (
         not force_refresh
@@ -225,6 +229,7 @@ def classify_capability(record: UseCaseRecord, *, force_refresh: bool = False) -
 
     signals = _assess_gcp_grounding_signals(record)
     named_sources = list(signals["named_sources"])  # type: ignore[arg-type]
+    matches: list[ConnectorMatch] = list(signals["matches"])  # type: ignore[arg-type]
     classification = str(signals["classification"])
     has_unknown_source = bool(signals["has_unknown_source"])
     has_high_code_sys = bool(signals["has_high_code_sys"])
@@ -235,12 +240,18 @@ def classify_capability(record: UseCaseRecord, *, force_refresh: bool = False) -
     delegation_reasons = list(signals["delegation_reasons"])  # type: ignore[arg-type]
     problem = str(signals["problem"])
 
+    # SKILL.md: Level 5 is one orchestrator calling a custom MCP server; Level 6
+    # is for multi-system orchestration. One custom system beside native
+    # connectors is therefore L5; two or more systems without a native
+    # connector (each its own adapter) is L6.
+    non_native_count = sum(1 for m in matches if not m.native)
+
     if tech.capability_level is None or force_refresh or is_legacy_rationale:
         # 1. Hard Pro-Code ADK (Level 6) triggers
         if (
             classification == "restricted"
             or has_complex_orchestration
-            or (has_high_code_sys and len(named_sources) >= 2)
+            or non_native_count >= 2
             or (has_mutation_verbs and len(named_sources) >= 2)
         ):
             tech.capability_level = CapabilityLevel.HIGH_CODE_AGENT
@@ -267,12 +278,16 @@ def classify_capability(record: UseCaseRecord, *, force_refresh: bool = False) -
 
     level = tech.capability_level
     if not tech.capability_rationale or force_refresh or is_legacy_rationale:
-        tech.capability_rationale = _build_guidance(
-            level,
-            named_sources,
-            classification,
-            delegation_reasons=delegation_reasons,
-            record_id=record.meta.record_id,
+        tech.capability_rationale = (
+            _build_guidance(
+                level,
+                [m.label for m in matches],
+                classification,
+                delegation_reasons=delegation_reasons,
+                record_id=record.meta.record_id,
+            )
+            + "\n"
+            + _evidence(matches)
         )
 
 
@@ -298,9 +313,15 @@ _PRETTY_SOURCE_MAP: dict[str, str] = {
 def _pretty_sources(sources: list[str]) -> str:
     if not sources:
         return "user-provided documents / general knowledge"
-    return ", ".join(
-        _PRETTY_SOURCE_MAP.get(s, s.replace("_", " ").title()) for s in sources
-    )
+    def _pretty(s: str) -> str:
+        if s in _PRETTY_SOURCE_MAP:
+            return _PRETTY_SOURCE_MAP[s]
+        # Catalog labels and user-typed names already carry their own casing.
+        if any(c.isupper() for c in s):
+            return s
+        return s.replace("_", " ").title()
+
+    return ", ".join(_pretty(s) for s in sources)
 
 
 def _build_guidance(
