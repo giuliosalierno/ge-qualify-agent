@@ -57,47 +57,65 @@ def needs_tech_review(ev: OpportunityEvaluation) -> bool:
 #: How the Ranked list columns are computed. Mirrors
 #: ``scoring.portfolio._score_business_value``, ``_score_feasibility`` and
 #: ``_assign_quadrant``; change both together.
+#:
+#: Every line is a ``body`` Text: GE renders markdown in ``body`` but shows
+#: it raw in ``caption``.
 _SCORING_NOTES: tuple[tuple[str, str], ...] = (
     ("pf-how-title", "**How the scores are computed**"),
+    ("pf-how-value-h", "**Value (1–5): how much time it saves**"),
     (
         "pf-how-value",
-        "**Value (1–5)** grows with annual hours saved: about 40 hrs/yr = 2, "
-        "350 = 3, 1,750 = 4, 7,500+ = 5, plus up to +0.6 for 250+ users and "
-        "well-described expected impacts. If hours are unsized, the user "
-        "count is used instead.",
+        "Annual hours saved across the team: 40 hrs → 2 · 350 → 3 · "
+        "1,750 → 4 · 7,500+ → 5. Up to +0.6 more for 250+ users and clearly "
+        "described impacts. If hours aren't estimated yet, the user count is "
+        "used instead.",
+    ),
+    ("pf-how-feas-h", "**Feasibility (1–5): how easy it is to build**"),
+    (
+        "pf-how-feas-before",
+        "**Before the technical review**, the score is an indicative estimate "
+        "(shown as `4/5*`), based on the build approach the agent recommends: "
+        "no-code assistant → 5 · low-code Workflow Builder agent → 4 · agent "
+        "plus one custom connector (MCP server) → 3 · custom multi-system "
+        "agent (ADK) → 2.",
     ),
     (
-        "pf-how-feas",
-        "**Feasibility (1–5)** comes from the Technical Architecture Review "
-        "readiness: 85%+ = 5, 70%+ = 4, 50%+ = 3, 30%+ = 2, less = 1. Until "
-        "that review is done it is *indicative* (marked \\*), based on the "
-        "Gemini Enterprise capability level: Levels 1–2 = 5, Levels 3–4 = 4, "
-        "Level 5 = 3, Level 6 = 2. The level is set by checking each data "
-        "source against the official Gemini Enterprise connector catalog; a "
-        "source with no native connector needs a custom MCP server (Level 5+). "
-        "Any hard blocker sets feasibility to 1.",
+        "pf-how-feas-sources",
+        "The approach depends mostly on the data sources: each is checked "
+        "against the official Gemini Enterprise connector list. A source "
+        "without a built-in connector needs a custom one, which lowers the "
+        "score.",
     ),
+    (
+        "pf-how-feas-after",
+        "**After the technical review**, its readiness score replaces the "
+        "estimate: 85%+ → 5 · 70%+ → 4 · 50%+ → 3 · 30%+ → 2 · lower → 1.",
+    ),
+    (
+        "pf-how-feas-blocker",
+        "**A hard blocker** (for example, data can't leave the network, or "
+        "cloud processing isn't allowed) sets feasibility to 1.",
+    ),
+    ("pf-how-quadrant-h", "**Quadrant**"),
     (
         "pf-how-quadrant",
-        "**Quadrant**: Quick Win = value ≥ 3 and feasibility ≥ 4 · Strategic "
-        "Bet = value ≥ 3 and feasibility 2–3 · Departmental Niche = value < 3 "
-        "and feasibility ≥ 4 · otherwise, or with a hard blocker, Deprioritized.",
+        "Quick Win: value 3+ and feasibility 4–5 · Strategic Bet: value 3+ "
+        "and feasibility 2–3 · Departmental Niche: value 1–2 and feasibility "
+        "4–5 · Deprioritized: anything else, or any hard blocker.",
     ),
+    ("pf-how-rank-h", "**Order**"),
     (
         "pf-how-rank",
-        "**Rank**: by quadrant (Quick Wins first), then composite score "
-        "(60% value + 40% feasibility, before rounding), then hours saved. "
-        "Thresholds and weights are CoE defaults, not industry benchmarks.",
+        "By quadrant (Quick Wins first), then 60% value + 40% feasibility, "
+        "then hours saved. Thresholds and weights are CoE defaults, not "
+        "industry benchmarks.",
     ),
 )
 _SCORING_NOTE_IDS = [cid for cid, _ in _SCORING_NOTES]
 
 
 def _scoring_note() -> list[ui.Component]:
-    return [
-        ui.text(cid, value, "body" if cid == "pf-how-title" else "caption")
-        for cid, value in _SCORING_NOTES
-    ]
+    return [ui.text(cid, value, "body") for cid, value in _SCORING_NOTES]
 
 
 def _ranked_rows(summary: PortfolioSummary) -> list[dict[str, Any]]:

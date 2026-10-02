@@ -394,6 +394,10 @@ def test_ranked_list_explains_the_scoring() -> None:
     text = " ".join(by_id[c].get("text", "") for c in children[1:])
     for term in ("Value (1–5)", "Feasibility (1–5)", "indicative", "Quadrant", "60% value"):
         assert term in text
+    # GE renders markdown in body Text but shows it raw in caption.
+    for c in children[1:]:
+        assert by_id[c].get("variant") != "caption", c
+    assert "\\*" not in text
 
 
 def test_value_note_matches_the_scoring_cut_offs() -> None:
