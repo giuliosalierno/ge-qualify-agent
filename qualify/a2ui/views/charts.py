@@ -128,6 +128,10 @@ def quadrant_matrix_spec(
     still opening, so the first render came out narrow and only corrected
     itself when a tab switch forced a redraw. A fixed width that fits the
     default panel renders the same every time.
+
+    That alone was not enough: GE's renderer still sized the chart to the
+    half-open panel. Views therefore keep the chart off their first tab (see
+    ``portfolio.build_portfolio_view``), so it draws once the panel is open.
     """
     region_labels = [
         {"x": _HI - 0.08, "y": _HI - 0.12, "label": "QUICK WINS", "quadrant": "Quick Wins", "align": "right"},

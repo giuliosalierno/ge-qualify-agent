@@ -180,9 +180,27 @@ def test_portfolio_view_validates_and_is_a_canvas() -> None:
     validate_surface(messages)
     by_id = _components(messages)
     assert by_id["root"]["component"] == "Canvas"
-    assert [t["title"] for t in by_id["pf-tabs"]["tabs"]] == ["Matrix", "Ranked list", "Actions"]
+    assert [t["title"] for t in by_id["pf-tabs"]["tabs"]] == ["Ranked list", "Matrix", "Actions"]
     assert by_id["pf-chart"]["spec"] == {"path": "/ui/portfolio/chart"}
     assert len(_data(messages)["ui"]["portfolio"]["chart"]["layer"][4]["data"]["values"]) == 4
+
+
+def test_charts_are_never_on_the_first_tab() -> None:
+    """GE sizes a chart on the first tab to the half-open panel (narrow render)."""
+    for messages, tabs_id in (
+        (build_portfolio_view(_summary(), "s"), "pf-tabs"),
+        (build_brief_view(_summary().evaluations[0].record, "b"), "br-tabs"),
+    ):
+        by_id = _components(messages)
+        first = by_id[by_id[tabs_id]["tabs"][0]["child"]]
+        stack, seen = [first], set()
+        while stack:
+            node = stack.pop()
+            assert node["component"] != "VegaChart", f"chart on first tab of {tabs_id}"
+            for cid in node.get("children", []) if isinstance(node.get("children"), list) else []:
+                if cid in by_id and cid not in seen:
+                    seen.add(cid)
+                    stack.append(by_id[cid])
 
 
 def test_portfolio_table_cells_are_strings_in_rank_order() -> None:
@@ -366,3 +384,29 @@ def test_chart_has_a_fixed_size() -> None:
     spec = quadrant_matrix_spec(matrix_points(_summary().evaluations))
     assert isinstance(spec["width"], int) and isinstance(spec["height"], int)
     assert spec["autosize"]["type"] == "fit"
+
+
+def test_ranked_list_explains_the_scoring() -> None:
+    by_id = _components(build_portfolio_view(_summary(), "s"))
+    assert by_id["pf-tabs"]["tabs"][0]["child"] == "pf-ranked"
+    children = by_id["pf-ranked"]["children"]
+    assert children[0] == "pf-table"
+    text = " ".join(by_id[c].get("text", "") for c in children[1:])
+    for term in ("Value (1–5)", "Feasibility (1–5)", "indicative", "Quadrant", "60% value"):
+        assert term in text
+
+
+def test_value_note_matches_the_scoring_cut_offs() -> None:
+    """The note's hour cut-offs are where the integer score actually changes."""
+    from qualify.scoring.portfolio import _score_business_value
+
+    def value_for(hours: float) -> int:
+        # derived hours = freq * minutes / 60 * 50 weeks * users; 1 user, 1/wk.
+        rec = UseCaseRecord(meta=Meta(record_id="UC-2026-CUT001", initiative_name="x"))
+        rec.business.user_count = 1
+        rec.sizing.task_frequency_weekly = 1
+        rec.sizing.target_minutes_saved_per_task = hours * 60 / 50
+        return _score_business_value(rec)[0]
+
+    for hours, expected in ((30, 1), (40, 2), (340, 2), (360, 3), (1_740, 3), (1_760, 4), (7_400, 4), (7_600, 5)):
+        assert value_for(hours) == expected, hours
