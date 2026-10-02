@@ -52,3 +52,12 @@ def interactive_views_enabled() -> bool:
     code change.
     """
     return os.environ.get("INTERACTIVE_VIEWS", "1").strip().lower() not in ("0", "false", "off")
+
+
+def welcome_menu_enabled() -> bool:
+    """Whether a greeting opens the three-workflow menu card.
+
+    On unless ``WELCOME_MENU`` is ``0``/``false``/``off``. When off, a greeting
+    goes straight to the Business Value Intake Stage 1 card, as it used to.
+    """
+    return os.environ.get("WELCOME_MENU", "1").strip().lower() not in ("0", "false", "off")

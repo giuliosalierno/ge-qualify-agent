@@ -23,6 +23,14 @@ def _disable_signin_card_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture(autouse=True)
+def _disable_welcome_menu_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Same reasoning as the sign-in card: the suite opens interviews with
+    "hello" and expects Stage 1 back. `test_welcome_menu.py` switches it on.
+    """
+    monkeypatch.setenv("WELCOME_MENU", "0")
+
+
+@pytest.fixture(autouse=True)
 def _isolate_sharepoint_mock_dir(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

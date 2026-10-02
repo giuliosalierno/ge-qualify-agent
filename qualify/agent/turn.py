@@ -53,7 +53,11 @@ from qualify.a2ui.patcher import (
     extract_drafts,
 )
 from qualify.a2ui.provenance import missing_required
-from qualify.config import agent_base_url, interactive_views_enabled
+from qualify.config import (
+    agent_base_url,
+    interactive_views_enabled,
+    welcome_menu_enabled,
+)
 from qualify.connectors.oauth_state import build_signin_url
 from qualify.a2ui.systems_extractor import (
     SYSTEMS_STAGE_ID,
@@ -308,6 +312,11 @@ def _run_turn(
     if sp_load_output is not None:
         store.save(session)
         return sp_load_output
+
+    menu_output = _try_welcome_menu(turn_input.user_text, session)
+    if menu_output is not None:
+        store.save(session)
+        return menu_output
 
     signin_output = _maybe_offer_signin(session)
     if signin_output is not None:
@@ -800,10 +809,174 @@ def _try_help_command(user_text: str | None, session: Session) -> TurnOutput | N
         session.welcome_shown = True
         return TurnOutput(
             reply_text=_welcome_banner(),
-            a2ui_messages=[],
+            a2ui_messages=_welcome_menu_messages(session),
             session=session,
         )
     return None
+
+
+_GREETINGS = frozenset(
+    {
+        "hi",
+        "hello",
+        "hey",
+        "hiya",
+        "howdy",
+        "yo",
+        "ciao",
+        "hola",
+        "salve",
+        "bonjour",
+        "hallo",
+        "buongiorno",
+        "greetings",
+        "morning",
+        "start",
+        "begin",
+    }
+)
+_GREETING_PHRASES = frozenset(
+    {
+        "good morning",
+        "good afternoon",
+        "good evening",
+        "get started",
+        "let's start",
+        "lets start",
+        "let's begin",
+        "lets begin",
+        "let's go",
+        "lets go",
+    }
+)
+
+
+def _is_greeting(user_text: str | None) -> bool:
+    """True for a bare opener such as "hello" or "hi there".
+
+    Deliberately narrow: anything that already describes a use case ("hi, our
+    claims team re-keys invoices...") is real intake content and must reach
+    the interview rather than a menu.
+    """
+    if not user_text:
+        return False
+    cleaned = " ".join(
+        user_text.strip().lower().replace(",", " ").strip("?.!👋 ").split()
+    )
+    if not cleaned:
+        return False
+    if cleaned in _GREETING_PHRASES:
+        return True
+    words = cleaned.split()
+    return words[0] in _GREETINGS and len(words) <= 3
+
+
+def _at_conversation_start(session: Session) -> bool:
+    """Nothing chosen yet: a fresh business session with no card rendered."""
+    return (
+        session.pack_name == "business"
+        and session.active_stage == 0
+        and not session.rendered_stages
+        and not session.committed
+        and not session.skipped
+    )
+
+
+def _welcome_menu_messages(session: Session) -> list[dict[str, Any]]:
+    if not welcome_menu_enabled():
+        return []
+    from qualify.a2ui.views.welcome import build_welcome_menu  # noqa: PLC0415
+
+    return build_welcome_menu(session.panel_surface_id("welcome"))
+
+
+_WELCOME_MENU_INTRO = (
+    "### 👋 Welcome to the Gemini Enterprise AI Qualification & CoE Agent\n"
+    "Pick one of the three workflows below, or describe a new use case idea "
+    "in chat to go straight into the **Business Value Intake**.\n\n"
+    "_You can also type `technical review` or `portfolio review` at any time._"
+)
+
+
+def _try_welcome_menu(user_text: str | None, session: Session) -> TurnOutput | None:
+    """Answers an opening greeting with the three-workflow menu card.
+
+    A greeting says nothing about who is speaking, so the menu replaces the
+    Stage 1 form that used to open by default: architects and CoE leads no
+    longer land in a business owner's intake.
+    """
+    if not welcome_menu_enabled():
+        return None
+    if not _at_conversation_start(session) or not _is_greeting(user_text):
+        return None
+    session.welcome_shown = True
+    return TurnOutput(
+        reply_text=_WELCOME_MENU_INTRO,
+        a2ui_messages=_welcome_menu_messages(session),
+        session=session,
+    )
+
+
+def _start_intake(store: SessionStore, session: Session) -> TurnOutput:
+    """Opens the Business Value Intake, from the welcome menu's button.
+
+    The menu stays clickable in the chat history, so this may arrive mid-way
+    through something else:
+
+    * a finished intake or review: start a fresh business intake
+    * an intake in progress: re-show its current stage rather than reset it
+    * a technical review in progress: leave it alone and say so
+    """
+    from qualify.sinks.session import new_session  # noqa: PLC0415
+
+    session.pending_review_choices = []
+
+    if session.pack_name == "tech" and not session.is_complete:
+        name = session.record.meta.initiative_name or session.record.meta.record_id
+        store.save(session)
+        return TurnOutput(
+            reply_text=(
+                f"You're in the middle of the technical review for **{name}**. "
+                "Finish it first, then type `start a new qualification` to "
+                "begin a new business intake."
+            ),
+            a2ui_messages=[],
+            session=session,
+        )
+
+    if session.is_complete:
+        fresh = new_session(session.context_id, "business")
+        fresh.signin_prompted = session.signin_prompted
+        fresh.signin_dismissed = session.signin_dismissed
+        fresh.signin_confirmed = session.signin_confirmed
+        session = fresh
+
+    session.welcome_shown = True
+
+    signin_output = _maybe_offer_signin(session)
+    if signin_output is not None:
+        store.save(session)
+        return signin_output
+
+    stage = session.pack.stages[session.active_stage]
+    a2ui_messages: list[dict[str, Any]] = []
+    if session.active_stage not in session.rendered_stages:
+        sid = session.next_surface_id()
+        a2ui_messages.extend(_stage_card(session, sid))
+        session.rendered_stages.add(session.active_stage)
+        reply_text = _stage_intro_text(
+            stage,
+            stage_index=session.active_stage,
+            total_stages=len(session.pack.stages),
+        )
+    else:
+        reply_text = (
+            f"Your intake is already under way — carry on with **{stage.label}** "
+            "in the card above."
+        )
+
+    store.save(session)
+    return TurnOutput(reply_text=reply_text, a2ui_messages=a2ui_messages, session=session)
 
 
 def _record_has_content(session: Session) -> bool:
@@ -1012,10 +1185,14 @@ def _try_view_event(
         OPEN_BRIEF,
         OPEN_PORTFOLIO,
         OPEN_WORKSPACE,
+        START_INTAKE,
         START_TECH_REVIEW,
     )
 
     record_id = str(event.context.get("recordId") or "").strip()
+
+    if event.name == START_INTAKE:
+        return _start_intake(store, session)
 
     if event.name == OPEN_WORKSPACE:
         output = _open_workspace(session, user_asked_for="progress")
@@ -1028,8 +1205,18 @@ def _try_view_event(
             store.save(output.session)
         return output
 
-    if event.name == START_TECH_REVIEW and record_id:
-        return _try_start_tech_review(store, f"technical review {record_id}", session)
+    if event.name == START_TECH_REVIEW:
+        command = f"technical review {record_id}" if record_id else "technical review"
+        output = _try_start_tech_review(store, command, session)
+        if output is None:
+            # Only when a review is already running and no record was named.
+            store.save(session)
+            return TurnOutput(
+                reply_text="You're already in a technical review — carry on in the card above.",
+                a2ui_messages=[],
+                session=session,
+            )
+        return output
 
     if event.name == OPEN_BRIEF and record_id:
         from qualify.a2ui.views.brief import build_brief_view  # noqa: PLC0415
