@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import logging
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
@@ -85,6 +85,16 @@ def _session_from_dict(data: dict[str, Any]) -> Session:
     )
 
 
+#: What a stored session that cannot be parsed or validated raises. JSON
+#: decode errors and pydantic's ValidationError are both ValueErrors. Anything
+#: else (network, permissions) is not corruption and must propagate.
+_CORRUPT_SESSION_ERRORS = (ValueError, KeyError, TypeError)
+
+
+def _corrupt_stamp() -> str:
+    return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+
+
 # ---------------------------------------------------------------------------
 # Portfolio index: which records are *finished*, not just started
 # ---------------------------------------------------------------------------
@@ -147,11 +157,22 @@ class LocalRecordStore(SessionStore, RecordStore):
         path = self._session_path(context_id)
         if not path.is_file():
             return None
+        # Read errors propagate: a turn that fails visibly is better than one
+        # that starts an empty interview over the real one.
+        text = path.read_text(encoding="utf-8")
         try:
-            data = json.loads(path.read_text(encoding="utf-8"))
-            return _session_from_dict(data)
-        except Exception as exc:
-            log.warning("Failed to load session %s: %s", context_id, exc)
+            return _session_from_dict(json.loads(text))
+        except _CORRUPT_SESSION_ERRORS as exc:
+            corrupt_dir = self.sessions_dir / "_corrupt"
+            corrupt_dir.mkdir(parents=True, exist_ok=True)
+            target = corrupt_dir / f"{path.stem}-{_corrupt_stamp()}.json"
+            target.write_text(text, encoding="utf-8")
+            log.error(
+                "Unreadable session %s moved aside to %s before starting fresh: %s",
+                context_id,
+                target,
+                exc,
+            )
             return None
 
     def save(self, session: Session) -> None:
@@ -248,14 +269,29 @@ class GCSRecordStore(SessionStore, RecordStore):
         return self._bucket.blob(f"records/{safe_id}.json")
 
     def load(self, context_id: str) -> Session | None:
+        from google.api_core.exceptions import NotFound  # noqa: PLC0415
+
         blob = self._session_blob(context_id)
-        if not blob.exists():
+        # One download, not exists()+download: only a missing object means
+        # "no session". Transient errors propagate so the turn fails visibly
+        # instead of an empty session being written over the real one.
+        try:
+            text = blob.download_as_text(encoding="utf-8")
+        except NotFound:
             return None
         try:
-            data = json.loads(blob.download_as_text(encoding="utf-8"))
-            return _session_from_dict(data)
-        except Exception as exc:
-            log.warning("Failed to load GCS session %s: %s", context_id, exc)
+            return _session_from_dict(json.loads(text))
+        except _CORRUPT_SESSION_ERRORS as exc:
+            safe_id = context_id.replace("/", "_")
+            name = f"sessions/_corrupt/{safe_id}-{_corrupt_stamp()}.json"
+            self._bucket.blob(name).upload_from_string(text, content_type="application/json")
+            log.error(
+                "Unreadable GCS session %s moved aside to gs://%s/%s before starting fresh: %s",
+                context_id,
+                self.bucket_name,
+                name,
+                exc,
+            )
             return None
 
     def save(self, session: Session) -> None:
