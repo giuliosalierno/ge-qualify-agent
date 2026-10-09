@@ -82,9 +82,17 @@ class Sizing(_Base):
     needs them to sanity-check the Business Value score in Activity 3.
     """
 
-    task_frequency_weekly: Annotated[float | None, Field(ge=0)] = None
-    baseline_minutes_per_task: Annotated[float | None, Field(ge=0)] = None
-    target_minutes_saved_per_task: Annotated[float | None, Field(ge=0)] = None
+    # allow_inf_nan=False: infinity would score as "inf hrs/yr" and then
+    # serialise as null, so the stored record would differ from the scored one.
+    task_frequency_weekly: Annotated[
+        float | None, Field(ge=0, allow_inf_nan=False)
+    ] = None
+    baseline_minutes_per_task: Annotated[
+        float | None, Field(ge=0, allow_inf_nan=False)
+    ] = None
+    target_minutes_saved_per_task: Annotated[
+        float | None, Field(ge=0, allow_inf_nan=False)
+    ] = None
 
 
 class SystemEntry(_Base):

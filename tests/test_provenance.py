@@ -325,3 +325,33 @@ def test_optional_fields_never_block(pack, record) -> None:
     # department_bu and user_stories were never supplied.
     assert record.meta.department_bu is None
     assert missing_required(record, pack.stages[NEEDS]) == []
+
+
+@pytest.mark.parametrize("bad", ["-5", "1e400", "inf", "nan"])
+def test_bad_number_is_rejected_per_field_not_raised(pack, record, bad) -> None:
+    """Out-of-range or non-finite input must come back as a rejection.
+
+    It used to escape apply_commit as ValidationError / OverflowError /
+    ValueError and fail the whole turn, after earlier fields were written.
+    """
+    result = apply_commit(record, pack, NEEDS, needs_payload(business__user_count=bad))
+
+    assert [path for path, _ in result.rejected] == ["/uc/business/user_count"]
+    assert record.business.user_count is None
+    assert record.business.user_profile == "Claims handler"
+
+
+@pytest.mark.parametrize("bad", ["-5", "1e400", "inf", "nan"])
+def test_bad_sizing_number_is_rejected_per_field(pack, record, bad) -> None:
+    payload = {
+        "sizing": {
+            "task_frequency_weekly": bad,
+            "baseline_minutes_per_task": "30",
+            "target_minutes_saved_per_task": "10",
+        }
+    }
+    result = apply_commit(record, pack, SIZING, payload)
+
+    assert [path for path, _ in result.rejected] == ["/uc/sizing/task_frequency_weekly"]
+    assert record.sizing.task_frequency_weekly is None
+    assert record.sizing.baseline_minutes_per_task == 30

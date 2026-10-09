@@ -61,3 +61,14 @@ def welcome_menu_enabled() -> bool:
     goes straight to the Business Value Intake Stage 1 card, as it used to.
     """
     return os.environ.get("WELCOME_MENU", "1").strip().lower() not in ("0", "false", "off")
+
+
+def a2ui_probes_enabled() -> bool:
+    """Whether the diagnostic A2UI probes (``probe canvas`` ...) are reachable.
+
+    Off unless ``A2UI_PROBES`` is ``1``/``true``/``on``. The probes draw test
+    panels with placeholder data and echo raw form input back into the chat;
+    they are for measuring what a GE release renders, not for published
+    deployments, so they must be switched on deliberately.
+    """
+    return os.environ.get("A2UI_PROBES", "0").strip().lower() in ("1", "true", "on")

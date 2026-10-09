@@ -22,9 +22,10 @@ an interview, and it is what this store keys on (D15).
 from __future__ import annotations
 
 import logging
+import secrets
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Protocol
+from typing import Any, Protocol
 
 from qualify.packs.loader import Pack, load_pack
 from qualify.schema.use_case_record import Meta, UseCaseRecord
@@ -92,6 +93,14 @@ class Session:
     resume_command: str | None = None
     created_at: datetime = field(default_factory=_now)
     updated_at: datetime = field(default_factory=_now)
+    #: The record as this session last read it from, or wrote it to, the
+    #: shared record store: the common ancestor for the three-way merge that
+    #: durable stores do on save, so this session only writes the fields it
+    #: actually changed and keeps what other flows (technical review, another
+    #: chat) wrote meanwhile. None means "never synced": this session's copy
+    #: is taken as authoritative. Not persisted on its own; the session file's
+    #: record is, by construction, the copy last written.
+    record_base: dict[str, Any] | None = field(default=None, repr=False, compare=False)
 
     def next_surface_id(self, suffix: str | None = None) -> str:
         """Generates and tracks a fresh surfaceId for a new message card."""
@@ -230,6 +239,15 @@ class InMemorySessionStore:
         return len(self._sessions)
 
 
+def new_record_id() -> str:
+    """A fresh `UC-<year>-<8 upper hex>` id, e.g. `UC-2026-3F2A9C01`.
+
+    32 random bits keep collisions between conversations negligible at the
+    scale of a CoE portfolio; the format still matches `RECORD_ID_RE`.
+    """
+    return f"UC-{_now().year}-{secrets.token_hex(4).upper()}"
+
+
 def new_session(
     context_id: str, pack_name: str = "business", record_id: str | None = None
 ) -> Session:
@@ -238,11 +256,14 @@ def new_session(
     `context_id` is written into the record's meta as well as being the store
     key, so a record recovered from the sink alone can still be traced back to
     its conversation.
+
+    The generated record id is random, not derived from `context_id`: one
+    conversation can start several intakes ("qualify another"), and each must
+    get its own record rather than overwrite the one it just finished.
     """
     load_pack(pack_name)  # fail fast on a bad pack name, before any state exists
     if not record_id:
-        clean_suffix = context_id.replace("-", "").upper()[:6] or "0001"
-        record_id = f"UC-{_now().year}-{clean_suffix}"
+        record_id = new_record_id()
     return Session(
         context_id=context_id,
         pack_name=pack_name,

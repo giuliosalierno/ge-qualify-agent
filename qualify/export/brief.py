@@ -16,6 +16,8 @@ from __future__ import annotations
 
 from datetime import date
 
+from qualify.schema.classification import LABELS as CLASSIFICATION_LABELS
+from qualify.schema.classification import normalise_classification
 from qualify.schema.use_case_record import WORK_WEEKS_PER_YEAR, UseCaseRecord
 from qualify.scoring.business_tier import (
     approach_label,
@@ -23,13 +25,6 @@ from qualify.scoring.business_tier import (
     classify_capability,
 )
 from qualify.scoring.connectors import resolve
-
-_CLASSIFICATION = {
-    "public": "Public",
-    "internal": "Internal",
-    "confidential": "Confidential",
-    "restricted": "Restricted",
-}
 
 
 def _num(value: float) -> str:
@@ -134,8 +129,9 @@ def render_business_brief(
         if biz.user_count
         else (biz.user_profile or "Not sized yet")
     )
-    classification = _CLASSIFICATION.get(
-        (tech.security.data_classification or "").lower(), "Not specified yet"
+    classification = CLASSIFICATION_LABELS.get(
+        normalise_classification(tech.security.data_classification) or "",
+        "Not specified yet",
     )
 
     lines = [

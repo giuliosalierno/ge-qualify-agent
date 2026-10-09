@@ -32,6 +32,7 @@ import json
 import logging
 import os
 import secrets
+import threading
 import urllib.parse
 from pathlib import Path
 from typing import Any
@@ -648,11 +649,15 @@ class GoogleDriveConnector:
 
 
 _CONNECTOR_INSTANCE: GoogleDriveConnector | None = None
+_CONNECTOR_LOCK = threading.Lock()
 
 
 def get_gdrive_connector() -> GoogleDriveConnector:
     """Returns the default GoogleDriveConnector singleton."""
     global _CONNECTOR_INSTANCE
     if _CONNECTOR_INSTANCE is None:
-        _CONNECTOR_INSTANCE = GoogleDriveConnector()
+        # Turns run on worker threads; build the singleton exactly once.
+        with _CONNECTOR_LOCK:
+            if _CONNECTOR_INSTANCE is None:
+                _CONNECTOR_INSTANCE = GoogleDriveConnector()
     return _CONNECTOR_INSTANCE

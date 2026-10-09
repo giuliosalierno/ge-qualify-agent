@@ -346,7 +346,8 @@ def test_live_probe_validates_and_bump_is_data_only() -> None:
     assert msgs[0]["updateDataModel"]["value"]["count"] == "Refreshed 3 times"
 
 
-def test_live_probe_turns() -> None:
+def test_live_probe_turns(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("A2UI_PROBES", "1")
     store = InMemorySessionStore(quiet=True)
     out = execute_turn(store, TurnInput(context_id="ctx-ws-9", user_text="probe live"))
     assert any("createSurface" in m for m in out.a2ui_messages)

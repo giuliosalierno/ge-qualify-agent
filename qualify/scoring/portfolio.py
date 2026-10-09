@@ -63,6 +63,10 @@ class OpportunityEvaluation:
     feasibility_rationale: str
     recommended_next_step: str
     folder_url: str | None = None
+    #: `TechnicalScore.key2_ready`: readiness >= KEY2_THRESHOLD AND both
+    #: blocking subcriteria at PASS. Readiness alone is not enough — a WARN or
+    #: unconfirmed blocker can sit at 95%.
+    key2_ready: bool = False
 
 
 @dataclass(frozen=True)
@@ -171,8 +175,8 @@ def _score_feasibility(
     record: UseCaseRecord,
     *,
     has_dossier: bool = False,
-) -> tuple[int, float, bool, int | None, bool, str | None, str]:
-    """Computes feasibility (1–5), continuous (1.0–5.0), indicative flag, readiness %, blocker state, and rationale."""
+) -> tuple[int, float, bool, int | None, bool, str | None, str, bool]:
+    """Computes feasibility (1–5), continuous (1.0–5.0), indicative flag, readiness %, blocker state, rationale, and Key 2 state."""
     classify_capability(record)
     level = record.technical.capability_level or CapabilityLevel.DEFAULT_ASSISTANT
     tech_score = score_technical(record)
@@ -188,6 +192,7 @@ def _score_feasibility(
             True,
             blocker_labels,
             f"Hard Blocker ({blocker_labels})",
+            False,
         )
 
     if has_tech_data:
@@ -216,6 +221,7 @@ def _score_feasibility(
             False,
             None,
             f"{gate_note} ({level.label})",
+            tech_score.key2_ready,
         )
 
     # Indicative scoring from Phase 1 capability level
@@ -236,6 +242,7 @@ def _score_feasibility(
         False,
         None,
         f"Indicative from {level.label} (pending Gate 2 review)",
+        False,
     )
 
 
@@ -307,12 +314,13 @@ def evaluate_opportunity(
         has_blocker,
         blocker_summary,
         feas_rationale,
+        key2_ready,
     ) = _score_feasibility(record, has_dossier=has_dossier)
 
     quadrant = _assign_quadrant(val_int, feas_int, has_blocker)
     if has_blocker:
         priority_status = "Blocked"
-    elif has_dossier and readiness_pct is not None and readiness_pct >= 80:
+    elif has_dossier and key2_ready:
         priority_status = "Scoped (Key 2 Cleared)"
     elif has_dossier:
         priority_status = f"Tech Reviewed ({readiness_pct}%)"
@@ -363,6 +371,7 @@ def evaluate_opportunity(
         feasibility_rationale=feas_rationale,
         recommended_next_step=next_step,
         folder_url=folder_url,
+        key2_ready=key2_ready,
     )
 
 
@@ -406,13 +415,7 @@ def evaluate_portfolio(
     )
     total_users = sum(e.user_count or 0 for e in evaluations)
     pending_tech = sum(1 for e in evaluations if e.has_brief and not e.has_dossier)
-    key2_ready = sum(
-        1
-        for e in evaluations
-        if not e.has_hard_blocker
-        and e.readiness_pct is not None
-        and e.readiness_pct >= 80
-    )
+    key2_ready = sum(1 for e in evaluations if e.key2_ready)
     blocked = sum(1 for e in evaluations if e.has_hard_blocker)
 
     return PortfolioSummary(

@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
+import logging
+
+import pytest
+
 from qualify.a2ui.canvas_probe import (
     FULL_SURFACE_ID,
     INLINE_SURFACE_ID,
     MIN_SURFACE_ID,
     PROBE_CANVAS_ECHO,
+    PROBE_LIVE_BUMP,
     build_canvas_probe,
     describe_echo,
     is_probe_trigger,
@@ -79,14 +84,18 @@ def test_echo_reports_value_types() -> None:
     assert "`340` (int)" in text
 
 
-def test_turn_renders_probe_on_trigger() -> None:
+def test_turn_renders_probe_on_trigger(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("A2UI_PROBES", "1")
     store = InMemorySessionStore(quiet=True)
     output = execute_turn(store, TurnInput(context_id="ctx-cp", user_text="probe canvas"))
     assert "canvas probe" in output.reply_text
     assert output.a2ui_messages == build_canvas_probe()
 
 
-def test_turn_echoes_save_without_touching_the_record() -> None:
+def test_turn_echoes_save_without_touching_the_record(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("A2UI_PROBES", "1")
     store = InMemorySessionStore(quiet=True)
     execute_turn(store, TurnInput(context_id="ctx-cp2", user_text="probe canvas"))
     before = store.load("ctx-cp2")
@@ -105,3 +114,55 @@ def test_turn_echoes_save_without_touching_the_record() -> None:
     assert "`500` (int)" in output.reply_text
     after = store.load("ctx-cp2")
     assert (before.record if before else None) == (after.record if after else None)
+
+
+# ---------------------------------------------------------------------------
+# A2UI_PROBES gate
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "text", ["probe canvas", "probe live", "probe openurl", "a2ui probe openurl"]
+)
+def test_probe_triggers_are_off_by_default(text: str) -> None:
+    store = InMemorySessionStore(quiet=True)
+    output = execute_turn(store, TurnInput(context_id="ctx-off", user_text=text))
+    assert "probe" not in output.reply_text.lower()
+    assert not any(
+        "probe" in str(m.get("createSurface", {}).get("surfaceId", ""))
+        for m in output.a2ui_messages
+    )
+
+
+@pytest.mark.parametrize("name", [PROBE_CANVAS_ECHO, PROBE_LIVE_BUMP])
+def test_probe_actions_are_off_by_default(name: str) -> None:
+    store = InMemorySessionStore(quiet=True)
+    output = execute_turn(
+        store,
+        TurnInput(
+            context_id="ctx-off-action",
+            action_data={"name": name, "context": {"name": "Secret", "n": 0}},
+        ),
+    )
+    assert "Save received" not in output.reply_text
+    assert "refreshes in place" not in output.reply_text
+    assert "Secret" not in output.reply_text
+
+
+def test_probe_echo_does_not_log_form_values(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    monkeypatch.setenv("A2UI_PROBES", "1")
+    store = InMemorySessionStore(quiet=True)
+    with caplog.at_level(logging.INFO, logger="qualify.agent.turn"):
+        execute_turn(
+            store,
+            TurnInput(
+                context_id="ctx-echo-log",
+                action_data={
+                    "name": PROBE_CANVAS_ECHO,
+                    "context": {"name": "Confidential initiative"},
+                },
+            ),
+        )
+    assert "Confidential initiative" not in caplog.text

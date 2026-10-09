@@ -6,8 +6,10 @@ to the deterministic turn loop, and streams back A2A TextParts and A2UI DataPart
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
+import weakref
 from typing import Any
 
 from a2a.server.agent_execution import AgentExecutor, RequestContext
@@ -59,6 +61,22 @@ class QualifyAgentExecutor(AgentExecutor):
         self._extraction_client = extraction_client
         self._chat_client = chat_client
         self._pack_name = pack_name
+        # One lock per conversation, so two quick events in the same context
+        # (a double click, a button press racing a typed message) run one after
+        # the other instead of both loading the same session and the later
+        # save silently dropping the earlier one. Weak values: a lock lives only
+        # while a turn holds or awaits it, so the map cannot grow without bound.
+        self._context_locks: weakref.WeakValueDictionary[str, asyncio.Lock] = (
+            weakref.WeakValueDictionary()
+        )
+
+    def _context_lock(self, context_id: str) -> asyncio.Lock:
+        # No await between lookup and insert, so this is race-free on the loop.
+        lock = self._context_locks.get(context_id)
+        if lock is None:
+            lock = asyncio.Lock()
+            self._context_locks[context_id] = lock
+        return lock
 
     async def execute(self, context: RequestContext, event_queue: EventQueue) -> None:
         active_version = try_activate_a2ui_extension(context, self._agent_card)
@@ -106,13 +124,18 @@ class QualifyAgentExecutor(AgentExecutor):
         # handled in ReopenableTaskStore instead, where GE cannot see it.
         final_state = TaskState.completed
         try:
-            output: TurnOutput = execute_turn(
-                self._session_store,
-                turn_input,
-                extraction_client=self._extraction_client,
-                chat_client=self._chat_client,
-                pack_name=self._pack_name,
-            )
+            # execute_turn is synchronous and blocks on Gemini and storage
+            # calls for seconds. Run it on a worker thread so the event loop
+            # keeps serving other conversations meanwhile.
+            async with self._context_lock(context_id):
+                output: TurnOutput = await asyncio.to_thread(
+                    execute_turn,
+                    self._session_store,
+                    turn_input,
+                    extraction_client=self._extraction_client,
+                    chat_client=self._chat_client,
+                    pack_name=self._pack_name,
+                )
             parts: list[Part] = [Part(root=TextPart(text=output.reply_text))]
             for a2ui_msg in output.a2ui_messages:
                 parts.append(create_a2ui_part(a2ui_msg, version=WIRE_VERSION))

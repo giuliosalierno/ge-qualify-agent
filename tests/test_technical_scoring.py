@@ -193,6 +193,44 @@ def test_an_unasked_blocker_still_denies_key_2() -> None:
     assert score.key2_ready is False
 
 
+@pytest.mark.parametrize(
+    "field_path,blocked_id",
+    [("transit_blocker_status", "2.4"), ("cloud_policy_status", "3.5")],
+)
+def test_not_yet_confirmed_on_a_blocker_is_unconfirmed_not_a_blocker(
+    field_path: str, blocked_id: str
+) -> None:
+    """The pack's "Not yet confirmed" option (`unknown`) is not a finding.
+
+    It is the honest early answer to the airgap and cloud-ban questions.
+    Grading it as an answered FAIL reported a hard blocker nobody described.
+    """
+    record = perfect_record()
+    if field_path == "transit_blocker_status":
+        record.technical.network.transit_blocker_status = "unknown"
+    else:
+        record.technical.security.cloud_policy_status = "unknown"
+
+    score = score_technical(record)
+
+    assert score.blockers == ()
+    assert [s.id for s in score.unconfirmed_blockers] == [blocked_id]
+    assert score.key2_ready is False
+    assert score.feasibility_profile != "Blockers / High Risk"
+
+
+def test_not_yet_confirmed_blocker_is_worded_as_a_question_in_the_dossier() -> None:
+    from qualify.export.dossier import render_technical_dossier
+
+    record = perfect_record()
+    record.technical.network.transit_blocker_status = "unknown"
+
+    out = render_technical_dossier(record)
+
+    assert "Critical blockers found" not in out
+    assert "2.4 Airgap / transit blockers** — not yet confirmed" in out
+
+
 def test_a_warn_on_a_blocking_subcriterion_also_denies_key_2() -> None:
     """An exception process in flight is not an approval."""
     record = perfect_record()

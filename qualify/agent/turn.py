@@ -38,6 +38,7 @@ from qualify.a2ui.canvas_probe import (
     is_live_trigger,
 )
 from qualify.a2ui.views.events import VIEW_EVENTS
+from qualify.agent.commands import match_command, normalize_command
 from qualify.a2ui.canvas_probe import describe_echo as describe_canvas_echo
 from qualify.a2ui.canvas_probe import is_probe_trigger as is_canvas_probe_trigger
 from qualify.a2ui.compiler import (
@@ -54,6 +55,7 @@ from qualify.a2ui.patcher import (
 )
 from qualify.a2ui.provenance import missing_required
 from qualify.config import (
+    a2ui_probes_enabled,
     agent_base_url,
     interactive_views_enabled,
     welcome_menu_enabled,
@@ -321,16 +323,18 @@ def _run_turn(
     # -----------------------------------------------------------------------
     if turn_input.action_data:
         event = parse_action(turn_input.action_data)
-        if event is not None and event.name == PROBE_CANVAS_ECHO:
+        probes = a2ui_probes_enabled()
+        if probes and event is not None and event.name == PROBE_CANVAS_ECHO:
             # Diagnostic only: report what the canvas inputs wrote back and
-            # leave the session record untouched.
-            log.info("Canvas probe echo: %r", event.context)
+            # leave the session record untouched. The values are user input,
+            # so only their keys are logged.
+            log.info("Canvas probe echo: keys=%s", sorted(event.context or {}))
             return TurnOutput(
                 reply_text=describe_canvas_echo(event.context),
                 a2ui_messages=[],
                 session=session,
             )
-        if event is not None and event.name == PROBE_LIVE_BUMP:
+        if probes and event is not None and event.name == PROBE_LIVE_BUMP:
             return TurnOutput(
                 reply_text=(
                     "Sent a data-only update to the open **Probe 4** panel. If its "
@@ -601,7 +605,6 @@ def _handle_action_outcome(
                 from qualify.connectors.storage import sync_to_storage  # noqa: PLC0415
                 from qualify.sinks.sheets import sync_to_optional_sheet  # noqa: PLC0415
 
-                import os as _os  # noqa: PLC0415
                 sync_to_optional_sheet(session.record)
                 sp_res = sync_to_storage(
                     session.record,
@@ -909,9 +912,10 @@ def _try_help_command(user_text: str | None, session: Session) -> TurnOutput | N
     """Returns the Welcome & Capabilities menu when explicitly requested."""
     if not user_text:
         return None
-    cleaned = user_text.strip().lower().rstrip("?.!")
-    if cleaned in ("help", "menu", "info") or any(
-        phrase in cleaned for phrase in _HELP_PHRASES
+    # Whole short messages only: "agents run shell commands" is an answer.
+    cleaned = normalize_command(user_text)
+    if cleaned in ("help", "menu", "info") or match_command(
+        cleaned, _HELP_PHRASES, max_tail_words=2
     ):
         session.welcome_shown = True
         return TurnOutput(
@@ -1227,8 +1231,11 @@ def _try_a2ui_probe(user_text: str | None, session: Session) -> TurnOutput | Non
     description of the schema, not a promise about the renderer. GE has already
     been seen accepting a message and drawing nothing, so the sign-in button
     gets measured before it gets built.
+
+    All probes are off unless ``A2UI_PROBES`` is set (see
+    `qualify.config.a2ui_probes_enabled`).
     """
-    if not user_text:
+    if not user_text or not a2ui_probes_enabled():
         return None
 
     if is_canvas_probe_trigger(user_text):
@@ -1265,7 +1272,6 @@ def _try_a2ui_probe(user_text: str | None, session: Session) -> TurnOutput | Non
     if user_text.strip().lower() not in ("a2ui probe openurl", "probe openurl"):
         return None
 
-    import os as _os  # noqa: PLC0415
 
     from qualify.a2ui.signin import build_openurl_probe  # noqa: PLC0415
 
@@ -1581,11 +1587,10 @@ def _try_portfolio_review(
     if not user_text:
         return None
 
-    lowered = user_text.strip().lower()
-    if not any(trigger in lowered for trigger in _PORTFOLIO_TRIGGERS):
+    # Whole short messages only: "we rank use cases by cost today" is an answer.
+    if not match_command(user_text, _PORTFOLIO_TRIGGERS, max_tail_words=3):
         return None
 
-    import os as _os  # noqa: PLC0415
 
     from qualify.a2ui.signin import build_signin_card  # noqa: PLC0415
     from qualify.connectors.storage import (  # noqa: PLC0415
@@ -1691,13 +1696,9 @@ def _render_portfolio(
     from_record_store = connector is None
     summary = evaluate_portfolio(items)
 
-    # Persist updated CoE scoring fields back to RecordStore if configured
-    if hasattr(store, "save_record"):
-        for ev in summary.evaluations:
-            try:
-                store.save_record(ev.record)  # type: ignore[attr-defined]
-            except Exception:
-                pass
+    # The CoE scores are recomputed on every view and shown, not persisted:
+    # writing every listed record back from this snapshot raced the business
+    # and technical flows and could erase their newer edits.
 
     # Remember each folder's address in the record store, so the open buttons
     # also work in conversations that are not signed in.
@@ -1823,6 +1824,7 @@ def _try_start_tech_review(
         HandoverError,
         baseline_summary,
         list_pending_reviews,
+        looks_like_pending_review_pick,
         parse_tech_review_intent,
         resolve_pending_review_choice,
         review_document_links,
@@ -1865,6 +1867,13 @@ def _try_start_tech_review(
         if matched_id:
             record_id = matched_id
             wants = True
+        elif not wants and not looks_like_pending_review_pick(user_text):
+            # Not a pick and not a command: most likely the next interview
+            # answer (the portfolio view arms this list too). Drop the picker
+            # and let the turn continue rather than trap the user in it.
+            session.pending_review_choices = []
+            store.save(session)
+            return None
         elif not wants:
             first_choice = session.pending_review_choices[0]
             return TurnOutput(

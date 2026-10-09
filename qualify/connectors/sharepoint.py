@@ -21,6 +21,7 @@ import json
 import logging
 import os
 import re
+import threading
 import time
 import urllib.parse
 import xml.etree.ElementTree as ET
@@ -1073,13 +1074,17 @@ class SharePointConnector:
 
 # Singleton instance helper
 _CONNECTOR_INSTANCE: SharePointConnector | None = None
+_CONNECTOR_LOCK = threading.Lock()
 
 
 def get_sharepoint_connector() -> SharePointConnector:
     """Returns the default SharePointConnector singleton."""
     global _CONNECTOR_INSTANCE
     if _CONNECTOR_INSTANCE is None:
-        _CONNECTOR_INSTANCE = SharePointConnector()
+        # Turns run on worker threads; build the singleton exactly once.
+        with _CONNECTOR_LOCK:
+            if _CONNECTOR_INSTANCE is None:
+                _CONNECTOR_INSTANCE = SharePointConnector()
     return _CONNECTOR_INSTANCE
 
 
