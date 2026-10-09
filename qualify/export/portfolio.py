@@ -14,6 +14,7 @@ from qualify.scoring.portfolio import (
     PortfolioSummary,
     QuadrantName,
 )
+from qualify.scoring.technical import KEY2_THRESHOLD
 
 PORTFOLIO_REPORT_FILENAME = "Portfolio_Prioritization_Report.md"
 
@@ -77,7 +78,7 @@ def render_portfolio_report(
             f"| **🟡 Departmental Niche** | **{len(by_q['Departmental Niche'])}** | Localized Value (<3/5) & High Self-Service Feasibility (>=4/5) |",
             f"| **⚪ Deprioritized / Blocked** | **{len(by_q['Deprioritized'])}** | Hard technical blockers or low value & low feasibility |",
             f"| **Pending Gate 2 Tech Review** | **{summary.pending_tech_review_count}** | Business Value Brief completed; awaiting Technical Architecture Review |",
-            f"| **Gate 2 Cleared (>=80% Readiness)** | **{summary.key2_ready_count}** | Passed 22-subcriteria technical review with zero hard blockers |",
+            f"| **Gate 2 Cleared (>={KEY2_THRESHOLD}% Readiness)** | **{summary.key2_ready_count}** | Passed 22-subcriteria technical review with both hard-blocker checks (2.4, 3.5) cleared |",
             "",
             "## 2. Ranked Portfolio Matrix",
             "",

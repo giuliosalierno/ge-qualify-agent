@@ -343,7 +343,9 @@ def test_different_conversations_do_not_share_state() -> None:
 
 
 def test_a_bad_pack_name_fails_before_any_state_exists() -> None:
-    with pytest.raises(Exception):
+    from qualify.packs.loader import PackError
+
+    with pytest.raises(PackError):
         new_session("ctx-x", pack_name="no-such-pack")
 
 

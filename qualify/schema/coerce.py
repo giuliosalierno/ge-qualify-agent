@@ -21,11 +21,12 @@ pack loader exists to prevent at the other end of the pipeline.
 
 from __future__ import annotations
 
+import math
 from datetime import date, datetime
 from enum import IntEnum
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from qualify.schema.paths import ResolvedPath, resolve_record_path
 from qualify.schema.use_case_record import UseCaseRecord, assert_agent_writable
@@ -170,16 +171,21 @@ def _coerce_int(resolved: ResolvedPath, raw: Any) -> int:
 def _coerce_float(resolved: ResolvedPath, raw: Any) -> float:
     if isinstance(raw, bool):
         raise CoercionError(f"{resolved.path}: expected a number, got a boolean.")
-    if isinstance(raw, (int, float)):
-        return float(raw)
-    # Thousands separators arrive from users typing "1,200". Stripping them is
-    # safer than rejecting, because the alternative is the user retyping a
-    # number they already got right.
-    text = str(raw).replace(",", "").strip()
     try:
-        return float(text)
-    except ValueError as exc:
+        if isinstance(raw, (int, float)):
+            value = float(raw)
+        else:
+            # Thousands separators arrive from users typing "1,200". Stripping
+            # them is safer than rejecting, because the alternative is the user
+            # retyping a number they already got right.
+            value = float(str(raw).replace(",", "").strip())
+    except (ValueError, OverflowError) as exc:
         raise CoercionError(f"{resolved.path}: {raw!r} is not a number.") from exc
+    # "inf", "nan" and "1e400" all parse, but none is a usable measurement: they
+    # overflow int(), slip past ge=0 (nan) and serialise as null.
+    if not math.isfinite(value):
+        raise CoercionError(f"{resolved.path}: {raw!r} is not a finite number.")
+    return value
 
 
 def _coerce_date(resolved: ResolvedPath, raw: Any) -> date:
@@ -214,6 +220,8 @@ def set_by_path(record: UseCaseRecord, path: str, value: Any) -> None:
 
     `validate_assignment=True` on the models means pydantic re-validates each
     write, so a negative user count fails here rather than at serialisation.
+    That failure is re-raised as `CoercionError`, so callers that reject bad
+    input field by field (`apply_commit`) see it as a rejection, not a crash.
     """
     assert_agent_writable(path)
 
@@ -229,7 +237,11 @@ def set_by_path(record: UseCaseRecord, path: str, value: Any) -> None:
         if not isinstance(target, BaseModel):
             raise CoercionError(f"{path!r} passes through a non-container.")
 
-    setattr(target, segments[-1], value)
+    try:
+        setattr(target, segments[-1], value)
+    except ValidationError as exc:
+        reasons = "; ".join(e["msg"] for e in exc.errors()) or str(exc)
+        raise CoercionError(f"{path}: {value!r} rejected ({reasons}).") from exc
 
 
 def coerce_and_set(record: UseCaseRecord, path: str, raw: Any) -> Any:

@@ -217,7 +217,9 @@ def test_derived_is_serialised_for_the_data_model():
 
 def test_unknown_fields_are_rejected():
     """A typo in a pack or patch must fail loudly, not vanish."""
-    with pytest.raises(Exception):
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
         UseCaseRecord.model_validate(
             {"meta": {"record_id": "uc-001"}, "buisness": {}}
         )

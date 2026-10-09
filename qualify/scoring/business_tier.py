@@ -20,6 +20,7 @@ from __future__ import annotations
 import re
 
 from qualify.schema.capability import CapabilityLevel
+from qualify.schema.classification import REGULATED, normalise_classification
 from qualify.schema.use_case_record import UseCaseRecord
 from qualify.scoring.connectors import (
     ConnectorMatch,
@@ -35,53 +36,72 @@ from qualify.scoring.connectors import (
 # deny list was native, which classified "Internal REST API" as a native
 # Gemini Enterprise connector.
 
+# The keyword lists below are regex fragments matched as whole words, with the
+# inflections each verb is meant to cover spelled out. A plain substring test
+# read "committee" as "commit", "written" as "write", "async" as "sync" and
+# "routine" as "route", which escalated harmless descriptions to Level 6.
+
 # Verbs indicating linear workflow / action execution
 _WORKFLOW_VERBS = (
-    "automate",
-    "trigger",
-    "schedule",
-    "step",
-    "send email",
-    "triage",
-    "route",
-    "notify",
-    "assign",
+    r"automat(?:e|es|ed|ing)",
+    r"trigger(?:s|ed|ing)?",
+    r"schedul(?:e|es|ed|ing)",
+    r"step",
+    r"(?:send|sends|sending|sent) emails?",
+    r"triag(?:e|es|ed|ing)",
+    r"rout(?:e|es|ed|ing)",
+    r"notif(?:y|ies|ied|ying)",
+    r"assign(?:s|ed|ing)?",
 )
 
 # Verbs indicating external state mutation or transactional writes
 _MUTATION_VERBS = (
-    "write",
-    "update record",
-    "create ticket",
-    "create record",
-    "modify",
-    "delete",
-    "sync",
-    "approve",
-    "post to",
-    "execute",
-    "reconcile",
-    "provision",
-    "migrate",
-    "push to",
-    "commit",
-    "mutate",
+    r"(?:write|writes|writing|wrote)",
+    r"updat(?:e|es|ed|ing) records?",
+    r"creat(?:e|es|ed|ing) tickets?",
+    r"creat(?:e|es|ed|ing) records?",
+    r"modif(?:y|ies|ied|ying)",
+    r"delet(?:e|es|ed|ing)",
+    r"sync(?:s|ed|ing)?",
+    r"approv(?:e|es|ed|ing)",
+    r"post(?:s|ed|ing)? to",
+    r"execut(?:e|es|ed|ing)",
+    r"reconcil(?:e|es|ed|ing)",
+    r"provision(?:s|ed|ing)?",
+    r"migrat(?:e|es|ed|ing)",
+    r"push(?:es|ed|ing)? to",
+    r"commit(?:s|ted|ting)?",
+    r"mutat(?:e|es|ed|ing)",
 )
 
 # Markers of non-linear orchestration, deterministic math/reconciliation, or strict SLAs
 # that exceed Low-Code Workflow Builder boundaries per GCP reference documentation
 _COMPLEX_ORCHESTRATION_MARKERS = (
-    "multi-agent",
-    "loop",
-    "conditional branch",
-    "rollback",
-    "real-time transaction",
-    "reconciliation",
-    "orchestrate across",
-    "two-way sync",
-    "bidirectional",
-    "custom schema",
+    r"multi-agent",
+    r"loop(?:s|ed|ing)?",
+    r"conditional branch(?:es|ing)?",
+    r"rollbacks?",
+    r"real-time transactions?",
+    r"reconciliation",
+    r"orchestrat(?:e|es|ed|ing) across",
+    r"two-way sync",
+    r"bidirectional",
+    r"custom schemas?",
 )
+
+
+def _whole_words(fragments: tuple[str, ...]) -> re.Pattern[str]:
+    """One case-insensitive pattern matching any fragment as whole words.
+
+    A space inside a phrase matches any run of whitespace.
+    """
+    body = "|".join(f.replace(" ", r"\s+") for f in fragments)
+    return re.compile(r"\b(?:" + body + r")\b", re.IGNORECASE)
+
+
+_WORKFLOW_RE = _whole_words(_WORKFLOW_VERBS)
+_MUTATION_RE = _whole_words(_MUTATION_VERBS)
+_COMPLEX_ORCHESTRATION_RE = _whole_words(_COMPLEX_ORCHESTRATION_MARKERS)
 
 
 def _source_matches(record: UseCaseRecord) -> list[ConnectorMatch]:
@@ -117,18 +137,18 @@ def _assess_gcp_grounding_signals(record: UseCaseRecord) -> dict[str, object]:
     unverified = [m for m in matches if m.status == "unverified"]
     has_other_source = bool(unverified)
 
-    classification = (tech.security.data_classification or "internal").lower()
+    classification = (
+        normalise_classification(tech.security.data_classification) or "internal"
+    )
     problem = (record.business.problem_description or "").lower()
     stories = (record.business.user_stories or "").lower()
     text_corpus = f"{problem} {stories}"
 
     # Custom and unverified sources both rule out a native-connector build.
     has_high_code_sys = bool(custom) or bool(unverified)
-    has_workflow_verbs = any(w in text_corpus for w in _WORKFLOW_VERBS)
-    has_mutation_verbs = any(m in text_corpus for m in _MUTATION_VERBS)
-    has_complex_orchestration = any(
-        c in text_corpus for c in _COMPLEX_ORCHESTRATION_MARKERS
-    )
+    has_workflow_verbs = bool(_WORKFLOW_RE.search(text_corpus))
+    has_mutation_verbs = bool(_MUTATION_RE.search(text_corpus))
+    has_complex_orchestration = bool(_COMPLEX_ORCHESTRATION_RE.search(text_corpus))
 
     # Writes are only native where the connector page documents actions.
     read_only_mutation_sources = [
@@ -166,9 +186,9 @@ def _assess_gcp_grounding_signals(record: UseCaseRecord) -> dict[str, object]:
         delegation_reasons.append(
             "Describes non-linear orchestration, reconciliation, or bidirectional sync that exceeds linear Low-Code Workflow Builder prompt chains."
         )
-    if classification == "restricted":
+    if classification == REGULATED:
         delegation_reasons.append(
-            "Data classification is **Restricted**, requiring dedicated IAM/WIF, VPC Service Controls, and High-Code ADK guardrails."
+            "Data classification is **Restricted / regulated**, requiring dedicated IAM/WIF, VPC Service Controls, and High-Code ADK guardrails."
         )
 
     return {
@@ -249,7 +269,7 @@ def classify_capability(record: UseCaseRecord, *, force_refresh: bool = False) -
     if tech.capability_level is None or force_refresh or is_legacy_rationale:
         # 1. Hard Pro-Code ADK (Level 6) triggers
         if (
-            classification == "restricted"
+            classification == REGULATED
             or has_complex_orchestration
             or non_native_count >= 2
             or (has_mutation_verbs and len(named_sources) >= 2)
@@ -517,8 +537,11 @@ def business_summary(record: UseCaseRecord) -> str:
         )
     if signals["has_complex_orchestration"]:
         why.append("The process has branching or two-way syncing steps.")
-    if signals["classification"] == "restricted":
-        why.append("The data is classified Restricted, which needs extra security controls.")
+    if signals["classification"] == REGULATED:
+        why.append(
+            "The data is classified restricted or regulated, which needs extra "
+            "security controls."
+        )
     if not why:
         why.append("No external systems are needed beyond your documents and Google Workspace.")
 
