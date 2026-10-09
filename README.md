@@ -129,8 +129,8 @@ Balancer).
 
 Download and add them to Gemini Enterprise:
 
-- [`ge-intake-business`](https://github.com/giuliosalierno/ge-qualify-agent/releases/latest/download/ge_intake_business.zip) ([source](skills/ge_intake_business/SKILL.md))
-- [`ge-review-tech`](https://github.com/giuliosalierno/ge-qualify-agent/releases/latest/download/ge_tech_review.zip) ([source](skills/ge_tech_review/SKILL.md))
+- [`ge-intake-business`](https://github.com/cloud-gtm/ge-qualification-agent/releases/latest/download/ge_intake_business.zip) ([source](skills/ge_intake_business/SKILL.md))
+- [`ge-review-tech`](https://github.com/cloud-gtm/ge-qualification-agent/releases/latest/download/ge_tech_review.zip) ([source](skills/ge_tech_review/SKILL.md))
 
 Both run as a consultative interview, **one stage per turn**, entirely in
 chat: no Canvas or Google Doc is created mid-interview, because each Canvas
