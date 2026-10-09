@@ -70,7 +70,7 @@ owner: giuliosalierno
 #   - https://storage.cloud.google.com/demo-hub-images-prod/scene-00-hero-card.png
 
 
-click_to_deploy_path: https://github.com/cloud-gtm/ge-qualification-agent/tree/main/click-to-deploy
+# click_to_deploy_path:
 
 
 demo_guide: docs/demo-guide-ge-qualify-agent.md # replace with the Google Doc URL before publishing
