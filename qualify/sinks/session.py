@@ -91,6 +91,11 @@ class Session:
     #: A command that stopped for a sign-in (e.g. "portfolio review"); re-run
     #: when the user reports they signed in.
     resume_command: str | None = None
+    #: The last few chat turns, oldest first, as {"role": "user"|"assistant",
+    #: "text": ...}. Gives the extractor and the chat model the question a
+    #: short answer ("yes", "about 30") replies to. Bounded and truncated in
+    #: qualify/agent/turn.py; starts empty for every new session (record).
+    recent_turns: list[dict[str, str]] = field(default_factory=list)
     created_at: datetime = field(default_factory=_now)
     updated_at: datetime = field(default_factory=_now)
     #: The record as this session last read it from, or wrote it to, the

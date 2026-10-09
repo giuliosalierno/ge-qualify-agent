@@ -103,7 +103,6 @@ class QualifyAgentExecutor(AgentExecutor):
             context_id=context_id,
             user_text=user_text,
             action_data=action_data,
-            conversation_history=user_text or "",
         )
 
         task = context.current_task

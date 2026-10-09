@@ -420,6 +420,14 @@ def test_menu_lists_option_values_not_labels(pack) -> None:
     assert "confidential" in menu
 
 
+def test_menu_explains_each_option_value(pack) -> None:
+    """Bare codes hid that "the shared Outlook mailbox" is `workspace_mail`."""
+    menu = build_field_menu(pack.stages[DATA], pack)
+
+    assert "workspace_mail = Email or calendar" in menu
+    assert "Outlook" in menu
+
+
 def test_instruction_licenses_returning_nothing(pack) -> None:
     """The bias to under-fill has to be stated, not implied."""
     instruction = build_instruction(pack.stages[NEEDS], pack)

@@ -147,8 +147,14 @@ def build_field_menu(stage: Stage, pack: Pack) -> str:
 
         options = pack.options_for(spec)
         if options:
-            allowed = ", ".join(f"{o.value}" for o in options)
-            parts.append(f"[choose from: {allowed}]")
+            # Value *and* meaning: bare codes such as `workspace_mail` or
+            # `sla_documented` left the model unable to see that "the shared
+            # Outlook mailbox" or "updated in real time" answer the question.
+            parts.append("[option values:")
+            for o in options:
+                hint = f" — e.g. {o.hint}" if o.hint else ""
+                parts.append(f"\n    {o.value} = {o.label}{hint}")
+            parts.append("]")
         elif spec.variant == "number":
             parts.append("[a number, digits only]")
         elif spec.resolved is not None and spec.resolved.is_bool:
@@ -189,8 +195,15 @@ in every other number.
 people?" and the user has not answered, there is no value.
 5. **Numbers as digits, no units.** "about a dozen" is 12. "twenty minutes" \
 is 20. "a couple of hours" is not a number the user gave precisely — skip it.
-6. **Choices must use the exact option value** listed above, never the label \
-and never a new one.
+6. **Choices must use the exact option value** listed above (the part before \
+`=`), never the label and never a new one. When the user states a fact that one \
+option's description clearly matches ("the shared Outlook mailbox" matches \
+`Email or calendar`; "answers must cite their sources" matches strict \
+attribution), choose that option and quote the fact as evidence. That is \
+reading, not inferring. If no option clearly matches, report nothing.
+7. **Earlier turns are context.** The transcript may include earlier \
+questions and answers. A short reply such as "yes" or "about 30" answers the \
+question just before it. Evidence must still be the user's own words.
 
 Report nothing for any field the user has not addressed."""
 
@@ -205,11 +218,17 @@ def extract_drafts(
     pack: Pack,
     conversation: str,
     client: ExtractionClient,
+    *,
+    evidence_text: str | None = None,
 ) -> ExtractionResult:
     """Asks the model for values, then refuses most of what could go wrong.
 
     Never raises on a bad model response. A failed extraction should cost the
     turn its auto-fill, not the conversation.
+
+    `evidence_text` is what evidence quotes are checked against. Pass only the
+    user's own messages when `conversation` also carries the assistant's
+    questions, so a quote of the assistant cannot justify a value.
     """
     instruction = build_instruction(stage, pack)
     schema = build_schema(stage, pack)
@@ -222,7 +241,7 @@ def extract_drafts(
         log.warning("Extraction call failed, continuing without it: %s", exc)
         return ExtractionResult(drafts=[], rejected=[("*", str(exc))])
 
-    return _filter(raw, stage, pack, conversation)
+    return _filter(raw, stage, pack, conversation if evidence_text is None else evidence_text)
 
 
 def _filter(
@@ -256,7 +275,8 @@ def _filter(
             rejected.append((path, "not a writable field of this stage"))
             continue
 
-        if path in seen:
+        is_list = spec.resolved is not None and spec.resolved.is_list
+        if path in seen and not is_list:
             rejected.append((path, "duplicate; keeping the first"))
             continue
 
@@ -289,6 +309,17 @@ def _filter(
         if coerced is None or coerced == [] or coerced == "":
             # The model found the field but not a value in it. Nothing to say.
             rejected.append((path, "coerced to empty"))
+            continue
+
+        if path in seen:
+            # Multi-select answered one option per item ("SAP", then
+            # "Outlook"): merge them rather than keep only the first.
+            idx = next(i for i, d in enumerate(drafts) if d.path == path)
+            prev = drafts[idx]
+            merged = list(prev.value) + [v for v in coerced if v not in prev.value]
+            drafts[idx] = FieldDraft(
+                path=path, value=merged, evidence=f"{prev.evidence} / {evidence}"
+            )
             continue
 
         seen.add(path)

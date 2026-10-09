@@ -70,6 +70,10 @@ class Option(BaseModel):
 
     label: str
     value: str
+    #: Extraction only, never rendered: what a user typically says when this
+    #: option applies ("Outlook" for `workspace_mail`), so the extractor can
+    #: map a stated fact to the right option.
+    hint: str | None = None
 
 
 def options_from_enum(enum_cls: type[IntEnum]) -> list[Option]:

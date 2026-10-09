@@ -13,7 +13,7 @@ Ties the deterministic core together:
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -100,6 +100,9 @@ class TurnInput:
     user_text: str | None = None
     action_data: dict[str, Any] | None = None
     conversation_history: str = ""
+    #: The user's own recent messages; what extraction evidence must quote.
+    #: Filled with `conversation_history` by `execute_turn` when empty.
+    user_history: str = ""
 
 
 @dataclass
@@ -165,6 +168,15 @@ def execute_turn(
     """
     session = get_or_start(store, turn_input.context_id, pack_name=pack_name)
 
+    if turn_input.user_text and not turn_input.conversation_history:
+        conversation, user_history = _conversation_with_history(session, turn_input.user_text)
+        turn_input = replace(
+            turn_input, conversation_history=conversation, user_history=user_history
+        )
+    if turn_input.user_text:
+        # Before the turn runs, so whichever save the turn makes keeps it.
+        _remember_turn(session, "user", turn_input.user_text)
+
     banner = _consume_signin_banner(session)
 
     output = _run_turn(
@@ -184,10 +196,48 @@ def execute_turn(
         # silently roll that back.
         store.save(output.session)
 
-    if _announce_lost_signin(output) or _offer_signin_on_first_reply(output):
+    remembered = False
+    if turn_input.user_text and output.reply_text:
+        _remember_turn(output.session, "assistant", output.reply_text)
+        remembered = True
+
+    if _announce_lost_signin(output) or _offer_signin_on_first_reply(output) or remembered:
         store.save(output.session)
 
     return output
+
+
+#: Chat turns kept for context (user and assistant messages together).
+_HISTORY_TURNS = 6
+#: Per-message cap. Assistant replies can be long (banners, briefs); the
+#: question at their end is what matters, so they are cut from the front.
+_HISTORY_CHARS = {"user": 1200, "assistant": 600}
+
+
+def _remember_turn(session: Session, role: str, text: str) -> None:
+    text = text.strip()
+    if not text:
+        return
+    cap = _HISTORY_CHARS[role]
+    if len(text) > cap:
+        text = text[:cap] if role == "user" else "…" + text[-cap:]
+    session.recent_turns = [*session.recent_turns, {"role": role, "text": text}][
+        -_HISTORY_TURNS:
+    ]
+
+
+def _conversation_with_history(session: Session, user_text: str) -> tuple[str, str]:
+    """(transcript for the models, the user's words only for evidence checks)."""
+    lines = []
+    user_lines = []
+    for turn in session.recent_turns:
+        speaker = "User" if turn.get("role") == "user" else "Assistant"
+        lines.append(f"{speaker}: {turn.get('text', '')}")
+        if speaker == "User":
+            user_lines.append(turn.get("text", ""))
+    lines.append(f"User: {user_text}")
+    user_lines.append(user_text)
+    return "\n\n".join(lines), "\n\n".join(user_lines)
 
 
 def _offer_signin_on_first_reply(output: TurnOutput) -> bool:
@@ -504,7 +554,13 @@ def _run_turn(
             and convo.strip()
             and not _should_skip_extraction(turn_input.user_text)
         ):
-            result = extract_drafts(stage, session.pack, convo, extraction_client)
+            result = extract_drafts(
+                stage,
+                session.pack,
+                convo,
+                extraction_client,
+                evidence_text=turn_input.user_history or None,
+            )
             drafts = apply_drafts(session.record, result.drafts)
 
             for d in drafts:
