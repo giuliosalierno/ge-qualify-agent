@@ -20,7 +20,13 @@ from __future__ import annotations
 from datetime import date
 
 from qualify.schema.use_case_record import UseCaseRecord
-from qualify.scoring.technical import FAIL, PASS, TechnicalScore, score_technical
+from qualify.scoring.technical import (
+    FAIL,
+    KEY2_THRESHOLD,
+    PASS,
+    TechnicalScore,
+    score_technical,
+)
 
 #: What an unestablished field renders as. Matches the SKILL exactly.
 PENDING = "⚠️ [Pending Discovery]"
@@ -244,7 +250,7 @@ def _feasibility_rationale(record: UseCaseRecord, score: TechnicalScore) -> str:
             f"reaches private backends, which is outside what native managed "
             f"connectors cover. A custom agent on Cloud Run is the fit."
         )
-    if score.readiness_pct >= 80:
+    if score.readiness_pct >= KEY2_THRESHOLD:
         return (
             "All systems are reachable over public interfaces with documented "
             "schemas, so native managed connectors should cover this."
@@ -297,5 +303,5 @@ def _next_step(score: TechnicalScore) -> str:
         )
     return (
         f"**Close the gaps in the access checklist.** Readiness is "
-        f"{score.readiness_pct}%; Key 2 needs 80% with no blockers."
+        f"{score.readiness_pct}%; Key 2 needs {KEY2_THRESHOLD}% with no blockers."
     )

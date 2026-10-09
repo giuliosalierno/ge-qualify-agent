@@ -310,3 +310,50 @@ def test_capability_grounding_anti_overcommitment_delegation() -> None:
     assert rec_multi_write.technical.capability_level == CapabilityLevel.HIGH_CODE_AGENT
 
 
+
+
+# ---------------------------------------------------------------------------
+# Key 2 in the portfolio follows TechnicalScore.key2_ready, not readiness alone
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("transit_blocker_status", "exception_required"),  # WARN, 98%
+        ("transit_blocker_status", None),  # unconfirmed, 95%
+        ("transit_blocker_status", "unknown"),  # "Not yet confirmed"
+        ("cloud_policy_status", "review_in_flight"),  # WARN
+    ],
+)
+def test_high_readiness_without_cleared_blockers_is_not_key_2_cleared(
+    field: str, value: str | None
+) -> None:
+    from tests.test_technical_scoring import perfect_record
+
+    rec = perfect_record()
+    if field == "transit_blocker_status":
+        rec.technical.network.transit_blocker_status = value
+    else:
+        rec.technical.security.cloud_policy_status = value
+
+    ev = evaluate_opportunity(rec, has_dossier=True)
+    summary = evaluate_portfolio([(rec, {"hasDossier": True})])
+
+    assert ev.readiness_pct is not None and ev.readiness_pct >= 80
+    assert ev.has_hard_blocker is False
+    assert ev.key2_ready is False
+    assert ev.priority_status == f"Tech Reviewed ({ev.readiness_pct}%)"
+    assert summary.key2_ready_count == 0
+
+
+def test_fully_cleared_record_is_key_2_cleared_in_the_portfolio() -> None:
+    from tests.test_technical_scoring import perfect_record
+
+    rec = perfect_record()
+    ev = evaluate_opportunity(rec, has_dossier=True)
+    summary = evaluate_portfolio([(rec, {"hasDossier": True})])
+
+    assert ev.key2_ready is True
+    assert ev.priority_status == "Scoped (Key 2 Cleared)"
+    assert summary.key2_ready_count == 1
