@@ -1,0 +1,165 @@
+# yamllint disable
+# common_typos_disable
+
+# File Info
+
+
+file_type: demo
+
+
+# Demo Info
+
+
+type: application
+
+
+title: GE Use Case Qualification Agent
+
+
+thumbnail_summary: Qualify, architecturally review, and rank enterprise AI use cases inside Gemini Enterprise—turning raw ideas into quantified Business Value Briefs, 22-point Technical Dossiers, and a 4-quadrant CoE portfolio in under 10 minutes.
+
+
+purpose: |
+  Enterprise AI Centers of Excellence (CoEs) receive dozens of generative AI requests across business units, but rely on disconnected spreadsheets and repetitive workshops to evaluate ROI and technical feasibility.
+
+  The GE Use Case Qualification Agent embeds the GE App Use Case Discovery Framework natively inside Gemini Enterprise. Across three guided workflows—Business Value Intake, Technical Architecture Review, and CoE Portfolio Prioritization—stakeholders converse naturally while the agent populates interactive A2UI forms, computes annual hours saved, assigns Capability Levels 1–6 with anti-overcommitment rules, evaluates 22 technical readiness subcriteria, and segments the backlog into actionable quadrants.
+  * **Built with Demo Engineering Skills**: Created end-to-end with the [go/demo-eng-skills](https://demospace.corp.goog/demo/2155) Demo Engineering Skills library
+
+
+business_value: |
+  * **Eliminate Unquantified AI Science Projects:** Calculates auditable annual hours saved from user headcount, weekly frequency, and minutes saved per task over 50 work weeks without invented benchmarks.
+  * **Prevent Costly Over-Engineering:** Maps every request to the simplest Gemini Enterprise capability (Levels 1–6, from no-code skills to pro-code custom agents) before committing engineering capacity.
+  * **Cut Technical Discovery Time by 70%:** Locks Phase 1 business baselines in Cloud Storage so Solution Architects immediately review systems, network transit, IAM, and ACLs without re-interviewing the business.
+  * **Board-Ready Portfolio Prioritization:** Automatically scores Business Value (1–5) and Feasibility (1–5) to rank opportunities into Quick Wins, Strategic Bets, Departmental Niche, and Deprioritized quadrants.
+
+
+technical_value: |
+  * **Native A2A + Interactive A2UI v0.8 Architecture:** Streams JSON-RPC events from Cloud Run to Gemini Enterprise to render live side-panel forms, tabs, tables, and Vega-Lite quadrant charts alongside chat.
+  * **Evidence-Gated Gemini Extraction & Deterministic Scoring:** Pairs Gemini Flash structured output with verbatim quote verification and deterministic Python engines for tiering and 22-point readiness scoring.
+  * **Multi-Actor Optimistic Concurrency:** Persists records in Cloud Storage using three-way merges and generation preconditions so concurrent business and technical sessions never overwrite each other.
+  * **Zero-Trust Click-to-Deploy:** Pinned SHA-256 supply chain, non-root container, Discovery Engine service-agent IAM enforcement, and automated GE license provisioning.
+  * **Built with Demo Engineering Skills**: Architected, built, and validated with the [go/demo-eng-skills](https://demospace.corp.goog/demo/2155) Demo Engineering Skills library
+
+
+
+
+# Demo Attribution
+
+
+owner: giuliosalierno
+
+
+# team_owner: 1234567890
+
+
+# contributors:
+#   - contributor_ldap_1
+
+
+# channel_id: 123
+
+
+
+
+# Demo Assets
+
+
+# Upload docs/video-assets/shots/scene-00-hero-card.png and screenshots via the go/demos editor
+# and uncomment the returned https://storage.cloud.google.com/... URLs below:
+# images:
+#   - https://storage.cloud.google.com/demo-hub-images-prod/scene-00-hero-card.png
+
+
+click_to_deploy_path: https://github.com/cloud-gtm/ge-qualification-agent/tree/main/click-to-deploy
+
+
+demo_guide: docs/demo-guide-ge-qualify-agent.md # replace with the Google Doc URL before publishing
+
+
+artifacts:
+  - title: Demo Design Document
+
+
+    type: document
+
+
+    link: docs/ddd-ge-qualify-agent.md # replace with the Google Doc URL before publishing
+
+  - title: GitHub Repository
+
+
+    type: code_repo
+
+
+    link: https://github.com/cloud-gtm/ge-qualification-agent
+
+  - title: Standalone Skill - Business Value Intake
+
+
+    type: other_unspecified
+
+
+    link: https://github.com/cloud-gtm/ge-qualification-agent/releases/latest/download/ge_intake_business.zip
+
+  - title: Standalone Skill - Technical Architecture Review
+
+
+    type: other_unspecified
+
+
+    link: https://github.com/cloud-gtm/ge-qualification-agent/releases/latest/download/ge_tech_review.zip
+
+  - title: Demo Engineering Skills Library
+
+
+    type: other_unspecified
+
+
+    link: https://demospace.corp.goog/demo/2155
+
+# - title: Overview Slide Deck
+#
+#
+#   type: slide_deck
+#
+#
+#   link: https://docs.google.com/presentation/d/...
+
+# - title: Demo Walkthrough Video
+#
+#
+#   type: video
+#
+#
+#   link: https://drive.google.com/file/d/...
+
+
+featured_artifact_title: GitHub Repository
+
+
+# featured_video_artifact_title: Demo Walkthrough Video
+
+
+
+
+# Demo Metadata
+
+
+industries:
+  - all
+  - financial_services
+  - retail
+  - healthcare_life_services
+  - manufacturing
+  - telecommunications
+  - public_sector
+
+
+products:
+  - gemini_enterprise
+  - cloud_run
+  - cloud_storage
+  - vertex_ai
+
+
+# content_restriction_labels:
