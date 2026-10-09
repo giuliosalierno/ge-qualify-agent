@@ -315,6 +315,9 @@ def start_tech_review(
     record = load_review_record(store, record_id, context_id)
     if record is None:
         raise HandoverError(_not_found_message(store, record_id))
+    # Snapshot before this flow changes anything: saving then merges only this
+    # review's edits into the stored record instead of overwriting it.
+    record_base = record.model_dump(mode="json")
 
     log.info(
         "Handover: opening tech review context_id=%s record_id=%s",
@@ -339,6 +342,7 @@ def start_tech_review(
         context_id=context_id,
         pack_name=TECH_PACK,
         record=record,
+        record_base=record_base,
     )
     store.save(session)
     return session

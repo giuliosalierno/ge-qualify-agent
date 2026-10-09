@@ -25,7 +25,7 @@ import logging
 import secrets
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Protocol
+from typing import Any, Protocol
 
 from qualify.packs.loader import Pack, load_pack
 from qualify.schema.use_case_record import Meta, UseCaseRecord
@@ -93,6 +93,14 @@ class Session:
     resume_command: str | None = None
     created_at: datetime = field(default_factory=_now)
     updated_at: datetime = field(default_factory=_now)
+    #: The record as this session last read it from, or wrote it to, the
+    #: shared record store: the common ancestor for the three-way merge that
+    #: durable stores do on save, so this session only writes the fields it
+    #: actually changed and keeps what other flows (technical review, another
+    #: chat) wrote meanwhile. None means "never synced": this session's copy
+    #: is taken as authoritative. Not persisted on its own; the session file's
+    #: record is, by construction, the copy last written.
+    record_base: dict[str, Any] | None = field(default=None, repr=False, compare=False)
 
     def next_surface_id(self, suffix: str | None = None) -> str:
         """Generates and tracks a fresh surfaceId for a new message card."""

@@ -18,7 +18,7 @@ from typing import Any
 import pytest
 from google.api_core.exceptions import NotFound, PreconditionFailed, ServiceUnavailable
 
-from qualify.agent.handover import RECORD_ID_RE
+from qualify.agent.handover import RECORD_ID_RE, start_tech_review
 from qualify.agent.turn import TurnInput, execute_turn
 from qualify.sinks.record_store import GCSRecordStore, LocalRecordStore
 from qualify.sinks.session import get_or_start, new_session
@@ -192,3 +192,101 @@ def test_local_unreadable_session_propagates(
 
     with pytest.raises(OSError):
         store.load("ctx-a")
+
+
+# --- concurrent flows on one record ---------------------------------------------
+
+
+@pytest.fixture(params=["local", "gcs"])
+def any_store(request: pytest.FixtureRequest, tmp_path: Path) -> Any:
+    if request.param == "local":
+        return LocalRecordStore(tmp_path / "store")
+    return GCSRecordStore("test-bucket", client=FakeClient())
+
+
+def _finished_business(store: Any, ctx: str) -> str:
+    session = new_session(ctx, "business")
+    session.record.meta.initiative_name = "Invoice Triage"
+    session.record.business.problem_description = "Invoices are triaged by hand"
+    session.committed = set(range(len(session.pack.stages)))
+    store.save(session)
+    return session.record.meta.record_id
+
+
+def _finished_tech_review(store: Any, ctx: str, record_id: str) -> None:
+    tech = start_tech_review(store, ctx, record_id)
+    tech.record.technical.landing_zone_status = "Ready"
+    tech.record.technical.security.data_classification = "Confidential"
+    tech.committed = set(range(len(tech.pack.stages)))
+    store.save(tech)
+
+
+def test_business_chat_message_keeps_finished_tech_review(
+    any_store: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Production default: the first reply in a chat offers sign-in and saves
+    # the business session, which used to write its stale record copy back.
+    monkeypatch.delenv("SIGNIN_CARD", raising=False)
+    record_id = _finished_business(any_store, "ctx-a")
+    _finished_tech_review(any_store, "ctx-b", record_id)
+
+    execute_turn(any_store, TurnInput(context_id="ctx-a", user_text="thanks, looks good"))
+
+    stored = any_store.load_record(record_id)
+    assert stored.technical.landing_zone_status == "Ready"
+    assert stored.technical.security.data_classification == "Confidential"
+    assert stored.business.problem_description == "Invoices are triaged by hand"
+
+
+def test_each_flow_keeps_its_own_edits_after_a_merge(any_store: Any) -> None:
+    record_id = _finished_business(any_store, "ctx-a")
+    _finished_tech_review(any_store, "ctx-b", record_id)
+
+    business = any_store.load("ctx-a")
+    business.record.business.user_count = 42
+    any_store.save(business)
+
+    stored = any_store.load_record(record_id)
+    assert stored.business.user_count == 42
+    assert stored.technical.landing_zone_status == "Ready"
+    # The business session now holds the merged record, too.
+    assert business.record.technical.landing_zone_status == "Ready"
+    assert any_store.load("ctx-a").record.technical.landing_zone_status == "Ready"
+
+
+def test_gcs_new_record_is_created_with_generation_precondition(gcs: GCSRecordStore) -> None:
+    record_id = _finished_business(gcs, "ctx-a")
+    assert (f"records/{record_id}.json", 0) in gcs._bucket.uploads
+
+
+def test_gcs_concurrent_write_is_retried_and_merged(gcs: GCSRecordStore) -> None:
+    record_id = _finished_business(gcs, "ctx-a")
+    business = gcs.load("ctx-a")
+    business.record.business.user_count = 42
+
+    # The tech review commits between the business save's read and its write.
+    bucket = gcs._bucket
+    name = f"records/{record_id}.json"
+    real_download = FakeBlob.download_as_text
+    raced = []
+
+    def racing_download(self: FakeBlob, encoding: str = "utf-8") -> str:
+        text = real_download(self, encoding)
+        if self.name == name and not raced:
+            raced.append(True)
+            data = json.loads(text)
+            data["technical"]["landing_zone_status"] = "Ready"
+            bucket.counter += 1
+            bucket.objects[name] = (json.dumps(data), bucket.counter)
+        return text
+
+    FakeBlob.download_as_text = racing_download  # type: ignore[method-assign]
+    try:
+        gcs.save(business)
+    finally:
+        FakeBlob.download_as_text = real_download  # type: ignore[method-assign]
+
+    stored = gcs.load_record(record_id)
+    assert raced
+    assert stored.business.user_count == 42
+    assert stored.technical.landing_zone_status == "Ready"
