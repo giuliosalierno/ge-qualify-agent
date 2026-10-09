@@ -287,7 +287,7 @@ def test_data_classification_is_a_vocabulary_not_free_text():
         "public",
         "internal",
         "confidential",
-        "restricted",
+        "regulated",
         "unknown",
     ]
 

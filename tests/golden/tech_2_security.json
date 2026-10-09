@@ -178,6 +178,10 @@
             {
               "label": "Unclassified",
               "value": "unclassified"
+            },
+            {
+              "label": "Not yet confirmed",
+              "value": "unknown"
             }
           ],
           "value": {

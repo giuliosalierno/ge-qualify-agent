@@ -33,15 +33,15 @@ option_sets:
     - { label: Other (specify below), value: other }
     - { label: Not sure yet, value: unknown }
 
-  # Sensitivity labels. These live in the pack, not in UseCaseRecord, because
-  # every organisation names its tiers differently — freezing one tenant's
-  # vocabulary into the schema would be wrong for the next one. The record
-  # field stays a plain string; the pack supplies the choices.
+  # Sensitivity labels. The labels live in the pack, not in UseCaseRecord,
+  # because every organisation names its tiers differently. The VALUES do not:
+  # the tech pack writes the same field and scoring (3.4, capability tier)
+  # reads it, so they must come from qualify/schema/classification.py.
   data_classification:
     - { label: Public, value: public }
     - { label: Internal, value: internal }
     - { label: Confidential, value: confidential }
-    - { label: Restricted or regulated, value: restricted }
+    - { label: Restricted or regulated, value: regulated }
     - { label: Not sure yet, value: unknown }
 
 stages:

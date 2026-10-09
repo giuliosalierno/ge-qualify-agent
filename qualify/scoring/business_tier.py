@@ -20,6 +20,7 @@ from __future__ import annotations
 import re
 
 from qualify.schema.capability import CapabilityLevel
+from qualify.schema.classification import REGULATED, normalise_classification
 from qualify.schema.use_case_record import UseCaseRecord
 from qualify.scoring.connectors import (
     ConnectorMatch,
@@ -117,7 +118,9 @@ def _assess_gcp_grounding_signals(record: UseCaseRecord) -> dict[str, object]:
     unverified = [m for m in matches if m.status == "unverified"]
     has_other_source = bool(unverified)
 
-    classification = (tech.security.data_classification or "internal").lower()
+    classification = (
+        normalise_classification(tech.security.data_classification) or "internal"
+    )
     problem = (record.business.problem_description or "").lower()
     stories = (record.business.user_stories or "").lower()
     text_corpus = f"{problem} {stories}"
@@ -166,9 +169,9 @@ def _assess_gcp_grounding_signals(record: UseCaseRecord) -> dict[str, object]:
         delegation_reasons.append(
             "Describes non-linear orchestration, reconciliation, or bidirectional sync that exceeds linear Low-Code Workflow Builder prompt chains."
         )
-    if classification == "restricted":
+    if classification == REGULATED:
         delegation_reasons.append(
-            "Data classification is **Restricted**, requiring dedicated IAM/WIF, VPC Service Controls, and High-Code ADK guardrails."
+            "Data classification is **Restricted / regulated**, requiring dedicated IAM/WIF, VPC Service Controls, and High-Code ADK guardrails."
         )
 
     return {
@@ -249,7 +252,7 @@ def classify_capability(record: UseCaseRecord, *, force_refresh: bool = False) -
     if tech.capability_level is None or force_refresh or is_legacy_rationale:
         # 1. Hard Pro-Code ADK (Level 6) triggers
         if (
-            classification == "restricted"
+            classification == REGULATED
             or has_complex_orchestration
             or non_native_count >= 2
             or (has_mutation_verbs and len(named_sources) >= 2)
@@ -517,8 +520,11 @@ def business_summary(record: UseCaseRecord) -> str:
         )
     if signals["has_complex_orchestration"]:
         why.append("The process has branching or two-way syncing steps.")
-    if signals["classification"] == "restricted":
-        why.append("The data is classified Restricted, which needs extra security controls.")
+    if signals["classification"] == REGULATED:
+        why.append(
+            "The data is classified restricted or regulated, which needs extra "
+            "security controls."
+        )
     if not why:
         why.append("No external systems are needed beyond your documents and Google Workspace.")
 

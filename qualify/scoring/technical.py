@@ -25,6 +25,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from qualify.schema.classification import (
+    CLASSIFIED,
+    MIXED,
+    UNKNOWN,
+    normalise_classification,
+)
 from qualify.schema.use_case_record import UseCaseRecord
 
 #: Points awarded.
@@ -360,14 +366,16 @@ def _score_security(record: UseCaseRecord) -> list[Subscore]:
 
     # 3.4 folds classification and residency: a sensitivity label with an
     # unstated residency requirement is the WARN the matrix describes.
-    classification = sec.data_classification
+    # Both packs write this field; normalising accepts legacy Phase 1 values
+    # ("restricted") and treats "Not sure yet" as unanswered, not unclassified.
+    classification = normalise_classification(sec.data_classification)
     residency = sec.residency_requirements
-    if not classification:
+    if not classification or classification == UNKNOWN:
         s34 = Subscore(
             "3.4", _D3, "Data classification", FAIL,
             "Data sensitivity not classified.", answered=False,
         )
-    elif classification in ("public", "internal", "confidential", "regulated"):
+    elif classification in CLASSIFIED:
         if residency and residency != "unknown":
             s34 = Subscore(
                 "3.4", _D3, "Data classification", PASS,
@@ -378,7 +386,7 @@ def _score_security(record: UseCaseRecord) -> list[Subscore]:
                 "3.4", _D3, "Data classification", WARN,
                 f"Classified {classification}, but residency is unconfirmed.",
             )
-    elif classification == "mixed":
+    elif classification == MIXED:
         s34 = Subscore(
             "3.4", _D3, "Data classification", WARN,
             "Data mix unclear; review scheduled.",

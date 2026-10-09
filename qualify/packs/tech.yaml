@@ -72,6 +72,7 @@ option_sets:
     - { label: "Admin or owner role requested", value: admin }
     - { label: "Not yet confirmed", value: unknown }
 
+  # Values shared with business.yaml; see qualify/schema/classification.py.
   data_classification:
     - { label: "Public", value: public }
     - { label: "Internal", value: internal }
@@ -79,6 +80,7 @@ option_sets:
     - { label: "Regulated — PII, HIPAA or PCI", value: regulated }
     - { label: "Mixed or unclear, review scheduled", value: mixed }
     - { label: "Unclassified", value: unclassified }
+    - { label: "Not yet confirmed", value: unknown }
 
   residency:
     - { label: "No residency constraint", value: none }
