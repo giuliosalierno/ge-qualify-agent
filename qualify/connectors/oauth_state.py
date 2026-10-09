@@ -28,6 +28,7 @@ import json
 import logging
 import os
 import secrets
+import threading
 import time
 import urllib.parse
 
@@ -37,6 +38,9 @@ LINK_TTL_SECONDS = 24 * 3600
 STATE_TTL_SECONDS = 10 * 60
 
 _EPHEMERAL_KEY: bytes | None = None
+# Turns run on worker threads; without this two first turns could each mint a
+# key, and links signed with the losing one would never verify.
+_EPHEMERAL_KEY_LOCK = threading.Lock()
 
 
 def _key() -> bytes:
@@ -44,13 +48,14 @@ def _key() -> bytes:
     configured = os.environ.get("OAUTH_STATE_SECRET", "").strip()
     if configured:
         return configured.encode("utf-8")
-    if _EPHEMERAL_KEY is None:
-        logger.warning(
-            "OAUTH_STATE_SECRET is not set; using a random per-process key. "
-            "Sign-in links will stop working after a restart."
-        )
-        _EPHEMERAL_KEY = secrets.token_bytes(32)
-    return _EPHEMERAL_KEY
+    with _EPHEMERAL_KEY_LOCK:
+        if _EPHEMERAL_KEY is None:
+            logger.warning(
+                "OAUTH_STATE_SECRET is not set; using a random per-process key. "
+                "Sign-in links will stop working after a restart."
+            )
+            _EPHEMERAL_KEY = secrets.token_bytes(32)
+        return _EPHEMERAL_KEY
 
 
 def _b64e(raw: bytes) -> str:

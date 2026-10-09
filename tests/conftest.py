@@ -63,3 +63,11 @@ def _disable_interactive_views_by_default(monkeypatch: pytest.MonkeyPatch) -> No
     same arrangement as the sign-in card above.
     """
     monkeypatch.setenv("INTERACTIVE_VIEWS", "0")
+
+
+@pytest.fixture(autouse=True)
+def _disable_a2ui_probes_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Probes are off in production; a developer's shell must not switch them
+    on for the suite. Probe tests set ``A2UI_PROBES=1`` themselves.
+    """
+    monkeypatch.delenv("A2UI_PROBES", raising=False)

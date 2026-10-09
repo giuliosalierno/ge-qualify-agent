@@ -77,12 +77,15 @@ def test_openurl_probe_offers_three_independent_renderings() -> None:
     assert f"({_AUTH_URL})" in control["text"]
 
 
-def test_probe_command_returns_the_surface_without_touching_sharepoint() -> None:
+def test_probe_command_returns_the_surface_without_touching_sharepoint(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """The trigger contains 'sign in', which the SharePoint matcher also claims.
 
     Ordering in execute_turn decides this, so a regression would silently send
     the user an auth prompt instead of the probe.
     """
+    monkeypatch.setenv("A2UI_PROBES", "1")
     store = InMemorySessionStore(quiet=True)
     output = execute_turn(
         store, TurnInput(context_id="ctx-probe", user_text="a2ui probe openurl")

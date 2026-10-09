@@ -24,6 +24,7 @@ import logging
 import re
 import urllib.parse
 
+from qualify.agent.commands import match_command, normalize_command
 from qualify.schema.use_case_record import UseCaseRecord
 from qualify.sinks.record_store import RecordStore
 from qualify.sinks.session import Session, SessionStore
@@ -48,9 +49,9 @@ RECORD_ID_RE = re.compile(r"\bUC-\d{4}-[A-Z0-9]+\b", re.IGNORECASE)
 
 #: Phrases that mean "start the technical review".
 #:
-#: Matched as substrings against the lower-cased message. Deliberately narrow:
-#: every one of these names the review explicitly, so ordinary conversation
-#: about technical topics cannot trip it.
+#: Matched as whole short commands (see `qualify.agent.commands`), never as
+#: substrings: "today every change needs an architecture review" is a business
+#: intake answer, not a request to open the review queue.
 _TRIGGERS = (
     "technical review",
     "tech review",
@@ -94,7 +95,9 @@ def parse_tech_review_intent(user_text: str | None) -> tuple[bool, str | None]:
     text = user_text.strip()
     lowered = text.lower()
 
-    wants = any(t in lowered for t in _TRIGGERS) or bool(_PENDING_QUERY_RE.search(lowered))
+    wants = bool(
+        match_command(text, _TRIGGERS, max_tail_words=_TRIGGER_TAIL_WORDS)
+    ) or _is_pending_question(lowered)
     if not wants:
         return False, None
 
@@ -112,6 +115,24 @@ def parse_tech_review_intent(user_text: str | None) -> tuple[bool, str | None]:
 _PENDING_QUERY_RE = re.compile(
     r"\bpe\w{0,2}di?ng\b.*\b(?:opp?or?tun\w*|docs?|documents?|reviews?|initiatives?|use ?cases?)\b"
 )
+
+#: Words a "what is pending?" question opens with. Without this anchor an
+#: intake answer such as "legal has 30 pending reviews a week" would open the
+#: review queue.
+_PENDING_QUESTION_OPENERS = frozenset(
+    {"what", "which", "any", "show", "list", "are", "is", "how", "do", "give", "see"}
+)
+
+#: Words allowed after a trigger: "for UC-2026-ABC123 please", "for AP
+#: Invoice Exception Assistant". A full sentence past that is not a command.
+_TRIGGER_TAIL_WORDS = 6
+
+
+def _is_pending_question(lowered: str) -> bool:
+    words = normalize_command(lowered).split()
+    if not words or len(words) > 12 or words[0] not in _PENDING_QUESTION_OPENERS:
+        return False
+    return bool(_PENDING_QUERY_RE.search(lowered))
 
 
 _CHOICE_PREFIXES = (
@@ -163,6 +184,26 @@ _ORDINAL_WORDS = {
     "fifth": 5,
     "5th": 5,
 }
+
+
+#: Words besides the initiative name a pick may carry ("the AAA one please").
+_PICK_LEFTOVER_WORDS = 2
+
+#: Longest name fragment accepted as a pick ("invoice exception").
+_PICK_FRAGMENT_WORDS = 3
+
+#: Leading words that mark a message as an attempt to pick from the list, so a
+#: miss deserves "which one?" rather than falling through to the interview.
+_PICK_ATTEMPT_RE = re.compile(
+    r"^(?:#?\s*\d+\b|(?:option|number|num|rank|item|select|choose|pick)\b|"
+    r"(?:let'?s\s+)?start\s+with\b|(?:the\s+)?(?:first|second|third|fourth|fifth|"
+    r"1st|2nd|3rd|4th|5th)\b)"
+)
+
+
+def looks_like_pending_review_pick(user_text: str | None) -> bool:
+    """True when the message reads as a choice from the list, matched or not."""
+    return bool(_PICK_ATTEMPT_RE.match(normalize_command(user_text)))
 
 
 def resolve_pending_review_choice(
@@ -239,14 +280,24 @@ def resolve_pending_review_choice(
         key=lambda c: len((c.get("initiativeName") or c.get("name") or "").strip()),
         reverse=True,
     )
+    # Both checks only accept pick-sized messages, so an ordinary sentence that
+    # happens to mention an initiative's name (or a word of it) is not taken
+    # as a pick that silently swaps the user's session for a review.
     for item in sorted_choices:
         name = (item.get("initiativeName") or item.get("name") or "").strip()
         if not name:
             continue
         name_low = name.lower()
-        if len(name_low) >= 2 and re.search(rf"\b{re.escape(name_low)}\b", lowered):
-            return item.get("recordId")
-        if len(cleaned) >= 3 and cleaned in name_low:
+        name_re = rf"\b{re.escape(name_low)}\b"
+        if len(name_low) >= 2 and re.search(name_re, cleaned):
+            leftover = re.sub(name_re, " ", cleaned).split()
+            if len(leftover) <= _PICK_LEFTOVER_WORDS:
+                return item.get("recordId")
+        if (
+            len(cleaned) >= 3
+            and len(cleaned.split()) <= _PICK_FRAGMENT_WORDS
+            and re.search(rf"\b{re.escape(cleaned)}\b", name_low)
+        ):
             return item.get("recordId")
 
     return None
