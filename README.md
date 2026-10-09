@@ -110,6 +110,14 @@ scripts/smoke_test_auth.sh
 `deploy.sh` reads `.env`. Useful overrides: `A2A_AUTH_MODE=enforce|log`,
 `SIGNIN_CARD=0|1`, `MAX_INSTANCES`.
 
+### One-click demo (go/demos)
+
+[`click-to-deploy/`](click-to-deploy/README.md) holds the Terraform that
+go/demos runs to deploy the agent into an Argolis project: Cloud Run, a GCS
+record store with synthetic seed data, and a Gemini Enterprise app with the
+agent registered. It runs with `STORAGE_PROVIDER=none` (no SharePoint, no Load
+Balancer).
+
 ---
 
 ## The standalone skills
@@ -121,8 +129,8 @@ scripts/smoke_test_auth.sh
 
 Download and add them to Gemini Enterprise:
 
-- [`ge-intake-business`](https://github.com/giuliosalierno/ge-qualify-agent/releases/latest/download/ge_intake_business.zip) ([source](skills/ge_intake_business/SKILL.md))
-- [`ge-review-tech`](https://github.com/giuliosalierno/ge-qualify-agent/releases/latest/download/ge_tech_review.zip) ([source](skills/ge_tech_review/SKILL.md))
+- [`ge-intake-business`](https://github.com/cloud-gtm/ge-qualification-agent/releases/latest/download/ge_intake_business.zip) ([source](skills/ge_intake_business/SKILL.md))
+- [`ge-review-tech`](https://github.com/cloud-gtm/ge-qualification-agent/releases/latest/download/ge_tech_review.zip) ([source](skills/ge_tech_review/SKILL.md))
 
 Both run as a consultative interview, **one stage per turn**, entirely in
 chat: no Canvas or Google Doc is created mid-interview, because each Canvas
