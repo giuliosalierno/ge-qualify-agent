@@ -38,6 +38,7 @@ from qualify.a2ui.canvas_probe import (
     is_live_trigger,
 )
 from qualify.a2ui.views.events import VIEW_EVENTS
+from qualify.agent.commands import match_command, normalize_command
 from qualify.a2ui.canvas_probe import describe_echo as describe_canvas_echo
 from qualify.a2ui.canvas_probe import is_probe_trigger as is_canvas_probe_trigger
 from qualify.a2ui.compiler import (
@@ -909,9 +910,10 @@ def _try_help_command(user_text: str | None, session: Session) -> TurnOutput | N
     """Returns the Welcome & Capabilities menu when explicitly requested."""
     if not user_text:
         return None
-    cleaned = user_text.strip().lower().rstrip("?.!")
-    if cleaned in ("help", "menu", "info") or any(
-        phrase in cleaned for phrase in _HELP_PHRASES
+    # Whole short messages only: "agents run shell commands" is an answer.
+    cleaned = normalize_command(user_text)
+    if cleaned in ("help", "menu", "info") or match_command(
+        cleaned, _HELP_PHRASES, max_tail_words=2
     ):
         session.welcome_shown = True
         return TurnOutput(
@@ -1581,8 +1583,8 @@ def _try_portfolio_review(
     if not user_text:
         return None
 
-    lowered = user_text.strip().lower()
-    if not any(trigger in lowered for trigger in _PORTFOLIO_TRIGGERS):
+    # Whole short messages only: "we rank use cases by cost today" is an answer.
+    if not match_command(user_text, _PORTFOLIO_TRIGGERS, max_tail_words=3):
         return None
 
     import os as _os  # noqa: PLC0415
@@ -1823,6 +1825,7 @@ def _try_start_tech_review(
         HandoverError,
         baseline_summary,
         list_pending_reviews,
+        looks_like_pending_review_pick,
         parse_tech_review_intent,
         resolve_pending_review_choice,
         review_document_links,
@@ -1865,6 +1868,13 @@ def _try_start_tech_review(
         if matched_id:
             record_id = matched_id
             wants = True
+        elif not wants and not looks_like_pending_review_pick(user_text):
+            # Not a pick and not a command: most likely the next interview
+            # answer (the portfolio view arms this list too). Drop the picker
+            # and let the turn continue rather than trap the user in it.
+            session.pending_review_choices = []
+            store.save(session)
+            return None
         elif not wants:
             first_choice = session.pending_review_choices[0]
             return TurnOutput(
