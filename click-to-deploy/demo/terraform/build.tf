@@ -104,7 +104,7 @@ resource "null_resource" "build_image" {
         gcloud builds submit . \
           --project="${var.project_id}" \
           --region="${var.region}" \
-          --config="click-to-deploy/demo/cloudbuild.yaml" \
+          --config="${abspath("${path.module}/../cloudbuild.yaml")}" \
           --substitutions="_IMAGE=${local.built_image}" \
           --gcs-source-staging-dir="gs://${google_storage_bucket.build_staging[0].name}/source" \
           --service-account="projects/${var.project_id}/serviceAccounts/${google_service_account.build[0].email}" \
