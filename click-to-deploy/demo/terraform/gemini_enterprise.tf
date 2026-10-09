@@ -9,7 +9,7 @@ resource "google_discovery_engine_data_store" "demo" {
 
   project                     = var.project_id
   location                    = "global"
-  data_store_id               = "${var.service_name}-ds"
+  data_store_id               = "${var.service_name}-ds-${local.ge_id_suffix}"
   display_name                = "${local.ge_app_display_name} data store"
   industry_vertical           = "GENERIC"
   content_config              = "NO_CONTENT"
@@ -23,7 +23,7 @@ resource "google_discovery_engine_search_engine" "demo" {
   count = var.ge_engine_id == "" ? 1 : 0
 
   project           = var.project_id
-  engine_id         = "${var.service_name}-app"
+  engine_id         = "${var.service_name}-app-${local.ge_id_suffix}"
   collection_id     = "default_collection"
   location          = "global"
   display_name      = local.ge_app_display_name

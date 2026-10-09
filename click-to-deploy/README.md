@@ -19,8 +19,9 @@ flowchart LR
 | Cloud Run `ge-qualify-agent` | Scales 0–1. Only the Discovery Engine service agent may invoke it. |
 | Service accounts `*-run`, `*-build` | Least privilege. The Compute default SA is not used. |
 | Artifact Registry + Cloud Build | Image built from this repo in your project. |
-| GCS bucket `<project>-qualify-records` | Private. Holds sessions, records, and 3 synthetic use cases. |
-| Gemini Enterprise app `ge-qualify-agent-app` | Created unless `ge_engine_id` is set. The agent is registered in it. |
+| GCS bucket `<project>-ge-qualify-agent` | Private. Holds sessions, records, and 3 synthetic use cases. |
+| GCS bucket `<project>-ge-qualify-agent-build` | Private build staging (source uploads, deleted after 7 days). Only the build SA can read it. |
+| Gemini Enterprise app `ge-qualify-agent-app-<suffix>` | Created unless `ge_engine_id` is set. The agent is registered in it. The random suffix lets you destroy and redeploy in the same project (Discovery Engine keeps deleted IDs reserved for hours). |
 
 Takes about 10–15 minutes, mostly the image build.
 
@@ -53,7 +54,7 @@ terraform apply \
   -var org_id=YOUR_ORG -var gcp_account_name=you@your-argolis-domain \
   -var deployment_service_account_name=unused -var data_location=unused \
   -var secret_stored_project=unused
-terraform destroy   # same -var flags; leaves the project clean
+terraform destroy   # same -var flags; see below for what stays
 ```
 
 Requires `gcloud`, `curl` and `python3` on the machine running Terraform
@@ -61,6 +62,11 @@ Requires `gcloud`, `curl` and `python3` on the machine running Terraform
 pattern the CDP Sample_Standard_Demos template uses). In go/demos the
 `org_policy/` stage runs first and enables the APIs; by hand, the demo
 Terraform enables them itself.
+
+`terraform destroy` removes everything above except: the Gemini Enterprise
+licence config (no delete API; the free trial expires after a month), the
+enabled APIs and service identities, and, when `ge_engine_id` points at an
+existing app, the agent entry in that app (delete it in the console).
 
 Useful variables: `ge_engine_id` (reuse an existing GE app),
 `container_image` (skip the build), `model`, `seed_demo_data`,

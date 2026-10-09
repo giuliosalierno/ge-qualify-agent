@@ -12,6 +12,10 @@ locals {
   # collide with or take over existing resources.
   bucket_name = "${var.project_id}-${var.service_name}"
 
+  # Discovery Engine deletes asynchronously and keeps IDs reserved for hours,
+  # so destroy followed by deploy in the same project needs fresh IDs.
+  ge_id_suffix = random_id.ge.hex
+
   ge_service_agent    = "service-${var.project_number}@gcp-sa-discoveryengine.iam.gserviceaccount.com"
   ge_engine_id        = var.ge_engine_id != "" ? var.ge_engine_id : google_discovery_engine_search_engine.demo[0].engine_id
   ge_app_display_name = "GE Qualify Demo"
@@ -29,6 +33,13 @@ locals {
     "serviceusage.googleapis.com",
     "storage.googleapis.com",
   ]
+}
+
+resource "random_id" "ge" {
+  byte_length = 3
+  keepers = {
+    service_name = var.service_name
+  }
 }
 
 resource "google_project_service" "apis" {

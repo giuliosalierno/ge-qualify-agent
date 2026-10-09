@@ -32,9 +32,10 @@ resource "google_service_account" "build" {
 }
 
 resource "google_project_iam_member" "build" {
+  # Source is read from the dedicated staging bucket (build.tf), not via a
+  # project-wide storage role that would also expose the records bucket.
   for_each = var.container_image == "" ? toset([
     "roles/logging.logWriter",
-    "roles/storage.objectViewer", # read the uploaded source tarball
   ]) : toset([])
 
   project = var.project_id
