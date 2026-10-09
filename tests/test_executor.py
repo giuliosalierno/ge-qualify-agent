@@ -154,3 +154,74 @@ def test_executor_handles_commit_stage_action(agent_card) -> None:
         assert session.record.business.user_count == 12
 
     asyncio.run(_test())
+
+
+def _text_context(context_id: str, text: str, message_id: str) -> RequestContext:
+    message = Message(
+        role=Role.user,
+        parts=[Part(root=TextPart(text=text))],
+        context_id=context_id,
+        message_id=message_id,
+    )
+    return RequestContext(
+        request=MessageSendParams(message=message), context_id=context_id
+    )
+
+
+def test_turns_run_off_the_event_loop_and_serialize_per_context(
+    agent_card, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A slow turn must not stall other conversations, and two events in the
+    same conversation must not run at the same time.
+
+    The fake turn sleeps synchronously, like a blocking Gemini call. Called on
+    the event loop it would serialize everything; on a worker thread only the
+    same-context pair should wait for each other.
+    """
+    import threading
+    import time
+
+    from qualify.agent import executor as executor_mod
+    from qualify.agent.turn import TurnOutput
+
+    spans: dict[str, tuple[float, float]] = {}
+    spans_lock = threading.Lock()
+
+    def slow_turn(store, turn_input, **_kwargs):
+        start = time.monotonic()
+        time.sleep(0.3)
+        end = time.monotonic()
+        with spans_lock:
+            spans[turn_input.user_text] = (start, end)
+        return TurnOutput(reply_text="ok", a2ui_messages=[], session=None)
+
+    monkeypatch.setattr(executor_mod, "execute_turn", slow_turn)
+
+    async def _test():
+        executor = QualifyAgentExecutor(
+            agent_card, session_store=InMemorySessionStore(quiet=True)
+        )
+        await asyncio.gather(
+            executor.execute(_text_context("ctx-a", "a1", "m1"), MockEventQueue()),
+            executor.execute(_text_context("ctx-a", "a2", "m2"), MockEventQueue()),
+            executor.execute(_text_context("ctx-b", "b1", "m3"), MockEventQueue()),
+        )
+        return executor
+
+    executor = asyncio.run(_test())
+
+    def overlap(x: str, y: str) -> bool:
+        (s1, e1), (s2, e2) = spans[x], spans[y]
+        return s1 < e2 and s2 < e1
+
+    assert set(spans) == {"a1", "a2", "b1"}
+    assert not overlap("a1", "a2"), "same conversation must be serialized"
+    assert overlap("a1", "b1") or overlap("a2", "b1"), (
+        "different conversations must run concurrently"
+    )
+
+    # Locks are weakly held: nothing lingers once the turns are done.
+    import gc
+
+    gc.collect()
+    assert len(executor._context_locks) == 0

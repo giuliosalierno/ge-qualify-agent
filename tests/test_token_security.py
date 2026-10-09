@@ -292,3 +292,35 @@ def test_agent_card_no_longer_advertises_token_endpoint() -> None:
     card = build_agent_card("https://agent.example.run.app").model_dump(exclude_none=True)
     assert not card.get("security_schemes")
     assert "/token" not in json.dumps(card)
+
+
+def test_ephemeral_state_key_is_minted_once_under_concurrent_turns(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Turns run on worker threads now. Two first turns racing to mint the
+    per-process key must agree on one, or links signed with the other fail.
+    """
+    import threading
+    import time
+
+    monkeypatch.delenv("OAUTH_STATE_SECRET", raising=False)
+    monkeypatch.setattr(oauth_state, "_EPHEMERAL_KEY", None)
+    real_token_bytes = oauth_state.secrets.token_bytes
+
+    def slow_token_bytes(n: int) -> bytes:
+        time.sleep(0.05)
+        return real_token_bytes(n)
+
+    monkeypatch.setattr(oauth_state.secrets, "token_bytes", slow_token_bytes)
+
+    keys: list[bytes] = []
+    threads = [
+        threading.Thread(target=lambda: keys.append(oauth_state._key()))
+        for _ in range(4)
+    ]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert len(set(keys)) == 1
