@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import logging
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
@@ -60,10 +60,11 @@ def _session_to_dict(session: Session) -> dict[str, Any]:
 
 
 def _session_from_dict(data: dict[str, Any]) -> Session:
+    record = UseCaseRecord.model_validate(data["record"])
     return Session(
         context_id=data["context_id"],
         pack_name=data.get("pack_name", "business"),
-        record=UseCaseRecord.model_validate(data["record"]),
+        record=record,
         active_stage=int(data.get("active_stage", 0)),
         committed=set(data.get("committed", [])),
         skipped=set(data.get("skipped", [])),
@@ -82,7 +83,94 @@ def _session_from_dict(data: dict[str, Any]) -> Session:
         resume_command=data.get("resume_command"),
         created_at=datetime.fromisoformat(data["created_at"]),
         updated_at=datetime.fromisoformat(data["updated_at"]),
+        # The session file is written right after the record it embeds was
+        # merged into records/<id>.json, so it is the last synced copy.
+        record_base=record.model_dump(mode="json"),
     )
+
+
+# ---------------------------------------------------------------------------
+# Shared records: several flows, one object
+# ---------------------------------------------------------------------------
+#
+# `records/<id>.json` is written by the business session, by the technical
+# review session (another chat, often another person) and, in the past, by
+# portfolio scoring, each from its own copy. A plain overwrite lets whichever
+# writes last erase what the others added, e.g. a message in the original
+# business chat wiping the finished technical review.
+#
+# So a session save is a read-merge-write: read the stored record, three-way
+# merge it with this session's copy against `Session.record_base` (the copy
+# this session last synced), and write. Field by field, a value this session
+# changed wins; everything else comes from the stored copy. No ownership table
+# is needed, which matters because the packs overlap (both write e.g.
+# /uc/technical/security/data_classification). On GCS the write carries an
+# `if_generation_match` precondition on the generation just read (0 when
+# creating), and a concurrent write (412) triggers a re-read and re-merge.
+
+_MISSING: Any = object()
+
+#: Re-read/merge/write rounds before giving up on a contended record.
+_MAX_RECORD_WRITE_ATTEMPTS = 5
+
+
+def _merge3(base: Any, mine: Any, theirs: Any) -> Any:
+    """Field-wise three-way merge of JSON values; this side's changes win."""
+    if isinstance(mine, dict) and isinstance(theirs, dict):
+        base_d = base if isinstance(base, dict) else {}
+        out = {}
+        for key in {**theirs, **mine}:
+            value = _merge3(
+                base_d.get(key, _MISSING), mine.get(key, _MISSING), theirs.get(key, _MISSING)
+            )
+            if value is not _MISSING:
+                out[key] = value
+        return out
+    return theirs if mine == base else mine
+
+
+def _merge_record(
+    record: UseCaseRecord, base: dict[str, Any] | None, stored_text: str | None
+) -> UseCaseRecord:
+    """`record` with what other writers stored since `base` folded in."""
+    if stored_text is None or base is None:
+        return record
+    try:
+        stored = json.loads(stored_text)
+    except ValueError as exc:
+        log.error("Stored record %s is unreadable, overwriting: %s", record.meta.record_id, exc)
+        return record
+    mine = record.model_dump(mode="json")
+    merged = _merge3(base, mine, stored)
+    if merged == mine:
+        return record
+    try:
+        return UseCaseRecord.model_validate(merged)
+    except ValueError as exc:
+        log.error(
+            "Merging record %s with the stored copy failed, keeping this session's copy: %s",
+            record.meta.record_id,
+            exc,
+        )
+        return record
+
+
+def _adopt_merged(session: Session, merged: UseCaseRecord) -> None:
+    """Updates the session's record in place, so callers holding it see the merge."""
+    if merged is not session.record:
+        for name in type(merged).model_fields:
+            setattr(session.record, name, getattr(merged, name))
+    session.record_base = session.record.model_dump(mode="json")
+
+
+#: What a stored session that cannot be parsed or validated raises. JSON
+#: decode errors and pydantic's ValidationError are both ValueErrors. Anything
+#: else (network, permissions) is not corruption and must propagate.
+_CORRUPT_SESSION_ERRORS = (ValueError, KeyError, TypeError)
+
+
+def _corrupt_stamp() -> str:
+    return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
 
 
 # ---------------------------------------------------------------------------
@@ -147,22 +235,33 @@ class LocalRecordStore(SessionStore, RecordStore):
         path = self._session_path(context_id)
         if not path.is_file():
             return None
+        # Read errors propagate: a turn that fails visibly is better than one
+        # that starts an empty interview over the real one.
+        text = path.read_text(encoding="utf-8")
         try:
-            data = json.loads(path.read_text(encoding="utf-8"))
-            return _session_from_dict(data)
-        except Exception as exc:
-            log.warning("Failed to load session %s: %s", context_id, exc)
+            return _session_from_dict(json.loads(text))
+        except _CORRUPT_SESSION_ERRORS as exc:
+            corrupt_dir = self.sessions_dir / "_corrupt"
+            corrupt_dir.mkdir(parents=True, exist_ok=True)
+            target = corrupt_dir / f"{path.stem}-{_corrupt_stamp()}.json"
+            target.write_text(text, encoding="utf-8")
+            log.error(
+                "Unreadable session %s moved aside to %s before starting fresh: %s",
+                context_id,
+                target,
+                exc,
+            )
             return None
 
     def save(self, session: Session) -> None:
         session.touch()
+        if session.record.meta.record_id:
+            _adopt_merged(session, self._commit_record(session.record, session.record_base))
         path = self._session_path(session.context_id)
         payload = json.dumps(_session_to_dict(session), indent=2)
         path.write_text(payload, encoding="utf-8")
-        if session.record.meta.record_id:
-            self.save_record(session.record)
-            if session.is_complete:
-                self._mark_completed(session)
+        if session.record.meta.record_id and session.is_complete:
+            self._mark_completed(session)
 
     def _portfolio_path(self, record_id: str) -> Path:
         return self.portfolio_dir / f"{record_id.replace('/', '_')}.json"
@@ -207,11 +306,17 @@ class LocalRecordStore(SessionStore, RecordStore):
         if path.is_file():
             path.unlink()
 
-    def save_record(self, record: UseCaseRecord) -> str:
+    def save_record(self, record: UseCaseRecord, base: dict[str, Any] | None = None) -> str:
+        """Writes `record`; with `base`, merges what others stored since (see above)."""
+        self._commit_record(record, base)
+        return str(self._record_path(record.meta.record_id))
+
+    def _commit_record(self, record: UseCaseRecord, base: dict[str, Any] | None) -> UseCaseRecord:
         path = self._record_path(record.meta.record_id)
-        payload = json.dumps(record.model_dump(mode="json"), indent=2)
-        path.write_text(payload, encoding="utf-8")
-        return str(path)
+        stored_text = path.read_text(encoding="utf-8") if path.is_file() else None
+        merged = _merge_record(record, base, stored_text)
+        path.write_text(json.dumps(merged.model_dump(mode="json"), indent=2), encoding="utf-8")
+        return merged
 
     def load_record(self, record_id: str) -> UseCaseRecord | None:
         path = self._record_path(record_id)
@@ -248,25 +353,40 @@ class GCSRecordStore(SessionStore, RecordStore):
         return self._bucket.blob(f"records/{safe_id}.json")
 
     def load(self, context_id: str) -> Session | None:
+        from google.api_core.exceptions import NotFound  # noqa: PLC0415
+
         blob = self._session_blob(context_id)
-        if not blob.exists():
+        # One download, not exists()+download: only a missing object means
+        # "no session". Transient errors propagate so the turn fails visibly
+        # instead of an empty session being written over the real one.
+        try:
+            text = blob.download_as_text(encoding="utf-8")
+        except NotFound:
             return None
         try:
-            data = json.loads(blob.download_as_text(encoding="utf-8"))
-            return _session_from_dict(data)
-        except Exception as exc:
-            log.warning("Failed to load GCS session %s: %s", context_id, exc)
+            return _session_from_dict(json.loads(text))
+        except _CORRUPT_SESSION_ERRORS as exc:
+            safe_id = context_id.replace("/", "_")
+            name = f"sessions/_corrupt/{safe_id}-{_corrupt_stamp()}.json"
+            self._bucket.blob(name).upload_from_string(text, content_type="application/json")
+            log.error(
+                "Unreadable GCS session %s moved aside to gs://%s/%s before starting fresh: %s",
+                context_id,
+                self.bucket_name,
+                name,
+                exc,
+            )
             return None
 
     def save(self, session: Session) -> None:
         session.touch()
+        if session.record.meta.record_id:
+            _adopt_merged(session, self._commit_record(session.record, session.record_base))
         blob = self._session_blob(session.context_id)
         payload = json.dumps(_session_to_dict(session), indent=2)
         blob.upload_from_string(payload, content_type="application/json")
-        if session.record.meta.record_id:
-            self.save_record(session.record)
-            if session.is_complete:
-                self._mark_completed(session)
+        if session.record.meta.record_id and session.is_complete:
+            self._mark_completed(session)
 
     def _portfolio_blob(self, record_id: str) -> Any:
         return self._bucket.blob(f"portfolio/{record_id.replace('/', '_')}.json")
@@ -319,11 +439,39 @@ class GCSRecordStore(SessionStore, RecordStore):
         if blob.exists():
             blob.delete()
 
-    def save_record(self, record: UseCaseRecord) -> str:
-        blob = self._record_blob(record.meta.record_id)
-        payload = json.dumps(record.model_dump(mode="json"), indent=2)
-        blob.upload_from_string(payload, content_type="application/json")
+    def save_record(self, record: UseCaseRecord, base: dict[str, Any] | None = None) -> str:
+        """Writes `record`; with `base`, merges what others stored since (see above)."""
+        self._commit_record(record, base)
         return f"gs://{self.bucket_name}/records/{record.meta.record_id}.json"
+
+    def _commit_record(self, record: UseCaseRecord, base: dict[str, Any] | None) -> UseCaseRecord:
+        """Read-merge-write guarded by the generation read; retried on a 412."""
+        from google.api_core.exceptions import NotFound, PreconditionFailed  # noqa: PLC0415
+
+        blob = self._record_blob(record.meta.record_id)
+        for _ in range(_MAX_RECORD_WRITE_ATTEMPTS):
+            try:
+                stored_text: str | None = blob.download_as_text(encoding="utf-8")
+                generation = blob.generation
+            except NotFound:
+                stored_text, generation = None, 0  # create only if still absent
+            merged = _merge_record(record, base, stored_text)
+            try:
+                blob.upload_from_string(
+                    json.dumps(merged.model_dump(mode="json"), indent=2),
+                    content_type="application/json",
+                    if_generation_match=generation,
+                )
+                return merged
+            except PreconditionFailed:
+                log.info(
+                    "Record %s changed while saving; re-reading and merging",
+                    record.meta.record_id,
+                )
+        raise RuntimeError(
+            f"Record {record.meta.record_id} kept changing; gave up after "
+            f"{_MAX_RECORD_WRITE_ATTEMPTS} attempts"
+        )
 
     def load_record(self, record_id: str) -> UseCaseRecord | None:
         blob = self._record_blob(record_id)
