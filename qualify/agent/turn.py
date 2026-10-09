@@ -899,31 +899,65 @@ def _record_store_saved_note(session: Session) -> str:
 _HELP_PHRASES = (
     "what can you do",
     "what do you do",
+    "what can you help with",
+    "how can you help",
+    "what do you offer",
+    "tell me about yourself",
     "how does this work",
     "how to use",
     "help menu",
     "capabilities",
+    "what are your capabilities",
     "show commands",
     "commands",
 )
 
+#: Only at the very start of a conversation: later, "what is this field for?"
+#: is a question about the form and belongs to the chat reply.
+_OPENER_HELP_PHRASES = (
+    "what can i do",
+    "what can i do here",
+    "what are you",
+    "who are you",
+    "what is this",
+    "what's this",
+    "whats this",
+    "how do i start",
+    "how do i use this",
+)
+
+
+def _is_help_request(user_text: str | None, *, at_start: bool = False) -> bool:
+    """True for "help", "what can you do?", also after a greeting.
+
+    Whole short messages only: "agents run shell commands" is an answer.
+    """
+    cleaned = _strip_greeting(normalize_command(user_text))
+    if not cleaned:
+        return False
+    phrases = _HELP_PHRASES + _OPENER_HELP_PHRASES if at_start else _HELP_PHRASES
+    return cleaned in ("help", "menu", "info") or bool(
+        match_command(cleaned, phrases, max_tail_words=2)
+    )
+
 
 def _try_help_command(user_text: str | None, session: Session) -> TurnOutput | None:
     """Returns the Welcome & Capabilities menu when explicitly requested."""
-    if not user_text:
+    at_start = _at_conversation_start(session)
+    if not user_text or not _is_help_request(user_text, at_start=at_start):
         return None
-    # Whole short messages only: "agents run shell commands" is an answer.
-    cleaned = normalize_command(user_text)
-    if cleaned in ("help", "menu", "info") or match_command(
-        cleaned, _HELP_PHRASES, max_tail_words=2
-    ):
-        session.welcome_shown = True
-        return TurnOutput(
-            reply_text=_welcome_banner(),
-            a2ui_messages=_welcome_menu_messages(session),
-            session=session,
-        )
-    return None
+    session.welcome_shown = True
+    if welcome_menu_enabled() and at_start:
+        # The menu card already lists the three workflows; the long text
+        # banner on top of it would say everything twice.
+        reply_text = _WELCOME_MENU_INTRO
+    else:
+        reply_text = _welcome_banner()
+    return TurnOutput(
+        reply_text=reply_text,
+        a2ui_messages=_welcome_menu_messages(session),
+        session=session,
+    )
 
 
 _GREETINGS = frozenset(
@@ -962,6 +996,30 @@ _GREETING_PHRASES = frozenset(
 )
 
 
+#: Words that may follow a greeting without adding meaning ("hi there team").
+_GREETING_FILLERS = frozenset({"there", "team", "all", "everyone", "agent", "again", "folks"})
+
+
+def _strip_greeting(cleaned: str) -> str:
+    """Drops a leading greeting ("hello", "good morning there") from normalised text.
+
+    "start"/"begin" are greetings only on their own, never a prefix to strip:
+    "start technical review" is a command.
+    """
+    for phrase in sorted(_GREETING_PHRASES, key=len, reverse=True):
+        if cleaned == phrase or cleaned.startswith(phrase + " "):
+            cleaned = cleaned[len(phrase) :].strip()
+            break
+    words = cleaned.split()
+    i = 0
+    while i < len(words) and (
+        (words[i] in _GREETINGS and words[i] not in ("start", "begin"))
+        or (i > 0 and words[i] in _GREETING_FILLERS)
+    ):
+        i += 1
+    return " ".join(words[i:])
+
+
 def _is_greeting(user_text: str | None) -> bool:
     """True for a bare opener such as "hello" or "hi there".
 
@@ -979,7 +1037,9 @@ def _is_greeting(user_text: str | None) -> bool:
     if cleaned in _GREETING_PHRASES:
         return True
     words = cleaned.split()
-    return words[0] in _GREETINGS and len(words) <= 3
+    if words[0] in _GREETINGS and len(words) <= 3:
+        return True
+    return _strip_greeting(normalize_command(cleaned)) == "" and cleaned != ""
 
 
 def _at_conversation_start(session: Session) -> bool:

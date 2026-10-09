@@ -74,6 +74,60 @@ def test_hello_shows_menu_instead_of_stage_one() -> None:
     assert not out.session.rendered_stages
 
 
+@pytest.mark.parametrize(
+    "text",
+    [
+        "hello what can you do?",
+        "Hi, what can you do",
+        "hey there, how can you help?",
+        "good morning, who are you?",
+        "hello! what is this?",
+        "ciao, help",
+        "what can you do?",
+        "hi team",
+    ],
+)
+def test_greeting_or_help_question_opens_menu_not_intake(text: str) -> None:
+    """Regression: "hello what can you do?" used to open the Stage 1 form."""
+    store = InMemorySessionStore(quiet=True)
+    out = execute_turn(store, TurnInput(context_id="ctx-wm-help", user_text=text))
+
+    assert _events(out.a2ui_messages) == {START_INTAKE, START_TECH_REVIEW, OPEN_PORTFOLIO}
+    assert not _has_stage_form(out.a2ui_messages)
+    assert not out.session.rendered_stages
+    # One short intro over the card, not the long banner repeating it.
+    assert "Pick one of the three workflows" in out.reply_text
+    assert "I support three workflows" not in out.reply_text
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "hi, our claims team re-keys every invoice into SAP by hand",
+        "hello, we want an agent that drafts replies to supplier queries",
+        "start technical review",
+    ],
+)
+def test_greeting_followed_by_content_is_not_swallowed(text: str) -> None:
+    store = InMemorySessionStore(quiet=True)
+    out = execute_turn(store, TurnInput(context_id="ctx-wm-content", user_text=text))
+    assert "Pick one of the three workflows" not in out.reply_text
+
+
+def test_opener_questions_mid_intake_reach_the_chat() -> None:
+    """"what is this field for" during Stage 1 is a form question, not help."""
+    store = InMemorySessionStore(quiet=True)
+    execute_turn(store, TurnInput(context_id="ctx-wm-mid", user_text="hello"))
+    execute_turn(
+        store,
+        TurnInput(context_id="ctx-wm-mid", action_data={"name": START_INTAKE, "context": {}}),
+    )
+    out = execute_turn(
+        store, TurnInput(context_id="ctx-wm-mid", user_text="what is this field for?")
+    )
+    assert START_INTAKE not in str(out.a2ui_messages)
+
+
 def test_substantive_first_message_still_opens_intake() -> None:
     store = InMemorySessionStore(quiet=True)
     out = execute_turn(
