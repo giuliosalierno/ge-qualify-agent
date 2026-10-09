@@ -1,6 +1,10 @@
 locals {
   # Repository root, three levels up from click-to-deploy/demo/terraform.
-  repo_root = abspath("${path.module}/../../..")
+  # In a go/demos auto-provisioned C2D repository ({id}-{slug}), the upstream
+  # app source is synced under demo/cloud-gtm/ge-qualification-agent/main.
+  c2d_root  = abspath("${path.module}/../../..")
+  sync_root = abspath("${path.module}/../../../demo/cloud-gtm/ge-qualification-agent/main")
+  repo_root = fileexists("${local.c2d_root}/Dockerfile") ? local.c2d_root : local.sync_root
 
   # Deterministic Cloud Run URL. Known before the service exists, so the
   # service can be told its own URL (AGENT_URL, A2A audience) on first deploy
