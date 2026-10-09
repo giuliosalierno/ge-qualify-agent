@@ -1,0 +1,312 @@
+manifest:
+  version: "2.0"
+  demo:
+    id: ge-qualify-agent
+    name: GE Use Case Qualification Agent
+    description: >-
+      Native Gemini Enterprise A2A + A2UI agent that qualifies business use cases
+      (Phase 1 Business Value Brief), conducts a 22-point Technical Architecture Review
+      (Phase 2 Technical Dossier), and ranks opportunities in a 4-quadrant CoE Portfolio
+      (Phase 3 Portfolio Prioritization).
+    products:
+      - Gemini Enterprise
+      - Cloud Run
+      - Vertex AI
+      - Cloud Storage
+      - Secret Manager
+      - Cloud Build
+      - Artifact Registry
+    architecture_overview: >-
+      Gemini Enterprise invokes the Cloud Run A2A Starlette server over SSE (message/stream)
+      using the Discovery Engine service agent OIDC identity. The Turn Engine loads declarative
+      YAML packs (business.yaml, tech.yaml), runs evidence-gated extraction via Gemini 3.8 Flash
+      on Vertex AI, computes deterministic capability tiers (Levels 1-6), 22-point technical
+      readiness scores, and portfolio quadrants, and persists records to Cloud Storage with
+      3-way merge optimistic concurrency.
+    source_repo: github.com/giuliosalierno/ge-qualify-agent
+
+  industry_and_use_case:
+    parameterizable: true
+    supported_industries:
+      - financial_services
+      - retail
+      - healthcare_life_services
+      - manufacturing
+      - telecommunications
+      - public_sector
+    use_case_description: >-
+      Adapts to any industry by customizing the pre-seeded use case records in
+      click-to-deploy/demo/seed/generate_seed.py and optional domain hints in
+      qualify/packs/business.yaml and qualify/packs/tech.yaml.
+
+  company_context:
+    parameterizable: true
+    public_urls: []
+    call_notes_template: >-
+      Provide the customer's target business units, existing ERP/CRM/ticketing stack
+      (e.g., SAP, Salesforce, ServiceNow, Workday), cloud residency policies, and 2-3
+      candidate AI use case ideas to seed into the portfolio.
+
+  brand_surface:
+    parameterizable: false
+    reason: >-
+      The agent renders inside Gemini Enterprise using native A2UI v0.8 components
+      (Cards, TextFields, ChoicePickers, Tabs, VegaCharts) which inherit the host
+      Gemini Enterprise theme and typography.
+    ui_framework: a2ui
+    customizable_elements: []
+
+  data_shape:
+    parameterizable: true
+    schemas:
+      use_case_records:
+        target: cloud_storage
+        dataset: "{{ project_id }}-ge-qualify-agent"
+        tables:
+          - name: records
+            row_count_range: [3, 50]
+            description: JSON UseCaseRecord documents stored under records/<record_id>.json
+            columns:
+              - name: meta.record_id
+                type: STRING
+                required: true
+                description: Unique record ID (e.g., UC-2026-DEMO01 or UC-2026-<8HEX>)
+                mode: REQUIRED
+              - name: meta.initiative_name
+                type: STRING
+                required: true
+                description: Short recognizable name of the AI use case initiative
+                mode: REQUIRED
+              - name: meta.department_bu
+                type: STRING
+                required: false
+                description: Business unit or department sponsoring the use case
+                mode: NULLABLE
+              - name: business.user_count
+                type: INTEGER
+                required: true
+                description: Number of affected end users in the target role
+                mode: REQUIRED
+              - name: sizing.task_frequency_weekly
+                type: FLOAT
+                required: true
+                description: Weekly frequency of the task per user
+                mode: REQUIRED
+              - name: sizing.baseline_minutes_per_task
+                type: FLOAT
+                required: true
+                description: Current manual minutes spent per task execution
+                mode: REQUIRED
+              - name: sizing.target_minutes_saved_per_task
+                type: FLOAT
+                required: true
+                description: Expected minutes saved per task with Gemini Enterprise
+                mode: REQUIRED
+              - name: technical.capability_level
+                type: INTEGER
+                required: false
+                description: Assigned GE Capability Level (1 to 6)
+                mode: NULLABLE
+    generation_assets:
+      seed_records:
+        asset_type: json_records
+        location: click-to-deploy/demo/seed/records/
+        tool: click-to-deploy/demo/seed/generate_seed.py
+        customizable: true
+        generation_method: script
+        template_path: click-to-deploy/demo/seed/generate_seed.py
+        steps:
+          - Edit the fictional UseCaseRecord builders in click-to-deploy/demo/seed/generate_seed.py
+          - Run `uv run python click-to-deploy/demo/seed/generate_seed.py`
+          - Run `uv run pytest tests/test_seed_data.py` to verify schema and portfolio consistency
+        notes: >-
+          Writes byte-for-byte identical JSON records and portfolio summaries through
+          LocalRecordStore so Terraform uploads them directly to GCS.
+    runtime_dependencies:
+      - name: gcs_seed_records
+        type: gcs_objects
+        location_pattern: "gs://{{ project_id }}-ge-qualify-agent/records/"
+        required_artifacts:
+          - "records/UC-2026-DEMO01.json"
+          - "records/UC-2026-DEMO02.json"
+          - "records/UC-2026-DEMO03.json"
+          - "portfolio/latest.json"
+          - "portfolio/latest.md"
+        producer: click-to-deploy/demo/seed/generate_seed.py
+        consumer: qualify/sinks/record_store.py
+        fallback_strategy: graceful_degradation
+
+  agent_framing:
+    parameterizable: true
+    agent_type: custom
+    system_prompt_template: agent/instructions.md
+    tools:
+      - business_value_intake
+      - technical_architecture_review
+      - portfolio_prioritization
+    labels:
+      agent_name: "{{ agent_display_name | default('GE Use Case Qualification Agent') }}"
+    config_files:
+      - qualify/packs/business.yaml
+      - qualify/packs/tech.yaml
+      - skills/ge_capability_grounding/SKILL.md
+    interaction_contract:
+      scope_enforcement: strict
+      out_of_scope_behavior: polite_redirect
+      supported_intents:
+        - id: welcome_and_help
+          description: Display the 3 qualification workflows and interactive A2UI launcher card
+          example_prompts:
+            - "hello what can you do?"
+            - "help"
+        - id: business_value_intake
+          description: Run the 4-stage Phase 1 Business Value Intake and produce a Business Value Brief
+          example_prompts:
+            - "I want to qualify an agent that drafts replies to supplier invoice queries for our 30-person accounts payable team."
+            - "qualify another"
+        - id: technical_architecture_review
+          description: List pending use cases or run the 5-stage Phase 2 Technical Architecture Review
+          example_prompts:
+            - "technical review"
+            - "technical review Claims intake triage"
+        - id: portfolio_prioritization
+          description: Score and rank all qualified use cases across the 4-quadrant CoE portfolio matrix
+          example_prompts:
+            - "portfolio review"
+      known_limitations:
+        - SharePoint / Google Drive OAuth write-back is disabled in Click-to-Deploy (STORAGE_PROVIDER=none).
+        - Cloud Run scales 0-1; the first turn after idle incurs a ~5-8s cold start.
+
+  persona_and_role:
+    parameterizable: true
+    supported_personas:
+      - Business Unit Owner
+      - Solution Architect
+      - AI CoE Lead
+    scenario_narrative: >-
+      A Business Unit Owner qualifies a new use case idea in Phase 1; a Solution Architect
+      picks up the locked brief in Phase 2 to assess 22 technical readiness subcriteria;
+      an AI CoE Lead runs Phase 3 to prioritize the entire portfolio into 4 quadrants.
+
+  quality:
+    llm_judge:
+      - criterion: evidence_grounded_extraction
+        prompt: >-
+          Verify that the agent only pre-fills A2UI form fields with facts explicitly stated
+          by the user and asks clarifying questions for missing required stage fields without
+          inventing numbers or benchmarks.
+        threshold: 0.9
+      - criterion: consultative_concise_reply
+        prompt: >-
+          Verify that the agent's chat reply concisely confirms extracted facts, highlights
+          any remaining required fields on the current stage card, and invites the user to
+          click Continue when ready.
+        threshold: 0.85
+    deterministic:
+      - check: pytest_suite
+        description: 871 unit and integration tests covering schema, scoring, A2UI, seed data, and supply chain (`uv run pytest -q`)
+      - check: supply_chain_hashes
+        description: Every dependency in requirements.txt is pinned with `--hash=sha256:...` (`tests/test_supply_chain.py`)
+      - check: seed_data_integrity
+        description: Pre-generated seed records deserialize cleanly and match portfolio math (`tests/test_seed_data.py`)
+    smoke_tests:
+      - name: welcome_menu_test
+        type: agent_prompt
+        input: "hello what can you do?"
+        expect:
+          status: success
+          response_contains:
+            - "Welcome"
+            - "Business Value Intake"
+          response_excludes:
+            - "Traceback"
+        timeout_seconds: 30
+      - name: business_intake_test
+        type: agent_prompt
+        input: "I want to qualify an agent that drafts replies to supplier invoice queries for our 30-person accounts payable team."
+        expect:
+          status: success
+          response_contains:
+            - "30"
+          response_excludes:
+            - "Traceback"
+        timeout_seconds: 30
+      - name: tech_review_list_test
+        type: agent_prompt
+        input: "technical review"
+        expect:
+          status: success
+          response_contains:
+            - "Claims intake triage"
+            - "KYC document pre-check"
+          response_excludes:
+            - "Traceback"
+        timeout_seconds: 30
+      - name: portfolio_review_test
+        type: agent_prompt
+        input: "portfolio review"
+        expect:
+          status: success
+          response_contains:
+            - "Portfolio prioritization"
+            - "Quick Wins"
+          response_excludes:
+            - "Traceback"
+        timeout_seconds: 30
+
+  deployment:
+    infrastructure_modules:
+      - name: org_policy
+        required: true
+        template: click-to-deploy/org_policy/project_resource.tf
+        description: Enables required GCP APIs and temporarily relaxes iam.disableServiceAccountCreation
+        variables:
+          config_file: click-to-deploy/org_policy/project_config.json
+      - name: demo_terraform
+        required: true
+        template: click-to-deploy/demo/terraform/
+        description: Provisions Cloud Run, Cloud Build, Artifact Registry, GCS buckets, Secret Manager, and Gemini Enterprise Engine + Agent registration
+        variables:
+          region: us-central1
+          service_name: ge-qualify-agent
+          model: gemini-3.8-flash
+          genai_location: global
+    required_apis:
+      - aiplatform.googleapis.com
+      - artifactregistry.googleapis.com
+      - cloudbuild.googleapis.com
+      - cloudresourcemanager.googleapis.com
+      - discoveryengine.googleapis.com
+      - iam.googleapis.com
+      - logging.googleapis.com
+      - orgpolicy.googleapis.com
+      - run.googleapis.com
+      - secretmanager.googleapis.com
+      - serviceusage.googleapis.com
+      - storage.googleapis.com
+    required_iam_roles:
+      - roles/aiplatform.user
+      - roles/storage.objectUser
+      - roles/secretmanager.secretAccessor
+      - roles/run.invoker
+      - roles/logging.logWriter
+      - roles/artifactregistry.writer
+    targets:
+      - name: qualify_agent_service
+        platform: cloud_run
+        deploy_script: click-to-deploy/demo/scripts/register_agent.sh
+        deploy_args:
+          - name: PROJECT_ID
+            source: user_input
+            description: Target GCP Argolis project ID
+          - name: REGION
+            source: manifest
+            value: us-central1
+            description: Cloud Run region
+        identity:
+          resource_name: ge-qualify-agent
+          region: us-central1
+        registrations:
+          - registry: a2a_discovery
+            display_name: "GE Use Case Qualification Agent"
+            card_path: "/.well-known/agent-card.json"
