@@ -1,0 +1,48 @@
+# Python build & cache artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+build/
+dist/
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+
+# Local configuration & environment
+.env
+.env.*
+
+# Documentation and operator scripts (not needed in deployed container)
+doc/
+docs/
+scripts/
+
+# Skill sources & test suites. Only the capability grounding skill ships in
+# the container: the agent appends it to its system instruction.
+skills/*
+!skills/ge_capability_grounding/
+tests/
+*.zip
+
+# Git metadata
+.git/
+.gitignore
+
+# Click-to-Deploy Terraform (state holds generated secrets: never upload)
+click-to-deploy/
+
+# Local Terraform state, variables and provider binaries (Click-to-Deploy on
+# deploy/godemos). Ignored by git, but still on disk after a branch switch,
+# and they must never reach a Cloud Build upload.
+.terraform/
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+*.tfplan
+
+# Local mock SharePoint output and lint cache
+.data/
+.ruff_cache/

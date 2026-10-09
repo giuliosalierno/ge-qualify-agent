@@ -1,0 +1,49 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main, deploy/godemos]
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      # TODO(security): pin actions to commit SHAs once the repo lives in cloud-gtm.
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+      - run: uv sync --frozen
+      - run: uv run pytest -q
+      # The image installs requirements.txt, tests run on uv.lock: keep them equal.
+      - name: requirements.txt matches uv.lock
+        run: |
+          uv export --frozen --no-dev --no-emit-project --format requirements-txt -o /tmp/requirements.txt
+          diff -u <(grep -v '^#' requirements.txt) <(grep -v '^#' /tmp/requirements.txt)
+
+  terraform:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: click-to-deploy/demo/terraform
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+      - run: terraform fmt -check -recursive
+      - run: terraform init -backend=false -input=false
+      - run: terraform validate
+
+  org-policy:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: click-to-deploy/org_policy
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+      - run: terraform init -backend=false -input=false
+      - run: terraform validate

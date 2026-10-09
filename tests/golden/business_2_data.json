@@ -1,0 +1,323 @@
+[
+  {
+    "version": "v0.9",
+    "createSurface": {
+      "surfaceId": "qualify",
+      "catalogId": "https://www.gstatic.com/vertexaisearch/a2ui/v0_9/gemini_enterprise_composite_catalog.json"
+    }
+  },
+  {
+    "version": "v0.9",
+    "updateComponents": {
+      "surfaceId": "qualify",
+      "components": [
+        {
+          "id": "root",
+          "component": "Column",
+          "children": [
+            "stage-title",
+            "stage-caption",
+            "stage-rule",
+            "f-uc-technical-data-sources",
+            "f-uc-technical-other-data-sources",
+            "f-uc-technical-security-data-classification-label",
+            "f-uc-technical-security-data-classification",
+            "f-uc-technical-grounding-acl-preservation-required",
+            "continue-button-data",
+            "skip-button-data"
+          ]
+        },
+        {
+          "id": "stage-title",
+          "component": "Text",
+          "text": "Business intake and value qualification",
+          "variant": "h3"
+        },
+        {
+          "id": "stage-caption",
+          "component": "Text",
+          "text": {
+            "path": "/ui/stage/caption"
+          },
+          "variant": "caption"
+        },
+        {
+          "id": "stage-rule",
+          "component": "Divider"
+        },
+        {
+          "id": "f-uc-technical-data-sources",
+          "component": "ChoicePicker",
+          "label": "Systems and data sources involved *",
+          "variant": "multipleSelection",
+          "options": [
+            {
+              "label": "Google Drive",
+              "value": "google_drive"
+            },
+            {
+              "label": "SharePoint",
+              "value": "sharepoint"
+            },
+            {
+              "label": "Confluence",
+              "value": "confluence"
+            },
+            {
+              "label": "Jira",
+              "value": "jira"
+            },
+            {
+              "label": "ServiceNow",
+              "value": "servicenow"
+            },
+            {
+              "label": "Salesforce",
+              "value": "salesforce"
+            },
+            {
+              "label": "SAP",
+              "value": "sap"
+            },
+            {
+              "label": "BigQuery",
+              "value": "bigquery"
+            },
+            {
+              "label": "Cloud Storage bucket",
+              "value": "gcs"
+            },
+            {
+              "label": "Internal REST API",
+              "value": "internal_api"
+            },
+            {
+              "label": "Public website",
+              "value": "public_web"
+            },
+            {
+              "label": "Email or calendar",
+              "value": "workspace_mail"
+            },
+            {
+              "label": "Other (specify below)",
+              "value": "other"
+            },
+            {
+              "label": "Not sure yet",
+              "value": "unknown"
+            }
+          ],
+          "value": {
+            "path": "/uc/technical/data_sources"
+          }
+        },
+        {
+          "id": "f-uc-technical-other-data-sources",
+          "component": "TextField",
+          "label": "Other systems or data sources (optional) — List any custom databases, ERPs, or tools not shown above.",
+          "value": {
+            "path": "/uc/technical/other_data_sources"
+          },
+          "variant": "shortText"
+        },
+        {
+          "id": "f-uc-technical-security-data-classification-label",
+          "component": "Text",
+          "text": "Data sensitivity *",
+          "variant": "caption"
+        },
+        {
+          "id": "f-uc-technical-security-data-classification",
+          "component": "MaterialRadioButton",
+          "options": [
+            {
+              "label": "Public",
+              "value": "public"
+            },
+            {
+              "label": "Internal",
+              "value": "internal"
+            },
+            {
+              "label": "Confidential",
+              "value": "confidential"
+            },
+            {
+              "label": "Restricted or regulated",
+              "value": "regulated"
+            },
+            {
+              "label": "Not sure yet",
+              "value": "unknown"
+            }
+          ],
+          "value": {
+            "path": "/uc/technical/security/data_classification"
+          }
+        },
+        {
+          "id": "f-uc-technical-grounding-acl-preservation-required",
+          "component": "CheckBox",
+          "label": "Answers must respect each user's existing permissions",
+          "value": {
+            "path": "/uc/technical/grounding/acl_preservation_required"
+          }
+        },
+        {
+          "id": "continue-label-data",
+          "component": "Text",
+          "text": "Continue"
+        },
+        {
+          "id": "continue-button-data",
+          "component": "Button",
+          "child": "continue-label-data",
+          "variant": "primary",
+          "action": {
+            "event": {
+              "name": "commit_stage",
+              "context": {
+                "prompt": "Continue — Data and systems",
+                "pack": "business",
+                "stage": "data",
+                "data": {
+                  "path": "/uc"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "skip-label-data",
+          "component": "Text",
+          "text": "Skip for now"
+        },
+        {
+          "id": "skip-button-data",
+          "component": "Button",
+          "child": "skip-label-data",
+          "variant": "default",
+          "action": {
+            "event": {
+              "name": "skip_stage",
+              "context": {
+                "prompt": "Skip — Data and systems",
+                "pack": "business",
+                "stage": "data",
+                "data": {
+                  "path": "/uc"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "version": "v0.9",
+    "updateDataModel": {
+      "surfaceId": "qualify",
+      "path": "/",
+      "value": {
+        "uc": {
+          "meta": {
+            "record_id": "uc-0001",
+            "context_id": "ctx-abc",
+            "initiative_name": null,
+            "submission_date": null,
+            "submitter": null,
+            "department_bu": null,
+            "schema_version": "1.0"
+          },
+          "business": {
+            "user_profile": null,
+            "user_count": null,
+            "problem_description": null,
+            "user_stories": null,
+            "expected_impacts": null
+          },
+          "sizing": {
+            "task_frequency_weekly": null,
+            "baseline_minutes_per_task": null,
+            "target_minutes_saved_per_task": null
+          },
+          "technical": {
+            "data_sources": [],
+            "other_data_sources": null,
+            "systems": [],
+            "capability_level": null,
+            "capability_rationale": null,
+            "data_freshness": null,
+            "landing_zone_status": null,
+            "network": {
+              "hosting_environments": null,
+              "transit_path": null,
+              "firewall_proxy_status": null,
+              "transit_blocker_status": null
+            },
+            "security": {
+              "user_authentication": null,
+              "service_authentication": null,
+              "iam_least_privilege": null,
+              "data_classification": null,
+              "cloud_policy_status": null,
+              "residency_requirements": null
+            },
+            "grounding": {
+              "acl_preservation_required": null,
+              "model_profile": null,
+              "citation_policy": null,
+              "query_volume": null,
+              "latency_sla": null
+            }
+          },
+          "proposed": {
+            "business_owner": null,
+            "executive_sponsor": null,
+            "production_catcher_team": null,
+            "tech_owner": null,
+            "network_security_lead": null,
+            "domain_sme": null,
+            "adoption_kpi": null
+          },
+          "scoring": {
+            "feasibility_score": null,
+            "business_value_score": null,
+            "priority_status": null,
+            "category": null,
+            "scoping_document_url": null
+          },
+          "execution": {
+            "business_owner": null,
+            "executive_sponsor": null,
+            "tech_owner": null,
+            "target_mvp_date": null,
+            "production_catcher_team": null
+          },
+          "provenance": {},
+          "derived": {
+            "weekly_hours_saved_per_user": null,
+            "annual_hours_saved_per_user": null,
+            "total_annual_team_hours_saved": null,
+            "technical_readiness_pct": null,
+            "delivery_tier": null
+          }
+        },
+        "ui": {
+          "stage": {
+            "index": 2,
+            "count": 4,
+            "id": "data",
+            "caption": "Stage 3 of 4 — Data and systems"
+          },
+          "summary": {
+            "hours_line": "Fill in the three numbers above to see the estimate.",
+            "hours_basis": ""
+          }
+        }
+      }
+    }
+  }
+]

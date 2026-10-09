@@ -1,0 +1,228 @@
+# Gemini Enterprise connector catalog — the single source of truth the
+# capability classifier (qualify/scoring/business_tier.py) uses to decide
+# whether a data source is natively supported.
+#
+# Every entry must cite an official page. Nothing here may be asserted from
+# memory: if a source cannot be found in the official connector list, it is
+# `custom` (needs a custom MCP server) or `unverified`, never `native`.
+#
+# How this was built (re-run on every review):
+#   1. Connector list: the navigation of `source_index` below.
+#   2. `actions`: true only when the connector's own page documents end-user
+#      actions ("Supported actions" / "perform actions"). Actions are a fixed
+#      list per connector; Level 4 guidance tells the user to check the exact
+#      action on the cited page.
+#   3. `reviewed` is the date of the last check. Changing it re-classifies
+#      every stored record on its next scoring, so bump it with each review.
+#
+# status:
+#   native      listed in the official GE connector catalog
+#   custom      not in the catalog; needs a custom MCP server (Level 5+)
+#   unverified  could not be confirmed either way; treated like `custom`
+#               (anti-overcommitment) until someone confirms it
+
+reviewed: "2026-10-02"
+source_index: https://cloud.google.com/gemini/enterprise/docs/connectors/introduction-to-connectors-and-data-stores
+custom_mcp_doc: https://cloud.google.com/gemini/enterprise/docs/connectors/custom-mcp-server/set-up-custom-mcp-server
+
+connectors:
+  # --- Google -----------------------------------------------------------------
+  google_drive:
+    label: Google Drive
+    status: native
+    actions: true
+    doc: https://cloud.google.com/gemini/enterprise/docs/connectors/gdrive
+    aliases: [google drive, drive, google docs, gdrive]
+  workspace_mail:
+    label: Gmail & Google Calendar
+    status: native
+    actions: true
+    doc: https://cloud.google.com/gemini/enterprise/docs/connectors/gmail
+    aliases: [gmail, google calendar, gmail calendar, email or calendar]
+  google_chat:
+    label: Google Chat
+    status: native
+    actions: true
+    doc: https://cloud.google.com/gemini/enterprise/docs/connectors/gchat
+    aliases: [google chat, gchat]
+  google_sites:
+    label: Google Sites
+    status: native
+    actions: false
+    doc: https://cloud.google.com/gemini/enterprise/docs/connectors/connect-sites
+    aliases: [google sites]
+  bigquery:
+    label: BigQuery
+    status: native
+    actions: false
+    note: Imported into a data store (ingestion), not queried live.
+    doc: https://cloud.google.com/gemini/enterprise/docs/connectors/connect-bigquery
+    aliases: [bigquery, big query]
+  gcs:
+    label: Cloud Storage
+    status: native
+    actions: false
+    note: Ingestion only; periodic sync every 1, 3 or 5 days.
+    doc: https://cloud.google.com/gemini/enterprise/docs/connectors/connect-cloud-storage
+    aliases: [cloud storage, gcs, cloud storage bucket]
+  cloud_sql:
+    label: Cloud SQL
+    status: native
+    actions: false
+    note: Imported into a data store (ingestion), not queried live.
+    doc: https://cloud.google.com/gemini/enterprise/docs/connectors/connect-cloud-sql
+    aliases: [cloud sql]
+  alloydb:
+    label: AlloyDB for PostgreSQL
+    status: native
+    actions: false
+    doc: https://cloud.google.com/gemini/enterprise/docs/connectors/connect-alloydb
+    aliases: [alloydb]
+
+  # --- Microsoft --------------------------------------------------------------
+  sharepoint:
+    label: Microsoft SharePoint Online
+    status: native
+    actions: true
+    doc: https://cloud.google.com/gemini/enterprise/docs/connectors/ms-sharepoint
+    note: >-
+      actions are off by default; an admin enables them on the data store and
+      grants Sites.ReadWrite.All / AllSites.Write in Microsoft Entra ID
+    aliases: [sharepoint, sharepoint online]
+  onedrive:
+    label: Microsoft OneDrive
+    status: native
+    actions: true
+    doc: https://cloud.google.com/gemini/enterprise/docs/connectors/ms-onedrive
+    aliases: [onedrive, one drive]
+  outlook:
+    label: Microsoft Outlook
+    status: native
+    actions: true
+    doc: https://cloud.google.com/gemini/enterprise/docs/connectors/ms-outlook
+    aliases: [outlook]
+  teams:
+    label: Microsoft Teams
+    status: native
+    actions: true
+    doc: https://cloud.google.com/gemini/enterprise/docs/connectors/ms-teams
+    aliases: [microsoft teams, ms teams, teams]
+  dynamics365:
+    label: Microsoft Dynamics 365
+    status: native
+    actions: false
+    doc: https://cloud.google.com/gemini/enterprise/docs/connectors/dynamics365
+    aliases: [dynamics 365, dynamics365, dynamics crm]
+
+  # --- Atlassian, ITSM, CRM ---------------------------------------------------
+  confluence:
+    label: Confluence
+    status: native
+    actions: true
+    doc: https://cloud.google.com/gemini/enterprise/docs/connectors/confluence-cloud
+    aliases: [confluence]
+  jira:
+    label: Jira
+    status: native
+    actions: true
+    doc: https://cloud.google.com/gemini/enterprise/docs/connectors/jira-cloud
+    aliases: [jira]
+  servicenow:
+    label: ServiceNow
+    status: native
+    actions: true
+    doc: https://cloud.google.com/gemini/enterprise/docs/connectors/servicenow
+    aliases: [servicenow, service now]
+  salesforce:
+    label: Salesforce
+    status: native
+    actions: true
+    doc: https://cloud.google.com/gemini/enterprise/docs/connectors/salesforce
+    aliases: [salesforce, sfdc]
+  zendesk:
+    label: Zendesk
+    status: native
+    actions: true
+    doc: https://cloud.google.com/gemini/enterprise/docs/connectors/zendesk
+    aliases: [zendesk]
+  hubspot:
+    label: HubSpot
+    status: native
+    actions: true
+    doc: https://cloud.google.com/gemini/enterprise/docs/connectors/hubspot
+    aliases: [hubspot]
+  oracle_netsuite:
+    label: Oracle NetSuite
+    status: native
+    actions: false
+    doc: https://cloud.google.com/gemini/enterprise/docs/connectors/oracle_netsuite
+    aliases: [netsuite, oracle netsuite]
+
+  # --- Collaboration ----------------------------------------------------------
+  slack:
+    label: Slack
+    status: native
+    actions: true
+    doc: https://cloud.google.com/gemini/enterprise/docs/connectors/slack
+    aliases: [slack]
+  box:
+    label: Box
+    status: native
+    actions: true
+    doc: https://cloud.google.com/gemini/enterprise/docs/connectors/box
+    aliases: [box]
+  github:
+    label: GitHub
+    status: native
+    actions: true
+    doc: https://cloud.google.com/gemini/enterprise/docs/connectors/github
+    aliases: [github]
+  notion:
+    label: Notion
+    status: native
+    actions: true
+    doc: https://cloud.google.com/gemini/enterprise/docs/connectors/notion
+    aliases: [notion]
+
+  # --- Not in the GE connector catalog (as of `reviewed`) ----------------------
+  # These need a custom MCP server. `doc` points at the custom MCP setup page.
+  sap:
+    label: SAP
+    status: custom
+    actions: false
+    aliases: [sap, s/4hana, s4hana, sap erp]
+  workday:
+    label: Workday
+    status: custom
+    actions: false
+    aliases: [workday]
+  internal_api:
+    label: Internal REST API
+    status: custom
+    actions: false
+    aliases: [internal api, internal rest api, custom api, rest api, rest, soap, graphql, webhook, api]
+  oracle:
+    label: Oracle (database / E-Business Suite)
+    status: custom
+    actions: false
+    aliases: [oracle, oracle database, oracle db, oracle ebs, e-business suite]
+  self_hosted_database:
+    label: Self-hosted database
+    status: custom
+    actions: false
+    aliases: [sql server, postgres, postgresql, mysql, mongodb, snowflake, databricks, sql, database]
+  legacy_system:
+    label: On-premises / legacy system
+    status: custom
+    actions: false
+    aliases: [mainframe, on-prem, on prem, on-premises, erp, as400]
+
+  # --- Could not be confirmed -------------------------------------------------
+  public_web:
+    label: Public website
+    status: unverified
+    actions: false
+    note: >-
+      No website connector page was found in the GE connector catalog on the
+      review date. Confirm whether built-in web grounding covers the use case.
+    aliases: [public website, public web, website]

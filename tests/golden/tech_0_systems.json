@@ -1,0 +1,231 @@
+[
+  {
+    "version": "v0.9",
+    "createSurface": {
+      "surfaceId": "qualify",
+      "catalogId": "https://www.gstatic.com/vertexaisearch/a2ui/v0_9/gemini_enterprise_composite_catalog.json"
+    }
+  },
+  {
+    "version": "v0.9",
+    "updateComponents": {
+      "surfaceId": "qualify",
+      "components": [
+        {
+          "id": "root",
+          "component": "Column",
+          "children": [
+            "stage-title",
+            "stage-caption",
+            "stage-rule",
+            "f-uc-technical-data-freshness",
+            "f-uc-proposed-tech-owner",
+            "f-ui-systems-table-label",
+            "f-ui-systems-table",
+            "continue-button-systems"
+          ]
+        },
+        {
+          "id": "stage-title",
+          "component": "Text",
+          "text": "Technical architecture and security review",
+          "variant": "h3"
+        },
+        {
+          "id": "stage-caption",
+          "component": "Text",
+          "text": {
+            "path": "/ui/stage/caption"
+          },
+          "variant": "caption"
+        },
+        {
+          "id": "stage-rule",
+          "component": "Divider"
+        },
+        {
+          "id": "f-uc-technical-data-freshness",
+          "component": "MaterialSelect",
+          "options": [
+            {
+              "label": "Sync schedule and SLA both documented",
+              "value": "sla_documented"
+            },
+            {
+              "label": "Refresh frequency known, sync mechanism unconfirmed",
+              "value": "frequency_only"
+            },
+            {
+              "label": "Real-time expected, no event stream identified",
+              "value": "realtime_assumed"
+            },
+            {
+              "label": "Not yet discussed",
+              "value": "unknown"
+            }
+          ],
+          "value": {
+            "path": "/uc/technical/data_freshness"
+          },
+          "label": "Data freshness and sync * — Both refresh frequency and sync mechanism are required.",
+          "placeholder": "Choose one"
+        },
+        {
+          "id": "f-uc-proposed-tech-owner",
+          "component": "TextField",
+          "label": "Lead DBA or data custodian * — Named individual (not a generic team queue).",
+          "value": {
+            "path": "/uc/proposed/tech_owner"
+          },
+          "variant": "shortText"
+        },
+        {
+          "id": "f-ui-systems-table-label",
+          "component": "Text",
+          "text": "Systems inventory",
+          "variant": "caption"
+        },
+        {
+          "id": "f-ui-systems-table",
+          "component": "Text",
+          "text": {
+            "path": "/ui/systems/table"
+          },
+          "variant": "body"
+        },
+        {
+          "id": "continue-label-systems",
+          "component": "Text",
+          "text": "Continue"
+        },
+        {
+          "id": "continue-button-systems",
+          "component": "Button",
+          "child": "continue-label-systems",
+          "variant": "primary",
+          "action": {
+            "event": {
+              "name": "commit_stage",
+              "context": {
+                "prompt": "Continue — Systems and data landscape",
+                "pack": "tech",
+                "stage": "systems",
+                "data": {
+                  "path": "/uc"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "version": "v0.9",
+    "updateDataModel": {
+      "surfaceId": "qualify",
+      "path": "/",
+      "value": {
+        "uc": {
+          "meta": {
+            "record_id": "uc-0001",
+            "context_id": "ctx-abc",
+            "initiative_name": null,
+            "submission_date": null,
+            "submitter": null,
+            "department_bu": null,
+            "schema_version": "1.0"
+          },
+          "business": {
+            "user_profile": null,
+            "user_count": null,
+            "problem_description": null,
+            "user_stories": null,
+            "expected_impacts": null
+          },
+          "sizing": {
+            "task_frequency_weekly": null,
+            "baseline_minutes_per_task": null,
+            "target_minutes_saved_per_task": null
+          },
+          "technical": {
+            "data_sources": [],
+            "other_data_sources": null,
+            "systems": [],
+            "capability_level": null,
+            "capability_rationale": null,
+            "data_freshness": null,
+            "landing_zone_status": null,
+            "network": {
+              "hosting_environments": null,
+              "transit_path": null,
+              "firewall_proxy_status": null,
+              "transit_blocker_status": null
+            },
+            "security": {
+              "user_authentication": null,
+              "service_authentication": null,
+              "iam_least_privilege": null,
+              "data_classification": null,
+              "cloud_policy_status": null,
+              "residency_requirements": null
+            },
+            "grounding": {
+              "acl_preservation_required": null,
+              "model_profile": null,
+              "citation_policy": null,
+              "query_volume": null,
+              "latency_sla": null
+            }
+          },
+          "proposed": {
+            "business_owner": null,
+            "executive_sponsor": null,
+            "production_catcher_team": null,
+            "tech_owner": null,
+            "network_security_lead": null,
+            "domain_sme": null,
+            "adoption_kpi": null
+          },
+          "scoring": {
+            "feasibility_score": null,
+            "business_value_score": null,
+            "priority_status": null,
+            "category": null,
+            "scoping_document_url": null
+          },
+          "execution": {
+            "business_owner": null,
+            "executive_sponsor": null,
+            "tech_owner": null,
+            "target_mvp_date": null,
+            "production_catcher_team": null
+          },
+          "provenance": {},
+          "derived": {
+            "weekly_hours_saved_per_user": null,
+            "annual_hours_saved_per_user": null,
+            "total_annual_team_hours_saved": null,
+            "technical_readiness_pct": null,
+            "delivery_tier": null
+          }
+        },
+        "ui": {
+          "stage": {
+            "index": 0,
+            "count": 5,
+            "id": "systems",
+            "caption": "Stage 1 of 5 — Systems and data landscape"
+          },
+          "summary": {
+            "hours_line": "Fill in the three numbers above to see the estimate.",
+            "hours_basis": ""
+          },
+          "systems": {
+            "table": "No systems recorded yet. Name the backends this needs and I'll build the matrix."
+          }
+        }
+      }
+    }
+  }
+]

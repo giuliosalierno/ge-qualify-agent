@@ -1,0 +1,87 @@
+{
+  "meta": {
+    "record_id": "UC-2026-DEMO01",
+    "context_id": null,
+    "initiative_name": "Claims intake triage",
+    "submission_date": null,
+    "submitter": "Alex Rivera (demo persona)",
+    "department_bu": "Cymbal Insurance - Claims Operations",
+    "schema_version": "1.0"
+  },
+  "business": {
+    "user_profile": "Claims handlers",
+    "user_count": 120,
+    "problem_description": "Handlers read every first notice of loss email and its attachments to classify severity and route the claim, which delays urgent claims.",
+    "user_stories": "As a claims handler I want new claims summarised and routed with a severity suggestion so I can act on urgent ones first.",
+    "expected_impacts": "Faster routing of urgent claims; less manual reading"
+  },
+  "sizing": {
+    "task_frequency_weekly": 40.0,
+    "baseline_minutes_per_task": 12.0,
+    "target_minutes_saved_per_task": 7.0
+  },
+  "technical": {
+    "data_sources": [
+      "workspace_mail",
+      "servicenow"
+    ],
+    "other_data_sources": null,
+    "systems": [],
+    "capability_level": 4,
+    "capability_rationale": "Multi-step routing with a write-back to the ticketing system.",
+    "data_freshness": null,
+    "landing_zone_status": null,
+    "network": {
+      "hosting_environments": null,
+      "transit_path": null,
+      "firewall_proxy_status": null,
+      "transit_blocker_status": null
+    },
+    "security": {
+      "user_authentication": null,
+      "service_authentication": null,
+      "iam_least_privilege": null,
+      "data_classification": null,
+      "cloud_policy_status": null,
+      "residency_requirements": null
+    },
+    "grounding": {
+      "acl_preservation_required": null,
+      "model_profile": null,
+      "citation_policy": null,
+      "query_volume": null,
+      "latency_sla": null
+    }
+  },
+  "proposed": {
+    "business_owner": "Head of Claims Operations",
+    "executive_sponsor": "COO",
+    "production_catcher_team": null,
+    "tech_owner": null,
+    "network_security_lead": null,
+    "domain_sme": null,
+    "adoption_kpi": "Median time to route an urgent claim"
+  },
+  "scoring": {
+    "feasibility_score": null,
+    "business_value_score": null,
+    "priority_status": null,
+    "category": null,
+    "scoping_document_url": null
+  },
+  "execution": {
+    "business_owner": null,
+    "executive_sponsor": null,
+    "tech_owner": null,
+    "target_mvp_date": null,
+    "production_catcher_team": null
+  },
+  "provenance": {},
+  "derived": {
+    "weekly_hours_saved_per_user": 4.67,
+    "annual_hours_saved_per_user": 233.33,
+    "total_annual_team_hours_saved": 28000.0,
+    "technical_readiness_pct": null,
+    "delivery_tier": 2
+  }
+}

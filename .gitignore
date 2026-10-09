@@ -1,0 +1,33 @@
+# Python build & cache artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+build/
+dist/
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+
+# OS & Editor
+.DS_Store
+
+# Local environment & secrets
+.env
+.env.*
+
+# Private design & implementation documentation
+doc/
+
+# Generated skill zip archives
+*.zip
+.data/
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+.terraform.lock.hcl.bak
+crash.log

@@ -1,0 +1,24 @@
+{
+    "constraints": [
+        {
+            "constraint": "iam.disableServiceAccountCreation",
+            "policy_type": "boolean",
+            "enforced": false,
+            "restore_post_deployment": true
+        }
+    ],
+    "apis_to_enable": [
+        "aiplatform.googleapis.com",
+        "artifactregistry.googleapis.com",
+        "cloudbuild.googleapis.com",
+        "cloudresourcemanager.googleapis.com",
+        "discoveryengine.googleapis.com",
+        "iam.googleapis.com",
+        "logging.googleapis.com",
+        "orgpolicy.googleapis.com",
+        "run.googleapis.com",
+        "secretmanager.googleapis.com",
+        "serviceusage.googleapis.com",
+        "storage.googleapis.com"
+    ]
+}

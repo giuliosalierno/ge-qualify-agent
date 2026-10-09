@@ -1,0 +1,682 @@
+"""Phase 1 to Phase 2 handover: opening a technical review on a saved record.
+
+The business intake and the technical review are two interviews over **one**
+record. Phase 1 fills `business`, `sizing` and the shallow half of `technical`;
+Phase 2 fills `technical.network`, `.security`, `.grounding` and the systems
+matrix. They are separate conversations, usually held by different people days
+apart, so the only thing tying them together is the record id.
+
+That makes the store the seam. `RecordStore.load_record` reads a record written
+by any earlier session, and this module turns one into a fresh `tech` session.
+
+**This only works when the store is durable.** `create_default_store()` falls
+back to `InMemorySessionStore` when neither `QUALIFY_GCS_BUCKET` nor
+`QUALIFY_DATA_DIR` is set, and an in-memory store has no record to find — the
+Phase 1 conversation lived in a process that has since been replaced. The
+caller gets a clear `HandoverError` rather than an empty review, because an
+empty review that looks like it worked is the failure mode that wrote an
+`Untitled Initiative` folder to SharePoint last time.
+"""
+
+from __future__ import annotations
+
+import logging
+import re
+import urllib.parse
+
+from qualify.agent.commands import match_command, normalize_command
+from qualify.schema.use_case_record import UseCaseRecord
+from qualify.sinks.record_store import RecordStore
+from qualify.sinks.session import Session, SessionStore
+
+log = logging.getLogger(__name__)
+
+#: The pack a handover opens. Named here so the string appears once.
+TECH_PACK = "tech"
+
+#: How many pending opportunities to offer at once.
+#:
+#: A chat reply is not a data grid. Past roughly this many the list stops being
+#: something a reviewer reads and starts being something they scroll, and the
+#: right answer becomes a search rather than a longer list.
+PENDING_REVIEW_LIMIT = 10
+
+#: `UC-2026-A1B2C3D4`. Generated at random by `new_session`; older records used
+#: a suffix derived from the context id, so letters and digits, length not
+#: guaranteed. Kept loose on purpose: a reviewer pasting an
+#: id from a SharePoint folder name should not fail on a length check.
+RECORD_ID_RE = re.compile(r"\bUC-\d{4}-[A-Z0-9]+\b", re.IGNORECASE)
+
+#: Phrases that mean "start the technical review".
+#:
+#: Matched as whole short commands (see `qualify.agent.commands`), never as
+#: substrings: "today every change needs an architecture review" is a business
+#: intake answer, not a request to open the review queue.
+_TRIGGERS = (
+    "technical review",
+    "tech review",
+    "technical architecture review",
+    "architecture review",
+    "start phase 2",
+    "phase 2 review",
+    "pending documents to review",
+    "pending opportunities to review",
+    "documents to review",
+    "opportunities to review",
+    "pending review",
+    "pending reviews",
+    "pending opportunities",
+    "show me pending",
+    "list pending",
+    "what is pending",
+)
+
+
+class HandoverError(Exception):
+    """Raised when a technical review cannot be opened.
+
+    Carries a message written for the user, not for the log, because every
+    failure here is something they can act on: fix the id, finish Phase 1, or
+    tell an engineer the store is not configured.
+    """
+
+
+def parse_tech_review_intent(user_text: str | None) -> tuple[bool, str | None]:
+    """Reads a "start the technical review" request out of a chat message.
+
+    Returns `(wants_review, record_id)`. The two are separate because
+    "start the technical review" without an id is a real request that deserves
+    a helpful reply, not silence — the user knows what they want and has simply
+    not said which initiative.
+    """
+    if not user_text:
+        return False, None
+
+    text = user_text.strip()
+    lowered = text.lower()
+
+    wants = bool(
+        match_command(text, _TRIGGERS, max_tail_words=_TRIGGER_TAIL_WORDS)
+    ) or _is_pending_question(lowered)
+    if not wants:
+        return False, None
+
+    match = RECORD_ID_RE.search(text)
+    return True, match.group(0).upper() if match else None
+
+
+#: "What is pending?" asked loosely, typos included.
+#:
+#: The exact phrases in `_TRIGGERS` miss "what are the peding opportunites
+#: still to qualify?", which then reached the business interview as if it were
+#: an answer. Needs both a "pending" word and a thing that can be pending, so
+#: "I'm spending hours on this" or "pending approval from legal" stay ordinary
+#: conversation.
+_PENDING_QUERY_RE = re.compile(
+    r"\bpe\w{0,2}di?ng\b.*\b(?:opp?or?tun\w*|docs?|documents?|reviews?|initiatives?|use ?cases?)\b"
+)
+
+#: Words a "what is pending?" question opens with. Without this anchor an
+#: intake answer such as "legal has 30 pending reviews a week" would open the
+#: review queue.
+_PENDING_QUESTION_OPENERS = frozenset(
+    {"what", "which", "any", "show", "list", "are", "is", "how", "do", "give", "see"}
+)
+
+#: Words allowed after a trigger: "for UC-2026-ABC123 please", "for AP
+#: Invoice Exception Assistant". A full sentence past that is not a command.
+_TRIGGER_TAIL_WORDS = 6
+
+
+def _is_pending_question(lowered: str) -> bool:
+    words = normalize_command(lowered).split()
+    if not words or len(words) > 12 or words[0] not in _PENDING_QUESTION_OPENERS:
+        return False
+    return bool(_PENDING_QUERY_RE.search(lowered))
+
+
+_CHOICE_PREFIXES = (
+    "let's start a tech review for",
+    "lets start a tech review for",
+    "let's start a technical review for",
+    "lets start a technical review for",
+    "start a technical review for",
+    "start a tech review for",
+    "start technical review for",
+    "start tech review for",
+    "let's start with",
+    "lets start with",
+    "start with",
+    "let's review",
+    "lets review",
+    "technical review for",
+    "technical review",
+    "tech review for",
+    "tech review",
+    "architecture review for",
+    "architecture review",
+    "start phase 2 for",
+    "start phase 2",
+    "phase 2 review for",
+    "phase 2 review",
+    "let's do",
+    "lets do",
+    "review",
+    "open",
+    "select",
+    "choose",
+    "option",
+    "number",
+    "num",
+    "for",
+    "the",
+)
+
+_ORDINAL_WORDS = {
+    "first": 1,
+    "1st": 1,
+    "second": 2,
+    "2nd": 2,
+    "third": 3,
+    "3rd": 3,
+    "fourth": 4,
+    "4th": 4,
+    "fifth": 5,
+    "5th": 5,
+}
+
+
+#: Words besides the initiative name a pick may carry ("the AAA one please").
+_PICK_LEFTOVER_WORDS = 2
+
+#: Longest name fragment accepted as a pick ("invoice exception").
+_PICK_FRAGMENT_WORDS = 3
+
+#: Leading words that mark a message as an attempt to pick from the list, so a
+#: miss deserves "which one?" rather than falling through to the interview.
+_PICK_ATTEMPT_RE = re.compile(
+    r"^(?:#?\s*\d+\b|(?:option|number|num|rank|item|select|choose|pick)\b|"
+    r"(?:let'?s\s+)?start\s+with\b|(?:the\s+)?(?:first|second|third|fourth|fifth|"
+    r"1st|2nd|3rd|4th|5th)\b)"
+)
+
+
+def looks_like_pending_review_pick(user_text: str | None) -> bool:
+    """True when the message reads as a choice from the list, matched or not."""
+    return bool(_PICK_ATTEMPT_RE.match(normalize_command(user_text)))
+
+
+def resolve_pending_review_choice(
+    user_text: str | None, choices: list[dict]
+) -> str | None:
+    """Resolves a user's selection against a list of pending review opportunities.
+
+    Supports:
+    - Explicit record ID: `UC-2026-0CD0BC` or `let's do UC-2026-0CD0BC`
+    - 1-based index/number: `1`, `#1`, `option 1`, `the first one`
+    - Initiative name/title: `AAA`, `let's start with AAA`, `AP Invoice Exception Assistant`
+    """
+    if not user_text or not choices:
+        return None
+
+    text = user_text.strip()
+    if not text:
+        return None
+
+    # 1. Explicit UC-XXXX-XXXXXX record ID anywhere in the message
+    id_match = RECORD_ID_RE.search(text)
+    if id_match:
+        return id_match.group(0).upper()
+
+    lowered = text.lower().strip(" .!?'\"")
+
+    # 2. Strip conversational prefixes first so both numeric/ordinal ("let's start with 1",
+    # "let's do the first one") and title ("let's start with AAA") inputs are normalized.
+    cleaned = lowered
+    changed = True
+    while changed:
+        changed = False
+        for prefix in _CHOICE_PREFIXES:
+            if cleaned.startswith(prefix + " "):
+                cleaned = cleaned[len(prefix) :].strip(" .!?'\"-")
+                changed = True
+            elif cleaned == prefix:
+                cleaned = ""
+                changed = True
+
+    for candidate in (lowered, cleaned):
+        if not candidate:
+            continue
+        # Numeric index (e.g. "1", "#1", "option 1", "number 2", "rank 1")
+        num_match = re.fullmatch(
+            r"(?:option|number|num|rank|item|#)?\s*(\d+)(?:\s*one)?", candidate
+        )
+        if num_match:
+            idx = int(num_match.group(1))
+            if 1 <= idx <= len(choices):
+                return choices[idx - 1].get("recordId")
+
+        # Ordinal words (e.g. "first", "the first one", "let's start with the first one")
+        for word, idx in _ORDINAL_WORDS.items():
+            if re.fullmatch(rf"(?:the\s+)?{word}(?:\s+one)?", candidate):
+                if 1 <= idx <= len(choices):
+                    return choices[idx - 1].get("recordId")
+
+    if not cleaned:
+        return None
+
+    # 3a. Exact case-insensitive title match against cleaned text or full text
+    for item in choices:
+        name = (item.get("initiativeName") or item.get("name") or "").strip()
+        if not name:
+            continue
+        if name.lower() == cleaned or name.lower() == lowered:
+            return item.get("recordId")
+
+    # 3b. Substring match (sort by name length descending so specific multi-word
+    # names like "AP Invoice Exception Assistant" match before short names like "a")
+    sorted_choices = sorted(
+        choices,
+        key=lambda c: len((c.get("initiativeName") or c.get("name") or "").strip()),
+        reverse=True,
+    )
+    # Both checks only accept pick-sized messages, so an ordinary sentence that
+    # happens to mention an initiative's name (or a word of it) is not taken
+    # as a pick that silently swaps the user's session for a review.
+    for item in sorted_choices:
+        name = (item.get("initiativeName") or item.get("name") or "").strip()
+        if not name:
+            continue
+        name_low = name.lower()
+        name_re = rf"\b{re.escape(name_low)}\b"
+        if len(name_low) >= 2 and re.search(name_re, cleaned):
+            leftover = re.sub(name_re, " ", cleaned).split()
+            if len(leftover) <= _PICK_LEFTOVER_WORDS:
+                return item.get("recordId")
+        if (
+            len(cleaned) >= 3
+            and len(cleaned.split()) <= _PICK_FRAGMENT_WORDS
+            and re.search(rf"\b{re.escape(cleaned)}\b", name_low)
+        ):
+            return item.get("recordId")
+
+    return None
+
+
+
+def load_review_record(
+    store: SessionStore, record_id: str, context_id: str | None = None
+) -> UseCaseRecord | None:
+    """Finds a record by id, preferring the store and falling back to SharePoint.
+
+    Two sources, in that order, because they fail in opposite directions. The
+    store is fast, needs no user token and holds the freshest copy — but only
+    for records written by a store-backed revision of this service. SharePoint
+    is slower and needs the reviewer to be signed in, but it is where the
+    artefacts actually live, and it survives deploys, store migrations and the
+    in-memory fallback that produced the records we cannot otherwise reach.
+
+    The SharePoint copy is a snapshot from the last sync, so it can lag a
+    business interview still in progress. That is the same thing a human sees
+    in the folder, which makes it the honest answer rather than a stale one.
+    """
+    if isinstance(store, RecordStore):
+        record = store.load_record(record_id)
+        if record is not None:
+            log.info("Handover: record %s came from the record store", record_id)
+            return record
+
+    from qualify.connectors.storage import storage_enabled  # noqa: PLC0415
+
+    if not storage_enabled():
+        return None
+
+    try:
+        from qualify.connectors.storage import (  # noqa: PLC0415
+            get_storage_connector,
+        )
+
+        record = get_storage_connector().load_opportunity(
+            record_id, delegated_token=None, context_id=context_id
+        )
+    except Exception as exc:
+        # A SharePoint outage must not turn into a stack trace in the chat.
+        # The caller reports "not found", which is what the reviewer can act on.
+        log.warning("Handover: SharePoint lookup for %s failed: %s", record_id, exc)
+        return None
+
+    if record is not None:
+        log.info("Handover: record %s came from SharePoint", record_id)
+    return record
+
+
+def start_tech_review(
+    store: SessionStore, context_id: str, record_id: str
+) -> Session:
+    """Opens a technical review against an existing business record.
+
+    The new session shares the record object wholesale rather than copying
+    selected fields across. Phase 2 is a continuation of the same use case, so
+    the initiative name, the problem statement and the sizing all stay
+    authoritative and visible; the tech pack renders them readonly.
+
+    Raises:
+        HandoverError: neither the store nor SharePoint holds the record.
+    """
+    record = load_review_record(store, record_id, context_id)
+    if record is None:
+        raise HandoverError(_not_found_message(store, record_id))
+    # Snapshot before this flow changes anything: saving then merges only this
+    # review's edits into the stored record instead of overwriting it.
+    record_base = record.model_dump(mode="json")
+
+    log.info(
+        "Handover: opening tech review context_id=%s record_id=%s",
+        context_id,
+        record_id,
+    )
+
+    # Populate indicative capability level when Phase 1 recorded inputs (data sources,
+    # user stories, or problem statement) but capability_level was not yet persisted.
+    has_phase1_inputs = bool(
+        record.technical.data_sources
+        or record.technical.other_data_sources
+        or record.business.user_stories
+        or record.business.problem_description
+    )
+    if record.technical.capability_level is None and has_phase1_inputs:
+        from qualify.scoring.business_tier import classify_capability  # noqa: PLC0415
+
+        classify_capability(record)
+
+    session = Session(
+        context_id=context_id,
+        pack_name=TECH_PACK,
+        record=record,
+        record_base=record_base,
+    )
+    store.save(session)
+    return session
+
+
+def review_document_links(
+    record_id: str, context_id: str | None = None, store: SessionStore | None = None
+) -> dict[str, str]:
+    """The record's folder and brief URLs in document storage, for the workspace.
+
+    A technical review starts in a new session that never saved anything, so
+    it has no links of its own. One listing call finds the folder the business
+    intake wrote. The brief URL is built from the folder URL only on
+    SharePoint, where a file's ``webUrl`` is the folder's plus the filename
+    (the save path relies on the same rule in reverse); Drive file links are
+    id-based, so there only the folder is offered.
+
+    Without a sign-in the listing fails; the folder address the record store
+    remembered (from the save, or a signed-in portfolio load) is used instead.
+
+    Never raises: no storage, no sign-in or a Graph outage just means no
+    buttons, which is what the panel showed before.
+    """
+    from qualify.connectors.storage import (  # noqa: PLC0415
+        get_storage_connector,
+        storage_enabled,
+    )
+    from qualify.export import deliverable_filename  # noqa: PLC0415
+
+    try:
+        if not storage_enabled():
+            return {}
+        connector = get_storage_connector()
+        entries = connector.list_opportunities(record_id, context_id=context_id, limit=10)
+    except Exception as exc:
+        log.info("Handover: listing failed for %s (%s); trying the record store", record_id, exc)
+        entries = _remembered_entries(store, record_id)
+
+    entry = next((e for e in entries if e.get("recordId") == record_id), None)
+    folder = (entry or {}).get("webUrl")
+    if not isinstance(folder, str) or not folder:
+        return {}
+    links = {"folder": folder}
+    if entry.get("hasBrief") and "sharepoint" in folder.lower():
+        links["business"] = f"{folder.rstrip('/')}/{urllib.parse.quote(deliverable_filename('business'))}"
+    return links
+
+
+def _remembered_entries(store: SessionStore | None, record_id: str) -> list[dict]:
+    """The record store's portfolio marker for ``record_id``, as a listing row."""
+    lister = getattr(store, "list_completed", None)
+    if lister is None:
+        return []
+    try:
+        return [e for e in lister(200) if e.get("recordId") == record_id]
+    except Exception as exc:
+        log.info("Handover: record-store lookup for %s failed (%s)", record_id, exc)
+        return []
+
+
+def _not_found_message(store: SessionStore, record_id: str) -> str:
+    """Explains a failed lookup in terms of what the reader can do next.
+
+    A deployment with no durable store fails for a different reason than a
+    mistyped id, and the two need different advice. Collapsing them into one
+    message sends a reviewer hunting for a typo in a correct id.
+    """
+    if not isinstance(store, RecordStore):
+        return (
+            f"I can't find record **{record_id}**.\n\n"
+            "This deployment has no durable record store, so the only place "
+            "left to look was SharePoint, and it isn't there either. If the "
+            "business intake was completed, ask an engineer to set "
+            "`QUALIFY_GCS_BUCKET` on the service — without it, records from "
+            "earlier conversations are unreachable."
+        )
+    return (
+        f"I can't find record **{record_id}** in the record store or in "
+        f"SharePoint. Check the id — it appears at the top of the Business "
+        f"Value Brief and in the SharePoint folder name. The business intake "
+        f"also has to have been saved before a technical review can start."
+    )
+
+
+_SOURCE_LABELS: dict[str, str] = {
+    "google_drive": "Google Drive / Docs",
+    "gmail_calendar": "Gmail & Google Calendar",
+    "sharepoint": "Microsoft SharePoint",
+    "sharepoint_onedrive": "Microsoft SharePoint / OneDrive",
+    "confluence": "Atlassian Confluence",
+    "jira": "Atlassian Jira",
+    "salesforce": "Salesforce CRM",
+    "servicenow": "ServiceNow",
+    "bigquery": "Google BigQuery",
+    "cloud_sql": "Google Cloud SQL / AlloyDB",
+    "sap_erp": "SAP ERP",
+    "workday": "Workday",
+    "zendesk": "Zendesk",
+    "slack_teams": "Slack / Microsoft Teams",
+    "public_web": "Public Web Grounding",
+}
+
+
+def _source_label(slug: str) -> str:
+    """Display name for a data source slug: curated label, then the pack's own."""
+    if slug in _SOURCE_LABELS:
+        return _SOURCE_LABELS[slug]
+    from qualify.packs.loader import load_pack  # noqa: PLC0415
+
+    for option in load_pack("business").option_sets.get("data_sources", []):
+        if option.value == slug:
+            return option.label
+    return slug.replace("_", " ").title()
+
+
+def format_source_names(sources: list[str], other: str | None = None) -> str:
+    """Formats Phase 1 data source slugs into human-readable display names."""
+    items = [_source_label(s) for s in sources if s != "other"]
+    if other:
+        items.append(other)
+    return ", ".join(items)
+
+
+def baseline_summary(session: Session) -> str:
+    """A structured Opportunity Brief recapping what Phase 1 established.
+
+    Shown on the handover turn so the Solution Architect immediately understands
+    the business problem, target persona, estimated ROI, systems in scope, and
+    recommended Gemini Enterprise capability tier before starting Stage 1.
+    """
+    record = session.record
+    name = record.meta.initiative_name or "Unnamed initiative"
+    lines = [f"#### 📋 Opportunity Summary — **{name}** (`{record.meta.record_id}`)"]
+
+    if record.business.problem_description:
+        lines.append(f"- **Problem Statement:** {record.business.problem_description}")
+    if record.business.user_stories:
+        lines.append(f"- **Target Workflow / User Stories:** {record.business.user_stories}")
+    if record.business.expected_impacts:
+        lines.append(f"- **Expected Business Impacts:** {record.business.expected_impacts}")
+
+    if record.meta.department_bu:
+        owner_suffix = (
+            f" (Business Owner: {record.proposed.business_owner})"
+            if record.proposed.business_owner
+            else ""
+        )
+        lines.append(f"- **Team:** {record.meta.department_bu}{owner_suffix}")
+
+    if record.business.user_count is not None:
+        persona = f" ({record.business.user_profile})" if record.business.user_profile else ""
+        hours = record.derived.total_annual_team_hours_saved
+        hours_suffix = (
+            f" · **{hours:,.0f} hrs/yr** estimated savings"
+            if hours is not None
+            else ""
+        )
+        lines.append(
+            f"- **Affected users:** {record.business.user_count}{persona}{hours_suffix}"
+        )
+
+    if record.technical.data_sources or record.technical.other_data_sources:
+        pretty_sources = format_source_names(
+            record.technical.data_sources, record.technical.other_data_sources
+        )
+        lines.append(f"- **Systems named in Phase 1:** {pretty_sources}")
+
+    if record.technical.capability_level is not None:
+        from qualify.scoring.business_tier import classify_capability  # noqa: PLC0415
+
+        classify_capability(record)
+        tier = record.technical.capability_level.delivery_tier
+        cap_label = record.technical.capability_level.label
+        lines.append(
+            f"- **Indicative delivery tier:** **{tier.label}** — *{cap_label}*"
+        )
+        lines.append(
+            f"- **Architect Review Focus:** {_architect_review_focus(record)}"
+        )
+
+    return "\n".join(lines)
+
+
+def _architect_review_focus(record: UseCaseRecord) -> str:
+    """One-line architectural focus for the Solution Architect in Phase 2."""
+    from qualify.schema.capability import CapabilityLevel  # noqa: PLC0415
+
+    lvl = record.technical.capability_level
+    sources = format_source_names(
+        record.technical.data_sources, record.technical.other_data_sources
+    ) or "the target repositories"
+
+    if lvl in (
+        CapabilityLevel.WORKFLOW_AGENT_WITH_CUSTOM_MCP,
+        CapabilityLevel.HIGH_CODE_AGENT,
+    ):
+        return (
+            f"Delegated to **Pro-Code ({lvl.label})** — verify API schemas, "
+            f"Workload Identity / OAuth 2.0 auth, VPC network transit, and "
+            f"whether to deploy on **Vertex AI Agent Runtime (ADK)** or **Cloud Run (A2A/MCP)** for {sources}."
+        )
+    if lvl in (
+        CapabilityLevel.WORKFLOW_BUILDER_CHAT_AGENT,
+        CapabilityLevel.WORKFLOW_BUILDER_WORKFLOW_AGENT,
+    ):
+        return (
+            f"Scoped for **Low-Code ({lvl.label})** over {sources} — confirm whether "
+            f"native Gemini Enterprise connectors cover all required queries/actions "
+            f"(read-only vs. write) and preserve document-level ACLs, or if custom APIs require **Pro-Code (Level 5/6)**."
+        )
+    return (
+        "Scoped for **No-Code (Gemini Enterprise Assistant / Custom Skill)** — "
+        "confirm no live backend system connectors or automated writes are required."
+    )
+
+
+def list_pending_reviews(
+    context_id: str | None = None,
+    limit: int = PENDING_REVIEW_LIMIT,
+    store: SessionStore | None = None,
+) -> tuple[list[dict], bool]:
+    """Opportunities in SharePoint that hold a brief and no dossier.
+
+    Returns `(pending, reachable)`. The flag is the point: an empty list means
+    "everything is reviewed", while an unreachable SharePoint means "I don't
+    know", and a reviewer told the first when the second is true will conclude
+    there is no work and stop. Only the connector can tell them apart, so the
+    distinction has to survive the return.
+
+    If SharePoint is unreachable and `store` keeps a completion index (the GCS
+    and local record stores do), that index answers instead. It records every
+    finished intake and review, so it is a reachable, honest answer for users
+    who cannot sign in to Microsoft.
+
+    Entries without a parsable record id are dropped. They are real folders and
+    the listing will still show them, but they cannot be offered as a review
+    target when we cannot say which record they are.
+    """
+    from qualify.connectors.storage import storage_enabled  # noqa: PLC0415
+
+    if not storage_enabled():
+        # No document storage: the record store is the only source of truth,
+        # so its answer is complete and an empty list really means "none".
+        list_completed = getattr(store, "list_completed", None)
+        if list_completed is None:
+            return [], False
+        try:
+            completed = list_completed()
+        except Exception as store_exc:
+            log.warning("Handover: record-store pending list failed: %s", store_exc)
+            return [], False
+        entries = [
+            e
+            for e in completed
+            if e.get("hasBrief") and not e.get("hasDossier") and e.get("recordId")
+        ]
+        return entries[:limit], True
+
+    try:
+        from qualify.connectors.storage import (  # noqa: PLC0415
+            get_storage_connector,
+        )
+
+        entries = get_storage_connector().list_opportunities(
+            context_id=context_id,
+            pending_technical_review=True,
+            limit=limit,
+        )
+    except Exception as exc:
+        log.warning("Handover: could not list pending reviews: %s", exc)
+        list_completed = getattr(store, "list_completed", None)
+        if list_completed is None:
+            return [], False
+        try:
+            completed = list_completed()
+        except Exception as store_exc:
+            log.warning("Handover: record-store pending list failed: %s", store_exc)
+            return [], False
+        entries = [e for e in completed if e.get("hasBrief") and not e.get("hasDossier")][:limit]
+        entries = [e for e in entries if e.get("recordId")]
+        # The index can prove work *is* waiting, but not that none is: records
+        # finished before it existed, or saved only to SharePoint, are absent.
+        # So an empty fallback keeps "unreachable" rather than "nothing to do".
+        return entries, bool(entries)
+
+    return [e for e in entries if e.get("recordId")], True

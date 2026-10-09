@@ -1,0 +1,314 @@
+# Technical architecture review pack — Phase 2, the Back Office review.
+#
+# Five stages, matching skills/ge_tech_review/SKILL.md and the five dimensions
+# of the 22-subcriteria matrix in doc/design_plan.md §8.3. The stage order is
+# the scoring order, so a reviewer who stops halfway has a partial score that
+# still means something.
+#
+# The Phase 1 facts appear at the top of stage 1 as readonly fields. They are
+# the business owner's answers, and a technical reviewer overwriting them would
+# silently change the record the CoE scores. Locking them is the whole reason
+# `FieldSpec.readonly` exists.
+#
+# Paths are validated against UseCaseRecord at load time. If you add a field
+# here and the path is wrong, the process refuses to start.
+
+pack: tech
+version: "1.0"
+title: Technical architecture and security review
+root_path: /uc
+
+option_sets:
+  # -- 1. Systems and data --------------------------------------------------
+  # 1.4. PASS needs both a frequency and a mechanism; naming one without the
+  # other is the WARN case the subcriterion describes.
+  data_freshness:
+    - { label: "Sync schedule and SLA both documented", value: sla_documented, hint: "a schedule AND a sync mechanism, such as 'CDC stream every 5 minutes'" }
+    - { label: "Refresh frequency known, sync mechanism unconfirmed", value: frequency_only, hint: "'hourly', 'nightly', 'refreshed daily' with no mechanism named" }
+    - { label: "Real-time expected, no event stream identified", value: realtime_assumed, hint: "'real time', 'live', 'always current' with no event stream or sync named" }
+    - { label: "Not yet discussed", value: unknown }
+
+  # -- 2. Network transit ---------------------------------------------------
+  transit_path:
+    - { label: "Cloud HA-VPN", value: ha_vpn }
+    - { label: "Dedicated or Partner Interconnect", value: interconnect }
+    - { label: "Private Service Connect", value: psc }
+    - { label: "Public HTTPS with IP allowlisting", value: public_https }
+    - { label: "Not yet defined", value: undefined }
+
+  firewall_status:
+    - { label: "TLS inspection and proxy ports already cleared", value: cleared }
+    - { label: "Corporate proxy in path, firewall ticket pending", value: ticket_pending }
+    - { label: "Inspecting proxy blocks gRPC or TLS", value: blocked }
+    - { label: "Not yet investigated", value: unknown }
+
+  # 2.4. One of the two hard blockers.
+  transit_blocker:
+    - { label: "Transit to Google Cloud is approved", value: approved }
+    - { label: "Exception process required", value: exception_required }
+    - { label: "Airgapped — cloud transit is barred", value: airgapped }
+    - { label: "Not yet confirmed", value: unknown }
+
+  # -- 3. Security and IAM --------------------------------------------------
+  identity_provider:
+    - { label: "Google Workspace SSO", value: workspace_sso }
+    - { label: "Microsoft Entra ID", value: entra_id }
+    - { label: "Okta", value: okta }
+    - { label: "SAML 2.0 (other)", value: saml }
+    - { label: "Multiple IdPs requiring federation", value: multiple_idp }
+    - { label: "Unmanaged or basic auth", value: basic_auth }
+    - { label: "Not yet confirmed", value: unknown }
+
+  service_auth:
+    - { label: "Workload Identity Federation", value: wif, hint: "'Workload Identity', 'keyless', federated workload credentials" }
+    - { label: "Service account keys with vault rotation", value: sa_keys_rotated, hint: "service account keys kept in a vault or rotated" }
+    - { label: "OAuth client credentials", value: oauth_client }
+    - { label: "Long-lived static tokens", value: static_tokens }
+    - { label: "Not yet confirmed", value: unknown }
+
+  iam_scope:
+    - { label: "Read-only, scoped service identities", value: read_only_scoped }
+    - { label: "Broad dataset reader role", value: broad_reader }
+    - { label: "Admin or owner role requested", value: admin }
+    - { label: "Not yet confirmed", value: unknown }
+
+  # Values shared with business.yaml; see qualify/schema/classification.py.
+  data_classification:
+    - { label: "Public", value: public }
+    - { label: "Internal", value: internal }
+    - { label: "Confidential", value: confidential }
+    - { label: "Regulated — PII, HIPAA or PCI", value: regulated }
+    - { label: "Mixed or unclear, review scheduled", value: mixed }
+    - { label: "Unclassified", value: unclassified }
+    - { label: "Not yet confirmed", value: unknown }
+
+  residency:
+    - { label: "No residency constraint", value: none }
+    - { label: "US only", value: us_only }
+    - { label: "EU only", value: eu_only }
+    - { label: "Other single-region requirement", value: other_region }
+    - { label: "Not yet confirmed", value: unknown }
+
+  # 3.5. The other hard blocker.
+  cloud_policy:
+    - { label: "Enterprise policy authorises GCP processing", value: authorised }
+    - { label: "Legal or risk review in flight", value: review_in_flight }
+    - { label: "Corporate policy bans cloud data processing", value: banned }
+    - { label: "Not yet confirmed", value: unknown }
+
+  # -- 4. Grounding and models ---------------------------------------------
+  citation_policy:
+    - { label: "Strict source attribution required and supported", value: strict, hint: "'answers must cite sources', 'needs citations', 'show where it came from'" }
+    - { label: "Loose attribution acceptable", value: loose, hint: "'citations would be nice', 'sources optional'" }
+    - { label: "No citation requirement stated", value: none }
+
+  query_volume:
+    - { label: "Target QPS estimated", value: qps_estimated, hint: "a number of queries per second, hour or day, such as '2,000 a day'" }
+    - { label: "Rough volume only", value: rough, hint: "'a lot', 'heavy use' with no number" }
+    - { label: "Unbounded or unknown concurrency", value: unbounded }
+
+  latency_sla:
+    - { label: "Under 2 seconds", value: sub_2s }
+    - { label: "Under 10 seconds", value: sub_10s }
+    - { label: "No latency SLA defined", value: none }
+
+  model_profile:
+    - { label: "Gemini Flash — search and summarisation", value: flash }
+    - { label: "Gemini Pro — multi-system synthesis", value: pro }
+    - { label: "Mixed routing by query type", value: mixed }
+    - { label: "Not yet decided", value: undecided }
+
+  # -- 5. Operational readiness --------------------------------------------
+  landing_zone:
+    - { label: "Project, VPC and base IAM provisioned", value: provisioned }
+    - { label: "Project requested, provisioning in progress", value: in_progress }
+    - { label: "No GCP footprint or billing account", value: none }
+    - { label: "Not yet confirmed", value: unknown }
+
+stages:
+  # -- 1 --------------------------------------------------------------------
+  # Phase 1 baseline is presented as a structured Opportunity Summary above the
+  # card so the Stage 1 surface focuses cleanly on the architect's inputs.
+  - id: systems
+    label: Systems and data landscape
+    chat_questions:
+      - Which backend repositories hold the data this needs, and where is each hosted?
+      - How will Gemini Enterprise reach each one — native connector, REST API, or direct SQL?
+      - Are schemas, data dictionaries or API specs documented, or are these undocumented legacy tables?
+      - How fresh does the data need to be, and what syncs it?
+    fields:
+      - path: /uc/technical/data_freshness
+        label: Data freshness and sync
+        component: MaterialSelect
+        options_ref: data_freshness
+        required: true
+        help: Both refresh frequency and sync mechanism are required.
+      - path: /uc/proposed/tech_owner
+        label: Lead DBA or data custodian
+        component: TextField
+        variant: shortText
+        required: true
+        help: Named individual (not a generic team queue).
+      # The Systems & Data matrix is a list of objects. No verified component
+      # can edit repeating rows and the field extractor cannot see them, so it
+      # is built from the conversation and shown back here, locked, for the
+      # reviewer to correct in chat. See qualify/a2ui/systems_extractor.py.
+      - path: /ui/systems/table
+        label: Systems inventory
+        component: Text
+        variant: body
+        readonly: true
+    exit_criteria:
+      - Every production backend is named, with its hosting location.
+      - The programmatic interface for each system is known.
+      - A named data owner exists for the primary repository.
+
+  # -- 2 --------------------------------------------------------------------
+  - id: network
+    label: Infrastructure and network
+    chat_questions:
+      - Where are these systems hosted — on-premises data centres, private cloud, or public SaaS?
+      - What is the network path to Google Cloud?
+      - Are there egress proxies, SSL inspection, or port restrictions in the way?
+    fields:
+      - path: /uc/technical/network/hosting_environments
+        label: Hosting environments
+        component: TextField
+        variant: longText
+        required: true
+        help: Cloud regions, VPCs, or on-premises data centres.
+      - path: /uc/technical/network/transit_path
+        label: Transit path to Google Cloud
+        component: MaterialSelect
+        options_ref: transit_path
+        required: true
+        help: Network interconnect, VPN, or Private Service Connect path.
+      - path: /uc/technical/network/firewall_proxy_status
+        label: Egress proxy and firewall status
+        component: MaterialSelect
+        options_ref: firewall_status
+        help: Whether TLS inspection or proxy ports are cleared.
+      - path: /uc/technical/network/transit_blocker_status
+        label: Transit approval
+        component: MaterialRadioButton
+        options_ref: transit_blocker
+        required: true
+        help: An airgapped system without cloud transit is a hard blocker.
+    exit_criteria:
+      - Hosting topology is mapped.
+      - A transit path is named, or its absence is recorded as a blocker.
+
+  # -- 3 --------------------------------------------------------------------
+  - id: security
+    label: Security, IAM and governance
+    chat_questions:
+      - How will users authenticate?
+      - What will services use for machine-to-machine access?
+      - What is the data sensitivity, and are there residency requirements?
+      - Does enterprise policy permit processing this data in Google Cloud?
+    fields:
+      - path: /uc/technical/security/user_authentication
+        label: End-user identity provider
+        component: MaterialSelect
+        options_ref: identity_provider
+        required: true
+        help: Enterprise SSO / Identity Provider for end-user login.
+      - path: /uc/technical/security/service_authentication
+        label: Service authentication
+        component: MaterialSelect
+        options_ref: service_auth
+        required: true
+        help: Machine-to-machine authentication and credential rotation.
+      - path: /uc/technical/security/iam_least_privilege
+        label: IAM scope requested
+        component: MaterialSelect
+        options_ref: iam_scope
+        help: Minimum required access scope for connectors and agents.
+      - path: /uc/technical/security/data_classification
+        label: Data classification
+        component: MaterialRadioButton
+        options_ref: data_classification
+        required: true
+        help: Highest sensitivity tier of data accessed by this workflow.
+      - path: /uc/technical/security/residency_requirements
+        label: Data residency
+        component: MaterialSelect
+        options_ref: residency
+      - path: /uc/technical/security/cloud_policy_status
+        label: Cloud processing policy
+        component: MaterialRadioButton
+        options_ref: cloud_policy
+        required: true
+        help: A corporate ban on cloud processing is a hard blocker.
+    exit_criteria:
+      - User and service authentication are both named.
+      - Data classification is recorded.
+      - Cloud processing is authorised, or the blocker is recorded.
+
+  # -- 4 --------------------------------------------------------------------
+  - id: grounding
+    label: Data grounding and model routing
+    chat_questions:
+      - Must search results respect each user's permissions in the source system?
+      - Is strict citation and provenance required?
+      - What query volume and latency are you targeting?
+      - Which model profile fits the workload?
+    fields:
+      - path: /uc/technical/grounding/acl_preservation_required
+        label: Document-level ACLs must be preserved
+        component: CheckBox
+        help: Enforce source-system user permissions at query time.
+      - path: /uc/technical/grounding/citation_policy
+        label: Citation and provenance
+        component: MaterialSelect
+        options_ref: citation_policy
+        help: Whether responses must include inline source attributions.
+      - path: /uc/technical/grounding/query_volume
+        label: Expected query volume
+        component: MaterialSelect
+        options_ref: query_volume
+        help: Peak concurrency and expected QPS profile.
+      - path: /uc/technical/grounding/latency_sla
+        label: Latency target
+        component: MaterialSelect
+        options_ref: latency_sla
+      - path: /uc/technical/grounding/model_profile
+        label: Model profile
+        component: MaterialButtonToggle
+        options_ref: model_profile
+        required: true
+        help: Target Gemini model tier for this workload.
+    exit_criteria:
+      - The ACL requirement is explicit either way.
+      - A model profile is chosen, with a workload reason.
+
+  # -- 5 --------------------------------------------------------------------
+  # Owners land in /uc/proposed/, never /uc/execution/. Those are the CoE's to
+  # decide; the reviewer is proposing names, not assigning them.
+  - id: readiness
+    label: Operational readiness
+    chat_questions:
+      - Who is the network or security lead for this work?
+      - Who will validate the output as a domain expert?
+      - Is a Google Cloud project and landing zone already provisioned?
+    fields:
+      - path: /uc/proposed/network_security_lead
+        label: Network or security lead
+        component: TextField
+        variant: shortText
+        required: true
+        help: Named cloud network or security architect.
+      - path: /uc/proposed/domain_sme
+        label: Domain validation SME
+        component: TextField
+        variant: shortText
+        help: Subject-matter expert for UAT and ground-truth evaluation.
+      - path: /uc/technical/landing_zone_status
+        label: GCP landing zone
+        component: MaterialSelect
+        options_ref: landing_zone
+        required: true
+        help: Google Cloud project, VPC, and IAM provisioning status.
+    exit_criteria:
+      - A named technical lead and a named security lead exist.
+      - Landing zone status is known.
