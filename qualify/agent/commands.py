@@ -43,6 +43,7 @@ _LEAD_INS = tuple(
             "let's",
             "lets",
             "let us",
+            "launch",
             "start",
             "begin",
             "run",

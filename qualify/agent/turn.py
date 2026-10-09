@@ -972,6 +972,9 @@ def _record_store_saved_note(session: Session) -> str:
 
 
 _HELP_PHRASES = (
+    "launch the agent",
+    "launch agent",
+    "launch qualification agent",
     "what can you do",
     "what do you do",
     "what can you help with",

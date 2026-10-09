@@ -72,20 +72,19 @@ ICON_SVG = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
 icon_data_uri = "data:image/svg+xml;base64," + base64.b64encode(ICON_SVG.encode("utf-8")).decode("ascii")
 
 starter_prompts = [
-    "Start a Business Value Intake (Phase 1)",
-    "Run a Technical Architecture Review (Phase 2)",
-    "Run a Portfolio Prioritization (Phase 3)",
+    "Launch the agent",
 ]
 
 card_obj = json.loads(open(card_path).read())
 exts = card_obj.setdefault("capabilities", {}).setdefault("extensions", [])
 sp_uri = "https://www.googleapis.com/gemini-enterprise/a2a/extensions/starter_prompts/v1"
-if not any(e.get("uri") == sp_uri for e in exts):
-    exts.append({
-        "uri": sp_uri,
-        "description": "Google Gemini Enterprise starter prompts extension to show contextually aware prompts on chat start.",
-        "params": {"prompts": starter_prompts},
-    })
+exts = [e for e in exts if e.get("uri") != sp_uri]
+exts.append({
+    "uri": sp_uri,
+    "description": "Google Gemini Enterprise starter prompts extension to show contextually aware prompts on chat start.",
+    "params": {"prompts": starter_prompts},
+})
+card_obj["capabilities"]["extensions"] = exts
 
 print(json.dumps({
     "displayName": display_name,
@@ -96,7 +95,7 @@ print(json.dumps({
     ),
     "icon": {"content": icon_data_uri},
     "starterPrompts": [{"text": t} for t in starter_prompts],
-    "customPlaceholderText": "Describe a new AI use case idea, or choose a workflow above...",
+    "customPlaceholderText": "Describe a new AI use case idea, or click Launch the agent above...",
     "a2aAgentDefinition": {"jsonAgentCard": json.dumps(card_obj)},
     "sharingConfig": {"scope": "ALL_USERS"},
 }))

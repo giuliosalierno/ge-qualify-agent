@@ -23,9 +23,7 @@ STARTER_PROMPTS_EXTENSION_URI = (
     "https://www.googleapis.com/gemini-enterprise/a2a/extensions/starter_prompts/v1"
 )
 STARTER_PROMPTS = [
-    "Start a Business Value Intake (Phase 1)",
-    "Run a Technical Architecture Review (Phase 2)",
-    "Run a Portfolio Prioritization (Phase 3)",
+    "Launch the agent",
 ]
 
 
