@@ -41,6 +41,12 @@ resource "google_discovery_engine_search_engine" "demo" {
     "agent-sharing-without-admin-approval" = "FEATURE_STATE_ON"
     "disable-agent-sharing"                = "FEATURE_STATE_OFF"
   }
+
+  # Gemini Enterprise adds its own default feature flags after creation
+  # (e.g. workflow-agents); without this every plan would try to remove them.
+  lifecycle {
+    ignore_changes = [features]
+  }
 }
 
 data "google_client_config" "current" {}
