@@ -22,6 +22,7 @@ an interview, and it is what this store keys on (D15).
 from __future__ import annotations
 
 import logging
+import secrets
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Protocol
@@ -230,6 +231,15 @@ class InMemorySessionStore:
         return len(self._sessions)
 
 
+def new_record_id() -> str:
+    """A fresh `UC-<year>-<8 upper hex>` id, e.g. `UC-2026-3F2A9C01`.
+
+    32 random bits keep collisions between conversations negligible at the
+    scale of a CoE portfolio; the format still matches `RECORD_ID_RE`.
+    """
+    return f"UC-{_now().year}-{secrets.token_hex(4).upper()}"
+
+
 def new_session(
     context_id: str, pack_name: str = "business", record_id: str | None = None
 ) -> Session:
@@ -238,11 +248,14 @@ def new_session(
     `context_id` is written into the record's meta as well as being the store
     key, so a record recovered from the sink alone can still be traced back to
     its conversation.
+
+    The generated record id is random, not derived from `context_id`: one
+    conversation can start several intakes ("qualify another"), and each must
+    get its own record rather than overwrite the one it just finished.
     """
     load_pack(pack_name)  # fail fast on a bad pack name, before any state exists
     if not record_id:
-        clean_suffix = context_id.replace("-", "").upper()[:6] or "0001"
-        record_id = f"UC-{_now().year}-{clean_suffix}"
+        record_id = new_record_id()
     return Session(
         context_id=context_id,
         pack_name=pack_name,
