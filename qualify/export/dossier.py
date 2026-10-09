@@ -87,11 +87,11 @@ def render_technical_dossier(
         # asked would invent the one fact the review exists to establish.
         parts.append("> [!IMPORTANT]")
         parts.append(
-            "> **Two questions decide this review, and neither has been asked yet.** "
+            "> **Two questions decide this review, and at least one is not yet confirmed.** "
             "Key 2 cannot be granted until both are answered."
         )
         for b in score.unconfirmed_blockers:
-            parts.append(f"> - **{b.id} {b.label}** — not yet discussed")
+            parts.append(f"> - **{b.id} {b.label}** — not yet confirmed")
         parts.append("")
 
     parts.append(f"> **Initiative / Customer:** {title}  ")

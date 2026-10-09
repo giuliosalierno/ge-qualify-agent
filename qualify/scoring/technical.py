@@ -101,14 +101,20 @@ def _graded(
     value: str | None,
     grades: dict[str, tuple[int, str]],
     unanswered_note: str,
+    unconfirmed_values: tuple[str, ...] = (),
 ) -> Subscore:
     """Scores a closed-vocabulary field by lookup.
 
     A value absent from `grades` scores FAIL rather than raising. The pack and
     this table can drift — a new option added to `tech.yaml` and not graded here
     should degrade the score, not crash a live review.
+
+    `unconfirmed_values` are explicit answers that mean "we don't know yet"
+    (the pack's "Not yet confirmed" option). They score like an empty field —
+    FAIL, answered=False — so a blocking subcriterion answered that way is
+    reported as unconfirmed rather than as a confirmed blocker.
     """
-    if not value:
+    if not value or value in unconfirmed_values:
         return Subscore(id_, dimension, label, FAIL, unanswered_note, answered=False)
 
     points, rationale = grades.get(
@@ -297,9 +303,9 @@ def _score_network(record: UseCaseRecord) -> list[Subscore]:
             "approved": (PASS, "Transit to Google Cloud is approved."),
             "exception_required": (WARN, "Exception process required."),
             "airgapped": (FAIL, "Airgapped system; cloud transit is barred."),
-            "unknown": (FAIL, "Transit approval not confirmed."),
         },
         "Transit approval not confirmed.",
+        unconfirmed_values=("unknown",),
     )
 
     return [s21, s22, s23, s24]
@@ -389,9 +395,9 @@ def _score_security(record: UseCaseRecord) -> list[Subscore]:
             "authorised": (PASS, "Enterprise policy authorises GCP processing."),
             "review_in_flight": (WARN, "Legal or risk review in flight."),
             "banned": (FAIL, "Corporate policy bans cloud data processing."),
-            "unknown": (FAIL, "Cloud processing policy not confirmed."),
         },
         "Cloud processing policy not confirmed.",
+        unconfirmed_values=("unknown",),
     )
 
     return [s31, s32, s33, s34, s35]
