@@ -55,6 +55,7 @@ from qualify.a2ui.patcher import (
 )
 from qualify.a2ui.provenance import missing_required
 from qualify.config import (
+    a2ui_probes_enabled,
     agent_base_url,
     interactive_views_enabled,
     welcome_menu_enabled,
@@ -322,16 +323,18 @@ def _run_turn(
     # -----------------------------------------------------------------------
     if turn_input.action_data:
         event = parse_action(turn_input.action_data)
-        if event is not None and event.name == PROBE_CANVAS_ECHO:
+        probes = a2ui_probes_enabled()
+        if probes and event is not None and event.name == PROBE_CANVAS_ECHO:
             # Diagnostic only: report what the canvas inputs wrote back and
-            # leave the session record untouched.
-            log.info("Canvas probe echo: %r", event.context)
+            # leave the session record untouched. The values are user input,
+            # so only their keys are logged.
+            log.info("Canvas probe echo: keys=%s", sorted(event.context or {}))
             return TurnOutput(
                 reply_text=describe_canvas_echo(event.context),
                 a2ui_messages=[],
                 session=session,
             )
-        if event is not None and event.name == PROBE_LIVE_BUMP:
+        if probes and event is not None and event.name == PROBE_LIVE_BUMP:
             return TurnOutput(
                 reply_text=(
                     "Sent a data-only update to the open **Probe 4** panel. If its "
@@ -1229,8 +1232,11 @@ def _try_a2ui_probe(user_text: str | None, session: Session) -> TurnOutput | Non
     description of the schema, not a promise about the renderer. GE has already
     been seen accepting a message and drawing nothing, so the sign-in button
     gets measured before it gets built.
+
+    All probes are off unless ``A2UI_PROBES`` is set (see
+    `qualify.config.a2ui_probes_enabled`).
     """
-    if not user_text:
+    if not user_text or not a2ui_probes_enabled():
         return None
 
     if is_canvas_probe_trigger(user_text):
