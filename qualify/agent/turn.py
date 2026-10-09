@@ -182,7 +182,107 @@ def execute_turn(
         # silently roll that back.
         store.save(output.session)
 
+    if _announce_lost_signin(output) or _offer_signin_on_first_reply(output):
+        store.save(output.session)
+
     return output
+
+
+def _offer_signin_on_first_reply(output: TurnOutput) -> bool:
+    """Attaches the SharePoint sign-in card to the conversation's first reply.
+
+    One place, once, whatever the first message was (a greeting, `portfolio
+    review`, a technical review...), instead of each command asking on its
+    own. The card is optional and not dismissible: declining simply means not
+    clicking, so it never replaces the answer the user asked for.
+    """
+    import os as _os  # noqa: PLC0415
+
+    session = output.session
+    if session.signin_prompted or session.signin_dismissed:
+        return False
+    if _os.environ.get("SIGNIN_CARD") == "0":
+        return False
+
+    from qualify.connectors import token_vault  # noqa: PLC0415
+    from qualify.connectors.storage import storage_enabled  # noqa: PLC0415
+
+    if not storage_enabled() or token_vault.has_session(session.context_id):
+        return False
+
+    session.signin_prompted = True
+    if _offers_signin(output):
+        return True
+
+    from qualify.a2ui.signin import build_signin_card  # noqa: PLC0415
+
+    auth_url = build_signin_url(agent_base_url(), session.context_id)
+    where = _storage_label() or "SharePoint"
+    note = (
+        f"🔐 *Optional:* sign in with the card below to save to {where} and open "
+        "files from here. Once you're done, reply **signed in**."
+    )
+    output.reply_text = f"{output.reply_text}\n\n---\n{note}" if output.reply_text else note
+    output.a2ui_messages = [*output.a2ui_messages, *build_signin_card(auth_url, dismissible=False)]
+    return True
+
+
+def _offers_signin(output: TurnOutput) -> bool:
+    """True when this reply already asks the user to sign in."""
+    from qualify.a2ui.signin import SIGNIN_SURFACE_ID  # noqa: PLC0415
+
+    if "/auth?t=" in (output.reply_text or ""):
+        return True
+    return any(
+        m.get("createSurface", {}).get("surfaceId") == SIGNIN_SURFACE_ID
+        for m in output.a2ui_messages
+    )
+
+
+def _announce_lost_signin(output: TurnOutput) -> bool:
+    """Tells the user, once, that their storage sign-in has ended.
+
+    Tokens live only in this process's memory, so a deploy or restart signs
+    everyone out; Entra or Google can also reject a refresh token (expired,
+    revoked, password changed) or an access token mid-call (the vault's 401
+    hook then clears it). Either way the session record still says
+    ``signin_confirmed``, and without this the agent would carry on as if
+    connected and fail quietly at the next SharePoint call.
+
+    Checked after the turn so a token rejected *during* this turn is caught
+    too. Returns True when the session changed.
+    """
+    session = output.session
+    if not session.signin_confirmed:
+        return False
+
+    from qualify.connectors import token_vault  # noqa: PLC0415
+    from qualify.connectors.storage import storage_enabled  # noqa: PLC0415
+
+    if not storage_enabled() or token_vault.has_session(session.context_id):
+        return False
+
+    # Re-arm the "connected" banner for the next sign-in, and keep the
+    # intake-start card from appearing on top of this notice.
+    session.signin_confirmed = False
+    session.signin_prompted = True
+
+    where = _storage_label() or "document storage"
+    note = f"🔐 **Your {where} session has expired.**"
+    if _offers_signin(output):
+        output.reply_text = f"{note}\n\n{output.reply_text}" if output.reply_text else note
+        return True
+
+    from qualify.a2ui.signin import build_signin_card  # noqa: PLC0415
+
+    auth_url = build_signin_url(agent_base_url(), session.context_id)
+    note += (
+        " Your answers are kept. Sign in again below to keep saving and opening files "
+        f"in {where}, or [open the sign-in page]({auth_url})."
+    )
+    output.reply_text = f"{note}\n\n---\n\n{output.reply_text}" if output.reply_text else note
+    output.a2ui_messages = [*output.a2ui_messages, *build_signin_card(auth_url, dismissible=False)]
+    return True
 
 
 def _consume_signin_banner(session: Session) -> str | None:
@@ -291,6 +391,13 @@ def _run_turn(
     if help_output is not None:
         store.save(session)
         return help_output
+
+    # Ahead of the pending-review picker, which would otherwise read "signed
+    # in" as an attempt to pick an opportunity.
+    ack_output = _try_signin_ack(store, turn_input.user_text, session)
+    if ack_output is not None:
+        store.save(ack_output.session)
+        return ack_output
 
     workspace_output = _try_workspace_command(turn_input.user_text, session)
     if workspace_output is not None:
@@ -994,6 +1101,64 @@ def _record_has_content(session: Session) -> bool:
     return bool(session.record.meta.initiative_name)
 
 
+#: Words that mean "I finished signing in", not "save now".
+_SIGNIN_SAVE_VERBS = ("save", "sync", "push", "upload", "write", "store")
+_SIGNIN_ACK_PHRASES = ("logged in", "signed in", "log in done", "i'm connected", "im connected")
+
+
+def _is_signin_ack(user_text: str | None) -> bool:
+    text = (user_text or "").strip().lower()
+    if not text or any(v in text for v in _SIGNIN_SAVE_VERBS):
+        return False
+    return any(p in text for p in _SIGNIN_ACK_PHRASES) or text.rstrip("!. ") == "done"
+
+
+def _try_signin_ack(store: SessionStore, user_text: str | None, session: Session) -> TurnOutput | None:
+    """Handles "signed in": resume what was waiting for it, else carry on.
+
+    A command that stopped for a sign-in (portfolio, technical review, the
+    SharePoint listing) is re-run, so the user gets what they asked for
+    without retyping it. Otherwise: the intake if one is under way, or the
+    workflow menu.
+    """
+    from qualify.connectors.storage import storage_enabled  # noqa: PLC0415
+
+    if not storage_enabled() or not _is_signin_ack(user_text):
+        return None
+
+    from qualify.connectors.storage import is_connected  # noqa: PLC0415
+
+    session.pending_review_choices = []
+    resume = session.resume_command
+    if resume and is_connected(session.context_id):
+        session.resume_command = None
+        session.signin_prompted = True
+        if resume == "portfolio review":
+            out = _try_portfolio_review(store, resume, session)
+        elif resume == "technical review":
+            out = _try_start_tech_review(store, resume, session)
+        else:
+            out = _try_load_from_sharepoint(resume, session)
+        if out is not None:
+            return out
+
+    if session.rendered_stages or session.committed or not welcome_menu_enabled():
+        return _acknowledge_signin(session)
+
+    # Nothing chosen yet: confirm and show the three workflows.
+    connected = is_connected(session.context_id)
+    session.signin_prompted = True
+    if connected:
+        session.signin_confirmed = True
+    head = (
+        "You're connected. What would you like to do?"
+        if connected
+        else "⚠️ I can't see a completed sign-in yet — the browser tab may have been "
+        "closed before Microsoft finished. You can carry on without it."
+    )
+    return TurnOutput(reply_text=head, a2ui_messages=_welcome_menu_messages(session), session=session)
+
+
 def _acknowledge_signin(session: Session) -> TurnOutput:
     """Confirms the SharePoint connection and opens the first stage.
 
@@ -1170,6 +1335,7 @@ def _brief_view_messages(
         pack=session.pack,
         skipped_stages=session.skipped,
         portfolio=_portfolio_evaluations(store),
+        links=session.document_links,
     )
 
 
@@ -1220,7 +1386,10 @@ def _try_view_event(
 
     if event.name == OPEN_BRIEF and record_id:
         from qualify.a2ui.views.brief import build_brief_view  # noqa: PLC0415
-        from qualify.agent.handover import load_review_record  # noqa: PLC0415
+        from qualify.agent.handover import (  # noqa: PLC0415
+            load_review_record,
+            review_document_links,
+        )
 
         record = load_review_record(store, record_id, session.context_id)
         if record is None:
@@ -1234,6 +1403,7 @@ def _try_view_event(
             record,
             session.panel_surface_id("brief"),
             portfolio=_portfolio_evaluations(store),
+            links=review_document_links(record_id, context_id=session.context_id, store=store),
         )
         store.save(session)
         return TurnOutput(
@@ -1437,11 +1607,26 @@ def _try_portfolio_review(
             )
         return _render_portfolio(store, session, items, connector=None)
 
+    from qualify.connectors.storage import StorageAuthRequired  # noqa: PLC0415
+
     connector = get_storage_connector()
     from_record_store = False
+    signin_url: str | None = None
     try:
         items = connector.load_all_opportunities(context_id=session.context_id)
-    except Exception:
+    except Exception as exc:
+        from qualify.connectors import token_vault  # noqa: PLC0415
+
+        # A 401 mid-listing clears the token (see the vault's response hook)
+        # but surfaces here as a generic failure, so "no session left" counts
+        # as signed out too.
+        if isinstance(exc, StorageAuthRequired) or not token_vault.has_session(
+            session.context_id
+        ):
+            # Not signed in (as opposed to an outage): say so and offer the
+            # sign-in, instead of silently showing the record-store copy.
+            signin_url = build_signin_url(agent_base_url(), session.context_id)
+            session.resume_command = "portfolio review"
         # No SharePoint session (or SharePoint is down). The record store holds
         # every *finished* opportunity too, so the CoE view still works for
         # users who cannot sign in to Microsoft — e.g. go/demo testers.
@@ -1451,13 +1636,14 @@ def _try_portfolio_review(
             base_url = agent_base_url()
             auth_url = build_signin_url(base_url, session.context_id)
             session.signin_prompted = True
+            session.resume_command = "portfolio review"
             return TurnOutput(
                 reply_text=(
                     "Happy to run the **AI CoE Portfolio Prioritization Review** — "
                     "but I couldn't reach SharePoint to load the qualified opportunities. "
-                    "Please sign in with Microsoft below, then type `portfolio review` again."
+                    "Please sign in with Microsoft below, then reply **signed in**."
                 ),
-                a2ui_messages=build_signin_card(auth_url),
+                a2ui_messages=build_signin_card(auth_url, dismissible=False),
                 session=session,
             )
 
@@ -1473,7 +1659,12 @@ def _try_portfolio_review(
         )
 
     return _render_portfolio(
-        store, session, items, connector=None if from_record_store else connector
+        store,
+        session,
+        items,
+        connector=None if from_record_store else connector,
+        signin_url=signin_url,
+        account_label=getattr(connector, "account_label", "Microsoft"),
     )
 
 
@@ -1483,11 +1674,15 @@ def _render_portfolio(
     items: list[tuple[Any, dict[str, Any]]],
     *,
     connector: Any | None,
+    signin_url: str | None = None,
+    account_label: str = "Microsoft",
 ) -> TurnOutput:
     """Scores `items` and renders the report.
 
     `connector` is None when the items came from the record store; the report
     is then not published anywhere and says where its data came from.
+    `signin_url` is set when that happened because the user is not signed in;
+    the reply and the panel then offer the sign-in.
     """
     from qualify.connectors.storage import storage_enabled  # noqa: PLC0415
     from qualify.export.portfolio import render_portfolio_report  # noqa: PLC0415
@@ -1503,6 +1698,17 @@ def _render_portfolio(
                 store.save_record(ev.record)  # type: ignore[attr-defined]
             except Exception:
                 pass
+
+    # Remember each folder's address in the record store, so the open buttons
+    # also work in conversations that are not signed in.
+    remember = getattr(store, "remember_folder_url", None)
+    if not from_record_store and remember is not None:
+        for ev in summary.evaluations:
+            if ev.folder_url:
+                try:
+                    remember(ev.record_id, ev.folder_url)
+                except Exception as exc:
+                    log.warning("Could not store folder URL for %s: %s", ev.record_id, exc)
 
     # Save Portfolio_Prioritization_Report.md to SharePoint and include its URL.
     # Skipped when SharePoint was unreachable a moment ago: it would fail again.
@@ -1532,10 +1738,19 @@ def _render_portfolio(
     source_note = None
     if from_record_store and storage_enabled():
         source_note = (
-            "Scored from the agent's record store (finished intakes only) — "
+            f"You're not signed in to {_storage_label() or 'document storage'}, so this is "
+            "scored from the agent's saved copies (finished intakes only)."
+            if signin_url
+            else "Scored from the agent's record store (finished intakes only) — "
             "SharePoint was not available for this conversation."
         )
         final_md = f"_{source_note}_\n\n" + final_md
+    signin_line = (
+        f"\n\n🔐 {source_note} Sign in with {account_label} (button in the panel) to open "
+        "the files and publish the report, then reply **signed in** and I'll refresh it."
+        if signin_url
+        else ""
+    )
 
     if interactive_views_enabled():
         from qualify.a2ui.views.portfolio import (  # noqa: PLC0415
@@ -1556,18 +1771,20 @@ def _render_portfolio(
         reply += (
             "\n\nUse the **Actions** tab, or type `technical review <name or ID>`."
         )
+        reply += signin_line
         return TurnOutput(
             reply_text=reply,
             a2ui_messages=build_portfolio_view(
                 summary,
                 session.panel_surface_id("portfolio"),
                 source_note=source_note,
+                signin=(signin_url, account_label) if signin_url else None,
             ),
             session=session,
         )
 
     return TurnOutput(
-        reply_text=final_md,
+        reply_text=final_md + signin_line,
         a2ui_messages=[],
         session=session,
     )
@@ -1608,6 +1825,7 @@ def _try_start_tech_review(
         list_pending_reviews,
         parse_tech_review_intent,
         resolve_pending_review_choice,
+        review_document_links,
         start_tech_review,
     )
 
@@ -1685,6 +1903,9 @@ def _try_start_tech_review(
     tech_session.signin_confirmed = session.signin_confirmed
     tech_session.signin_prompted = session.signin_prompted
     tech_session.signin_dismissed = session.signin_dismissed
+    tech_session.document_links.update(
+        review_document_links(record_id, context_id=session.context_id, store=store)
+    )
 
     sid = tech_session.next_surface_id()
     tech_session.rendered_stages.add(tech_session.active_stage)
@@ -1757,10 +1978,11 @@ def _offer_pending_reviews(
         base_url = agent_base_url()
         auth_url = build_signin_url(base_url, session.context_id)
         cards = (
-            build_signin_card(auth_url)
+            build_signin_card(auth_url, dismissible=False)
             if _os.environ.get("SIGNIN_CARD") != "0"
             else []
         )
+        session.resume_command = "technical review"
         return TurnOutput(
             reply_text=(
                 "Happy to start a technical review — but I couldn't reach "
@@ -1849,11 +2071,7 @@ def _try_load_from_sharepoint(user_text: str | None, session: Session) -> TurnOu
     # demanded a login. The connect card now asks at the very start of the
     # conversation, so the same words mean "I'm connected, let's begin" — and
     # reading them as "save now" wrote an empty record to SharePoint.
-    _SAVE_VERBS = ("save", "sync", "push", "upload", "write", "store")
-    _ACK_PHRASES = ("logged in", "signed in", "log in done", "i'm connected", "im connected")
-
-    mentions_save = any(v in text_lower for v in _SAVE_VERBS)
-    if any(p in text_lower for p in _ACK_PHRASES) and not mentions_save:
+    if _is_signin_ack(user_text):
         return _acknowledge_signin(session)
 
     # Case B: an explicit request to save or sync.
@@ -1873,7 +2091,7 @@ def _try_load_from_sharepoint(user_text: str | None, session: Session) -> TurnOu
             "push to sharepoint",
             "upload to sharepoint",
         )
-    ) or ("sharepoint" in text_lower and mentions_save)
+    ) or ("sharepoint" in text_lower and any(v in text_lower for v in _SIGNIN_SAVE_VERBS))
 
     if is_save_request:
         if not _record_has_content(session):
@@ -1956,10 +2174,11 @@ def _try_load_from_sharepoint(user_text: str | None, session: Session) -> TurnOu
             base_url = agent_base_url()
             auth_url = build_signin_url(base_url, session.context_id)
             cards = (
-                build_signin_card(auth_url)
+                build_signin_card(auth_url, dismissible=False)
                 if _os.environ.get("SIGNIN_CARD") != "0"
                 else []
             )
+            session.resume_command = "list sharepoint"
             return TurnOutput(
                 reply_text=(
                     "⚠️ I couldn't reach SharePoint to list the qualified opportunities. "

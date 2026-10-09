@@ -105,6 +105,47 @@ def event_button(
     ]
 
 
+def storage_name(url: str) -> str:
+    """The storage product a document URL points at, for button labels."""
+    lowered = url.lower()
+    if "sharepoint" in lowered:
+        return "SharePoint"
+    if "drive.google" in lowered or "drive.mock" in lowered:
+        return "Google Drive"
+    return "storage"
+
+
+def open_url_button(
+    cid: str,
+    label: str,
+    url: str,
+    *,
+    icon: str = "open_in_new",
+    primary: bool = False,
+    fallback: str | None = None,
+) -> list[Component]:
+    """A ``MaterialButton`` that opens ``url`` in the browser, plus a text link.
+
+    Same pattern as the SharePoint sign-in card: ``openUrl`` is a client
+    function (verified in GE on 2026-09-16), so the click never reaches the
+    agent. The markdown link is insurance in case a GE release drops
+    ``openUrl``; it uses ``body`` because GE shows ``caption`` markdown raw.
+    Returns ``[button, link]``; ids are ``cid`` and ``f"{cid}-link"``.
+    """
+    button: Component = {
+        "id": cid,
+        "component": "MaterialButton",
+        "label": label,
+        "variant": "raised" if primary else "stroked",
+        "leadingIcon": icon,
+        "action": {"functionCall": {"call": "openUrl", "args": {"url": url}}},
+    }
+    if primary:
+        button["color"] = "primary"
+    link = text(f"{cid}-link", fallback or f"Button not working? [{label}]({url})", "body")
+    return [button, link]
+
+
 def chart(cid: str, data_path: str, height: int = 340) -> Component:
     """A ``VegaChart`` whose spec lives in the data model.
 

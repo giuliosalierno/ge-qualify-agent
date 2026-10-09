@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import logging
 import re
+import urllib.parse
 
 from qualify.schema.use_case_record import UseCaseRecord
 from qualify.sinks.record_store import RecordStore
@@ -341,6 +342,61 @@ def start_tech_review(
     )
     store.save(session)
     return session
+
+
+def review_document_links(
+    record_id: str, context_id: str | None = None, store: SessionStore | None = None
+) -> dict[str, str]:
+    """The record's folder and brief URLs in document storage, for the workspace.
+
+    A technical review starts in a new session that never saved anything, so
+    it has no links of its own. One listing call finds the folder the business
+    intake wrote. The brief URL is built from the folder URL only on
+    SharePoint, where a file's ``webUrl`` is the folder's plus the filename
+    (the save path relies on the same rule in reverse); Drive file links are
+    id-based, so there only the folder is offered.
+
+    Without a sign-in the listing fails; the folder address the record store
+    remembered (from the save, or a signed-in portfolio load) is used instead.
+
+    Never raises: no storage, no sign-in or a Graph outage just means no
+    buttons, which is what the panel showed before.
+    """
+    from qualify.connectors.storage import (  # noqa: PLC0415
+        get_storage_connector,
+        storage_enabled,
+    )
+    from qualify.export import deliverable_filename  # noqa: PLC0415
+
+    try:
+        if not storage_enabled():
+            return {}
+        connector = get_storage_connector()
+        entries = connector.list_opportunities(record_id, context_id=context_id, limit=10)
+    except Exception as exc:
+        log.info("Handover: listing failed for %s (%s); trying the record store", record_id, exc)
+        entries = _remembered_entries(store, record_id)
+
+    entry = next((e for e in entries if e.get("recordId") == record_id), None)
+    folder = (entry or {}).get("webUrl")
+    if not isinstance(folder, str) or not folder:
+        return {}
+    links = {"folder": folder}
+    if entry.get("hasBrief") and "sharepoint" in folder.lower():
+        links["business"] = f"{folder.rstrip('/')}/{urllib.parse.quote(deliverable_filename('business'))}"
+    return links
+
+
+def _remembered_entries(store: SessionStore | None, record_id: str) -> list[dict]:
+    """The record store's portfolio marker for ``record_id``, as a listing row."""
+    lister = getattr(store, "list_completed", None)
+    if lister is None:
+        return []
+    try:
+        return [e for e in lister(200) if e.get("recordId") == record_id]
+    except Exception as exc:
+        log.info("Handover: record-store lookup for %s failed (%s)", record_id, exc)
+        return []
 
 
 def _not_found_message(store: SessionStore, record_id: str) -> str:

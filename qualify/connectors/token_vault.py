@@ -32,6 +32,8 @@ import time
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    import httpx
+
     from qualify.schema.use_case_record import UseCaseRecord
 
 logger = logging.getLogger(__name__)
@@ -102,6 +104,33 @@ def clear(context_id: str) -> None:
     """Forgets every token held for a conversation."""
     ACCESS.pop(context_id, None)
     REFRESH.pop(context_id, None)
+
+
+def forget_rejected_token(response: "httpx.Response") -> None:
+    """httpx response hook: a 401 on a vaulted user token signs that conversation out.
+
+    The vault keeps an access token until its stated expiry, but Microsoft or
+    Google can revoke it sooner (password change, admin revocation, consent
+    withdrawn). Without this the agent would keep sending a dead token and
+    report the provider as "unavailable". Clearing both tokens makes the next
+    check see "not signed in", which is what triggers the sign-in prompt. The
+    refresh token goes too: whatever revoked the access token has almost
+    always revoked it as well.
+    """
+    if response.status_code != 401:
+        return
+    auth = response.request.headers.get("Authorization", "")
+    if not auth.lower().startswith("bearer "):
+        return
+    token = auth[7:].strip()
+    for context_id, (held, _exp) in list(ACCESS.items()):
+        if held == token:
+            clear(context_id)
+            logger.warning("Provider rejected the user token (401); signed out context=%s", context_id)
+
+
+#: Pass as ``httpx.Client(event_hooks=HTTP_HOOKS)`` on every provider call.
+HTTP_HOOKS: dict[str, list] = {"response": [forget_rejected_token]}
 
 
 def queue_pending(

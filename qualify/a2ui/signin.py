@@ -171,7 +171,10 @@ def build_openurl_probe(
 
 
 def build_signin_card(
-    auth_url: str, surface_id: str = SIGNIN_SURFACE_ID
+    auth_url: str,
+    surface_id: str = SIGNIN_SURFACE_ID,
+    *,
+    dismissible: bool = True,
 ) -> list[dict[str, Any]]:
     """The SharePoint connect card shown at the start of a qualification.
 
@@ -188,6 +191,11 @@ def build_signin_card(
     Signing in first is worth the interruption: the token is then already
     vaulted when stage 4 commits, so the record writes straight through instead
     of being queued and needing a second prompt.
+
+    ``dismissible=False`` drops the "Continue without saving" button, whose
+    event opens the intake's first stage. Used where the card rides along
+    with another answer (the first reply, an expired-session notice), so
+    declining it must not hijack what the user asked for.
     """
     components: list[dict[str, Any]] = [
         {
@@ -247,6 +255,15 @@ def build_signin_card(
             "variant": "caption",
         },
     ]
+    if not dismissible:
+        root = components[0]
+        root["children"] = [c for c in root["children"] if c != "signin-skip"]
+        components = [c for c in components if c["id"] != "signin-skip"]
+        components[2]["text"] = (
+            "Sign in with Microsoft to save qualifications to the shared SharePoint "
+            "workspace and open their files from here. Optional: everything else "
+            "works without it."
+        )
 
     return [
         _create_surface(surface_id),

@@ -163,6 +163,7 @@ def _next_steps_tab(
     ev: OpportunityEvaluation,
     pack: Pack | None,
     skipped: set[int],
+    links: dict[str, str],
 ) -> list[ui.Component]:
     ids = ["br-next-text"]
     nodes: list[ui.Component] = [ui.text("br-next-text", f"➡️ {ev.recommended_next_step}", "body")]
@@ -178,6 +179,27 @@ def _next_steps_tab(
         )
     ids.append("br-portfolio")
     nodes += ui.event_button("br-portfolio", "Open portfolio", OPEN_PORTFOLIO, {})
+
+    folder = links.get("folder")
+    if folder:
+        where = ui.storage_name(folder)
+        ids += ["br-open-folder", "br-open-folder-link"]
+        nodes += ui.open_url_button(
+            "br-open-folder",
+            f"Open folder in {where}",
+            folder,
+            icon="folder_open",
+            fallback=f"📁 [Open the opportunity folder in {where}]({folder})",
+        )
+        if links.get("business"):
+            ids += ["br-open-brief", "br-open-brief-link"]
+            nodes += ui.open_url_button(
+                "br-open-brief",
+                f"Open brief in {where}",
+                links["business"],
+                icon="description",
+                fallback=f"🔗 [Open the brief file in {where}]({links['business']})",
+            )
 
     if pack is not None:
         ids.append("br-workspace")
@@ -210,13 +232,15 @@ def build_brief_view(
     pack: Pack | None = None,
     skipped_stages: set[int] | None = None,
     portfolio: list[OpportunityEvaluation] | None = None,
+    links: dict[str, str] | None = None,
 ) -> list[dict[str, Any]]:
     """The full message sequence for the brief side panel.
 
     ``pack`` is passed only when the brief belongs to the current
     conversation; it adds the reopen-stage buttons, which act on this
     session. ``portfolio`` adds the other opportunities to the chart so the
-    user sees where this one lands.
+    user sees where this one lands. ``links`` (``folder``, ``business``)
+    adds buttons that open the stored files.
     """
     skipped = skipped_stages or set()
     ev = evaluate_opportunity(record, apply_to_record=False)
@@ -227,7 +251,7 @@ def build_brief_view(
     section_ids, nodes = _brief_sections(record, open_items)
     nodes.insert(0, ui.column("br-brief", section_ids))
     nodes += _scores_tab(ev)
-    nodes += _next_steps_tab(ev, pack, skipped)
+    nodes += _next_steps_tab(ev, pack, skipped, links or {})
 
     title = record.meta.initiative_name or "Untitled use case"
     sub_date = (record.meta.submission_date or date.today()).isoformat()

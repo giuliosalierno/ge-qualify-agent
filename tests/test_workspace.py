@@ -141,8 +141,14 @@ def test_documents_preview_in_sections_and_link_when_stored() -> None:
     by_id = _components(
         _view(links={"folder": "https://drive/f", "business": "https://drive/b"}, storage_label="Google Drive")
     )
-    assert "https://drive/f" in by_id["ws-doc-folder"]["text"]
-    assert "Open in Google Drive" in by_id["ws-doc-brief-link"]["text"]
+    assert by_id["ws-doc-folder"]["component"] == "MaterialButton"
+    assert by_id["ws-doc-folder"]["action"] == {
+        "functionCall": {"call": "openUrl", "args": {"url": "https://drive/f"}}
+    }
+    assert "https://drive/f" in by_id["ws-doc-folder-link"]["text"]  # text fallback
+    assert by_id["ws-doc-brief-open"]["label"] == "Open in Google Drive"
+    assert "https://drive/b" in by_id["ws-doc-brief-open-link"]["text"]
+    assert "ws-doc-brief-open" in by_id["ws-doc-brief"]["children"]
     assert by_id["ws-doc-brief"]["description"].startswith("Draft")
     headings = [c["text"] for k, c in by_id.items() if k.startswith("ws-doc-brief-s") and k.endswith("-h")]
     assert any("Summary" in h for h in headings)
@@ -154,6 +160,16 @@ def test_demo_mode_explains_there_are_no_files() -> None:
     by_id = _components(_view())
     assert "storage is off" in by_id["ws-doc-note"]["text"]
     assert not any(k.endswith("-link") for k in by_id)
+    assert not any(c["component"] == "MaterialButton" for c in by_id.values())
+
+
+def test_open_buttons_validate_and_use_verified_components() -> None:
+    from qualify.a2ui.catalog import GE_RENDER_VERIFIED
+
+    msgs = _view(links={"folder": "https://sp/f", "business": "https://sp/b"}, storage_label="SharePoint")
+    validate_surface(msgs)
+    used = {c["component"] for c in _components(msgs).values()}
+    assert used <= GE_RENDER_VERIFIED, used - GE_RENDER_VERIFIED
 
 
 def test_completed_intake_offers_the_technical_review() -> None:
@@ -308,6 +324,12 @@ def test_tech_review_start_opens_the_workspace_on_the_brief(sharepoint) -> None:
     assert by_id["ws-tabs"]["tabs"][0]["title"] == "Documents"
     assert by_id["ws-doc-brief"]["expanded"] is True
     assert "side panel" in out.reply_text
+    # The business intake's SharePoint folder and brief open from the panel.
+    links = out.session.document_links
+    assert "UC-2026-SB0001" in links["folder"]
+    assert links["business"].startswith(links["folder"]) and links["business"].endswith(".md")
+    assert by_id["ws-doc-folder"]["action"]["functionCall"]["args"]["url"] == links["folder"]
+    assert "SharePoint" in by_id["ws-doc-brief-open"]["label"]
     # Live extraction patches must keep going to the stage card.
     assert out.session.current_surface_id.startswith("qualify-s0-")
 
@@ -358,3 +380,21 @@ def test_brief_has_no_latex() -> None:
     rec.sizing.target_minutes_saved_per_task = 6
     md = render_business_brief(rec)
     assert "\\times" not in md and "\\text" not in md and "$U$" not in md
+
+
+def test_tech_review_start_without_storage_has_no_links(monkeypatch: pytest.MonkeyPatch) -> None:
+    from qualify.agent.handover import review_document_links
+
+    monkeypatch.setenv("STORAGE_PROVIDER", "none")
+    assert review_document_links("UC-2026-SB0001") == {}
+
+
+def test_review_document_links_survives_a_failing_connector(monkeypatch: pytest.MonkeyPatch) -> None:
+    from qualify.agent.handover import review_document_links
+
+    class Broken:
+        def list_opportunities(self, *a, **k):
+            raise RuntimeError("Graph down")
+
+    monkeypatch.setattr("qualify.connectors.sharepoint.get_sharepoint_connector", lambda: Broken())
+    assert review_document_links("UC-2026-SB0001") == {}

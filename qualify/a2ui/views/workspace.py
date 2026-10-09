@@ -480,13 +480,14 @@ def _documents_tab(
     where = storage_label or "storage"
 
     if links.get("folder"):
-        ids.append("ws-doc-folder")
-        nodes.append(
-            ui.text(
-                "ws-doc-folder",
-                f"📁 [Open the opportunity folder in {where}]({links['folder']})",
-                "body",
-            )
+        ids += ["ws-doc-folder", "ws-doc-folder-link"]
+        nodes += ui.open_url_button(
+            "ws-doc-folder",
+            f"Open folder in {where}",
+            links["folder"],
+            icon="folder_open",
+            primary=True,
+            fallback=f"📁 [Open the opportunity folder in {where}]({links['folder']})",
         )
     elif storage_label is None:
         ids.append("ws-doc-note")
@@ -513,9 +514,12 @@ def _documents_tab(
         pid = f"ws-doc-{doc.key}"
         children: list[str] = []
         if links.get(doc.link_key):
-            children.append(f"{pid}-link")
-            nodes.append(
-                ui.text(f"{pid}-link", f"🔗 [Open in {where}]({links[doc.link_key]})", "body")
+            children += [f"{pid}-open", f"{pid}-open-link"]
+            nodes += ui.open_url_button(
+                f"{pid}-open",
+                f"Open in {where}",
+                links[doc.link_key],
+                fallback=f"🔗 [Open in {where}]({links[doc.link_key]})",
             )
         if doc.markdown is None:
             children.append(f"{pid}-empty")

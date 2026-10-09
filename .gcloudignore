@@ -32,3 +32,17 @@ tests/
 
 # Click-to-Deploy Terraform (state holds generated secrets: never upload)
 click-to-deploy/
+
+# Local Terraform state, variables and provider binaries (Click-to-Deploy on
+# deploy/godemos). Ignored by git, but still on disk after a branch switch,
+# and they must never reach a Cloud Build upload.
+.terraform/
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+*.tfplan
+
+# Local mock SharePoint output and lint cache
+.data/
+.ruff_cache/
