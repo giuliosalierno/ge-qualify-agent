@@ -234,9 +234,33 @@ def test_pydantic_validation_still_fires_on_assignment(
     record: UseCaseRecord,
 ) -> None:
     """`validate_assignment=True` means a negative head count fails at the
-    write, not hours later at serialisation."""
-    with pytest.raises(Exception):
+    write, not hours later at serialisation — and fails as a CoercionError,
+    which is the only kind `apply_commit` turns into a per-field rejection."""
+    with pytest.raises(CoercionError):
         coerce_and_set(record, COUNT, "-5")
+    assert record.business.user_count is None
+
+
+@pytest.mark.parametrize("path", [COUNT, RATE, MINUTES])
+@pytest.mark.parametrize(
+    "raw", ["-5", -5, "1e400", "inf", "-inf", "nan", "NaN", float("inf"), 10**400]
+)
+def test_out_of_range_and_non_finite_numbers_raise_coercion_error(
+    record: UseCaseRecord, path: str, raw: object
+) -> None:
+    """ValidationError, OverflowError and plain ValueError used to escape."""
+    with pytest.raises(CoercionError):
+        coerce_and_set(record, path, raw)
+    assert get_by_path(record, path) is None
+
+
+def test_non_finite_float_is_rejected_by_the_schema_too() -> None:
+    """Belt and braces: a direct assignment cannot store infinity either."""
+    from pydantic import ValidationError
+
+    r = UseCaseRecord(meta=Meta(record_id="uc-inf"))
+    with pytest.raises(ValidationError):
+        r.sizing.task_frequency_weekly = float("inf")
 
 
 def test_blank_clears_rather_than_zeroes(record: UseCaseRecord) -> None:
