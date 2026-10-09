@@ -119,3 +119,15 @@ def test_portfolio_uses_record_store_when_sharepoint_unavailable(store: LocalRec
 def test_portfolio_still_offers_sign_in_when_nothing_is_finished(store: LocalRecordStore) -> None:
     out = execute_turn(store, TurnInput(context_id="ctx-coe", user_text="portfolio review"))
     assert "sign in with Microsoft" in out.reply_text
+
+
+def test_portfolio_review_does_not_write_records_back(store: LocalRecordStore) -> None:
+    """Scoring a snapshot must not overwrite records the other flows own."""
+    session = _finished("ctx-1", "Invoice Triage")
+    store.save(session)
+    path = store._record_path(session.record.meta.record_id)
+    before = path.read_text(encoding="utf-8")
+
+    execute_turn(store, TurnInput(context_id="ctx-coe", user_text="portfolio review"))
+
+    assert path.read_text(encoding="utf-8") == before

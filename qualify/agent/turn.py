@@ -1691,13 +1691,9 @@ def _render_portfolio(
     from_record_store = connector is None
     summary = evaluate_portfolio(items)
 
-    # Persist updated CoE scoring fields back to RecordStore if configured
-    if hasattr(store, "save_record"):
-        for ev in summary.evaluations:
-            try:
-                store.save_record(ev.record)  # type: ignore[attr-defined]
-            except Exception:
-                pass
+    # The CoE scores are recomputed on every view and shown, not persisted:
+    # writing every listed record back from this snapshot raced the business
+    # and technical flows and could erase their newer edits.
 
     # Remember each folder's address in the record store, so the open buttons
     # also work in conversations that are not signed in.
