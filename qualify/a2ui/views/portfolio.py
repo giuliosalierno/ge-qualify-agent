@@ -58,64 +58,65 @@ def needs_tech_review(ev: OpportunityEvaluation) -> bool:
 #: ``scoring.portfolio._score_business_value``, ``_score_feasibility`` and
 #: ``_assign_quadrant``; change both together.
 #:
-#: Every line is a ``body`` Text: GE renders markdown in ``body`` but shows
-#: it raw in ``caption``.
+#: Rendered inside a collapsible MaterialExpansionPanel using ``body`` Text
+#: (GE renders markdown in ``body`` but shows it raw in ``caption``).
 _SCORING_NOTES: tuple[tuple[str, str], ...] = (
-    ("pf-how-title", "**How the scores are computed**"),
-    ("pf-how-value-h", "**Value (1–5): how much time it saves**"),
     (
         "pf-how-value",
-        "Annual hours saved across the team: 40 hrs → 2 · 350 → 3 · "
-        "1,750 → 4 · 7,500+ → 5. Up to +0.6 more for 250+ users and clearly "
-        "described impacts. If hours aren't estimated yet, the user count is "
-        "used instead.",
-    ),
-    ("pf-how-feas-h", "**Feasibility (1–5): how easy it is to build**"),
-    (
-        "pf-how-feas-before",
-        "**Before the technical review**, the score is an indicative estimate "
-        "(shown as `4/5*`), based on the build approach the agent recommends: "
-        "no-code assistant → 5 · low-code Workflow Builder agent → 4 · agent "
-        "plus one custom connector (MCP server) → 3 · custom multi-system "
-        "agent (ADK) → 2.",
+        "**📈 Value (1–5) — Annual Time Saved**\n\n"
+        "- **5 / 5:** 7,500+ hrs/yr saved across the team\n"
+        "- **4 / 5:** 1,750 – 7,499 hrs/yr\n"
+        "- **3 / 5:** 350 – 1,749 hrs/yr\n"
+        "- **2 / 5:** 40 – 349 hrs/yr\n"
+        "- **1 / 5:** Under 40 hrs/yr\n"
+        "- _Modifiers:_ Up to **+0.6** for 250+ users and quantified business impacts. "
+        "If hours aren't sized yet, user count is used as a proxy.",
     ),
     (
-        "pf-how-feas-sources",
-        "The approach depends mostly on the data sources: each is checked "
-        "against the official Gemini Enterprise connector list. A source "
-        "without a built-in connector needs a custom one, which lowers the "
-        "score.",
+        "pf-how-feas",
+        "**🛠️ Feasibility (1–5) — Delivery Readiness**\n\n"
+        "- **Before Phase 2 (indicative, shown as `4/5*`):** Estimated from the recommended "
+        "build tier and official Gemini Enterprise connector coverage:\n"
+        "  - **5 / 5:** No-code Assistant (built-in connectors)\n"
+        "  - **4 / 5:** Low-code Workflow Builder agent\n"
+        "  - **3 / 5:** Agent + 1 custom MCP connector\n"
+        "  - **2 / 5:** Custom multi-system ADK agent\n"
+        "- **After Phase 2 (verified):** Replaced by the Technical Review readiness score "
+        "(**85%+ → 5** · **70%+ → 4** · **50%+ → 3** · **30%+ → 2** · **<30% → 1**).\n"
+        "- **Hard blocker:** Any data-sovereignty or cloud-processing blocker caps Feasibility at **1 / 5**.",
     ),
-    (
-        "pf-how-feas-after",
-        "**After the technical review**, its readiness score replaces the "
-        "estimate: 85%+ → 5 · 70%+ → 4 · 50%+ → 3 · 30%+ → 2 · lower → 1.",
-    ),
-    (
-        "pf-how-feas-blocker",
-        "**A hard blocker** (for example, data can't leave the network, or "
-        "cloud processing isn't allowed) sets feasibility to 1.",
-    ),
-    ("pf-how-quadrant-h", "**Quadrant**"),
     (
         "pf-how-quadrant",
-        "Quick Win: value 3+ and feasibility 4–5 · Strategic Bet: value 3+ "
-        "and feasibility 2–3 · Departmental Niche: value 1–2 and feasibility "
-        "4–5 · Deprioritized: anything else, or any hard blocker.",
-    ),
-    ("pf-how-rank-h", "**Order**"),
-    (
-        "pf-how-rank",
-        "By quadrant (Quick Wins first), then 60% value + 40% feasibility, "
-        "then hours saved. Thresholds and weights are CoE defaults, not "
-        "industry benchmarks.",
+        "**🧭 Quadrant Assignment & Ranking Order**\n\n"
+        "- **🟢 Quick Wins:** Value 3–5 and Feasibility 4–5\n"
+        "- **🔵 Strategic Bets:** Value 3–5 and Feasibility 2–3\n"
+        "- **🟡 Departmental Niche:** Value 1–2 and Feasibility 4–5\n"
+        "- **⚪ Deprioritized:** Lower scores or any hard blocker\n"
+        "- **Ranking order:** Grouped by quadrant (Quick Wins first), then ranked by composite score "
+        "(**60% value + 40% feasibility**), then annual hours saved.",
     ),
 )
 _SCORING_NOTE_IDS = [cid for cid, _ in _SCORING_NOTES]
 
 
 def _scoring_note() -> list[ui.Component]:
-    return [ui.text(cid, value, "body") for cid, value in _SCORING_NOTES]
+    children: list[str] = []
+    nodes: list[ui.Component] = []
+    for idx, (cid, value) in enumerate(_SCORING_NOTES):
+        if idx > 0:
+            rule_id = f"{cid}-rule"
+            children.append(rule_id)
+            nodes.append(ui.divider(rule_id))
+        children.append(cid)
+        nodes.append(ui.text(cid, value, "body"))
+    panel = ui.panel(
+        "pf-how-panel",
+        "ℹ️ Scoring & Quadrant Guide",
+        children,
+        description="How Value (1–5), Feasibility (1–5), and Quadrant rankings are calculated",
+        expanded=False,
+    )
+    return [panel, *nodes]
 
 
 def _ranked_rows(summary: PortfolioSummary) -> list[dict[str, Any]]:
@@ -216,8 +217,7 @@ def build_portfolio_view(
 
     # --- Ranked tab -----------------------------------------------------------
     nodes += [
-        ui.column("pf-ranked", ["pf-table", "pf-how-rule", *_SCORING_NOTE_IDS]),
-        ui.divider("pf-how-rule"),
+        ui.column("pf-ranked", ["pf-table", "pf-how-panel"]),
         *_scoring_note(),
     ]
     nodes.append(

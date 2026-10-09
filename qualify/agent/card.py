@@ -8,6 +8,7 @@ from __future__ import annotations
 from a2a.types import (
     AgentCapabilities,
     AgentCard,
+    AgentExtension,
     AgentSkill,
 )
 from a2ui.a2a.extension import get_a2ui_agent_extension
@@ -17,6 +18,13 @@ from qualify.a2ui.catalog import catalog_id
 # The SDK constant is "0.9" while the wire version is "v0.9".
 A2UI_SDK_VERSION = "0.9"
 WIRE_VERSION = "v0.9"
+
+STARTER_PROMPTS_EXTENSION_URI = (
+    "https://www.googleapis.com/gemini-enterprise/a2a/extensions/starter_prompts/v1"
+)
+STARTER_PROMPTS = [
+    "Launch the agent",
+]
 
 
 def build_agent_card(base_url: str) -> AgentCard:
@@ -31,6 +39,11 @@ def build_agent_card(base_url: str) -> AgentCard:
         A2UI_SDK_VERSION,
         False,  # accepts_inline_catalogs - only use GE composite catalog by ID
         [catalog_id()],
+    )
+    starter_prompts_ext = AgentExtension(
+        uri=STARTER_PROMPTS_EXTENSION_URI,
+        description="Google Gemini Enterprise starter prompts extension to show contextually aware prompts on chat start.",
+        params={"prompts": STARTER_PROMPTS},
     )
 
     skill = AgentSkill(
@@ -51,7 +64,7 @@ def build_agent_card(base_url: str) -> AgentCard:
     )
 
     return AgentCard(
-        name="GE Use Case Qualification Agent",
+        name="Qualification Agent",
         description=(
             "Gemini Enterprise qualification agent. Conducts business intake and "
             "sizing interviews with an interactive A2UI living form."
@@ -60,6 +73,9 @@ def build_agent_card(base_url: str) -> AgentCard:
         version="0.1.0",
         default_input_modes=["text", "text/plain"],
         default_output_modes=["text", "text/plain"],
-        capabilities=AgentCapabilities(streaming=True, extensions=[extension]),
+        capabilities=AgentCapabilities(
+            streaming=True,
+            extensions=[extension, starter_prompts_ext],
+        ),
         skills=[skill],
     )

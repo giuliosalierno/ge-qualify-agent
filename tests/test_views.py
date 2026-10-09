@@ -390,13 +390,18 @@ def test_ranked_list_explains_the_scoring() -> None:
     by_id = _components(build_portfolio_view(_summary(), "s"))
     assert by_id["pf-tabs"]["tabs"][0]["child"] == "pf-ranked"
     children = by_id["pf-ranked"]["children"]
-    assert children[0] == "pf-table"
-    text = " ".join(by_id[c].get("text", "") for c in children[1:])
+    assert children == ["pf-table", "pf-how-panel"]
+    panel = by_id["pf-how-panel"]
+    assert panel["component"] == "MaterialExpansionPanel"
+    assert panel["expanded"] is False
+    panel_children = panel["children"]
+    text = " ".join(by_id[c].get("text", "") for c in panel_children if "text" in by_id[c])
     for term in ("Value (1–5)", "Feasibility (1–5)", "indicative", "Quadrant", "60% value"):
         assert term in text
     # GE renders markdown in body Text but shows it raw in caption.
-    for c in children[1:]:
-        assert by_id[c].get("variant") != "caption", c
+    for c in panel_children:
+        if by_id[c]["component"] == "Text":
+            assert by_id[c].get("variant") != "caption", c
     assert "\\*" not in text
 
 
