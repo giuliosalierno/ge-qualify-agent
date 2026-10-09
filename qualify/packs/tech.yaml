@@ -23,9 +23,9 @@ option_sets:
   # 1.4. PASS needs both a frequency and a mechanism; naming one without the
   # other is the WARN case the subcriterion describes.
   data_freshness:
-    - { label: "Sync schedule and SLA both documented", value: sla_documented }
-    - { label: "Refresh frequency known, sync mechanism unconfirmed", value: frequency_only }
-    - { label: "Real-time expected, no event stream identified", value: realtime_assumed }
+    - { label: "Sync schedule and SLA both documented", value: sla_documented, hint: "a schedule AND a sync mechanism, such as 'CDC stream every 5 minutes'" }
+    - { label: "Refresh frequency known, sync mechanism unconfirmed", value: frequency_only, hint: "'hourly', 'nightly', 'refreshed daily' with no mechanism named" }
+    - { label: "Real-time expected, no event stream identified", value: realtime_assumed, hint: "'real time', 'live', 'always current' with no event stream or sync named" }
     - { label: "Not yet discussed", value: unknown }
 
   # -- 2. Network transit ---------------------------------------------------
@@ -60,8 +60,8 @@ option_sets:
     - { label: "Not yet confirmed", value: unknown }
 
   service_auth:
-    - { label: "Workload Identity Federation", value: wif }
-    - { label: "Service account keys with vault rotation", value: sa_keys_rotated }
+    - { label: "Workload Identity Federation", value: wif, hint: "'Workload Identity', 'keyless', federated workload credentials" }
+    - { label: "Service account keys with vault rotation", value: sa_keys_rotated, hint: "service account keys kept in a vault or rotated" }
     - { label: "OAuth client credentials", value: oauth_client }
     - { label: "Long-lived static tokens", value: static_tokens }
     - { label: "Not yet confirmed", value: unknown }
@@ -98,13 +98,13 @@ option_sets:
 
   # -- 4. Grounding and models ---------------------------------------------
   citation_policy:
-    - { label: "Strict source attribution required and supported", value: strict }
-    - { label: "Loose attribution acceptable", value: loose }
+    - { label: "Strict source attribution required and supported", value: strict, hint: "'answers must cite sources', 'needs citations', 'show where it came from'" }
+    - { label: "Loose attribution acceptable", value: loose, hint: "'citations would be nice', 'sources optional'" }
     - { label: "No citation requirement stated", value: none }
 
   query_volume:
-    - { label: "Target QPS estimated", value: qps_estimated }
-    - { label: "Rough volume only", value: rough }
+    - { label: "Target QPS estimated", value: qps_estimated, hint: "a number of queries per second, hour or day, such as '2,000 a day'" }
+    - { label: "Rough volume only", value: rough, hint: "'a lot', 'heavy use' with no number" }
     - { label: "Unbounded or unknown concurrency", value: unbounded }
 
   latency_sla:

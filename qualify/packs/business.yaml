@@ -18,18 +18,18 @@ option_sets:
   # to learn which systems are in play, not to specify the integration. The
   # technical review pack goes deeper.
   data_sources:
-    - { label: Google Drive, value: google_drive }
-    - { label: SharePoint, value: sharepoint }
+    - { label: Google Drive, value: google_drive, hint: "Google Docs, Sheets, shared drives" }
+    - { label: SharePoint, value: sharepoint, hint: "SharePoint, OneDrive, Teams files" }
     - { label: Confluence, value: confluence }
     - { label: Jira, value: jira }
     - { label: ServiceNow, value: servicenow }
     - { label: Salesforce, value: salesforce }
     - { label: SAP, value: sap }
     - { label: BigQuery, value: bigquery }
-    - { label: Cloud Storage bucket, value: gcs }
-    - { label: Internal REST API, value: internal_api }
+    - { label: Cloud Storage bucket, value: gcs, hint: "files in a Google Cloud Storage bucket" }
+    - { label: Internal REST API, value: internal_api, hint: "an in-house service or API" }
     - { label: Public website, value: public_web }
-    - { label: Email or calendar, value: workspace_mail }
+    - { label: Email or calendar, value: workspace_mail, hint: "Gmail, Outlook, Exchange, a shared mailbox, calendars" }
     - { label: Other (specify below), value: other }
     - { label: Not sure yet, value: unknown }
 
