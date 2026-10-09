@@ -38,6 +38,19 @@ resource "google_artifact_registry_repository_iam_member" "build_writer" {
   member     = "serviceAccount:${google_service_account.build[0].email}"
 }
 
+# IAM grants on a brand-new service account take a while to propagate. Without
+# this pause the first build can fail with "could not resolve source" (the
+# build SA cannot yet read the uploaded source tarball).
+resource "time_sleep" "after_build_iam" {
+  count = var.container_image == "" ? 1 : 0
+
+  create_duration = "60s"
+  depends_on = [
+    google_artifact_registry_repository_iam_member.build_writer,
+    google_project_iam_member.build,
+  ]
+}
+
 resource "null_resource" "build_image" {
   count = var.container_image == "" ? 1 : 0
 
@@ -47,15 +60,27 @@ resource "null_resource" "build_image" {
 
   provisioner "local-exec" {
     working_dir = local.repo_root
+    # Retries only the IAM-propagation failure ("could not resolve source");
+    # any other build error fails immediately.
     command     = <<-EOT
-      set -euo pipefail
-      gcloud builds submit . \
-        --project="${var.project_id}" \
-        --region="${var.region}" \
-        --config="click-to-deploy/demo/cloudbuild.yaml" \
-        --substitutions="_IMAGE=${local.built_image}" \
-        --service-account="projects/${var.project_id}/serviceAccounts/${google_service_account.build[0].email}" \
-        --quiet
+      set -uo pipefail
+      log="$(mktemp)"
+      trap 'rm -f "$log"' EXIT
+      for attempt in 1 2 3 4; do
+        gcloud builds submit . \
+          --project="${var.project_id}" \
+          --region="${var.region}" \
+          --config="click-to-deploy/demo/cloudbuild.yaml" \
+          --substitutions="_IMAGE=${local.built_image}" \
+          --service-account="projects/${var.project_id}/serviceAccounts/${google_service_account.build[0].email}" \
+          --quiet 2>&1 | tee "$log"
+        rc=$${PIPESTATUS[0]}
+        [ "$rc" -eq 0 ] && exit 0
+        grep -q "could not resolve source" "$log" || exit "$rc"
+        echo "Build SA permissions not propagated yet (attempt $attempt); retrying in 30s..."
+        sleep 30
+      done
+      exit "$rc"
     EOT
     interpreter = ["/bin/bash", "-c"]
   }
@@ -64,5 +89,6 @@ resource "null_resource" "build_image" {
     google_artifact_registry_repository_iam_member.build_writer,
     google_project_iam_member.build,
     time_sleep.after_identities,
+    time_sleep.after_build_iam,
   ]
 }
