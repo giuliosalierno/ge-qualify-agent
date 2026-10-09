@@ -497,13 +497,21 @@ _SOURCE_LABELS: dict[str, str] = {
 }
 
 
+def _source_label(slug: str) -> str:
+    """Display name for a data source slug: curated label, then the pack's own."""
+    if slug in _SOURCE_LABELS:
+        return _SOURCE_LABELS[slug]
+    from qualify.packs.loader import load_pack  # noqa: PLC0415
+
+    for option in load_pack("business").option_sets.get("data_sources", []):
+        if option.value == slug:
+            return option.label
+    return slug.replace("_", " ").title()
+
+
 def format_source_names(sources: list[str], other: str | None = None) -> str:
     """Formats Phase 1 data source slugs into human-readable display names."""
-    items = [
-        _SOURCE_LABELS.get(s, s.replace("_", " ").title())
-        for s in sources
-        if s != "other"
-    ]
+    items = [_source_label(s) for s in sources if s != "other"]
     if other:
         items.append(other)
     return ", ".join(items)

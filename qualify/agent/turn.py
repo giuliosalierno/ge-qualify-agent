@@ -472,7 +472,7 @@ def _run_turn(
                     "Here is what you can do next:\n"
                     "- **Update or fill skipped stages**: Click any **Reopen Stage** / **Fill Skipped Stage** button on the summary card above.\n"
                     "- **Technical Architecture Review (Phase 2)**: Type **`technical review`** (or **`show pending documents to review`**) to evaluate a qualified opportunity.\n"
-                    "- **CoE Portfolio Prioritization**: Type **`portfolio review`** to score and rank all SharePoint opportunities.\n"
+                    "- **CoE Portfolio Prioritization**: Type **`portfolio review`** to score and rank every qualified opportunity.\n"
                     "- **Start a New Qualification**: Type **`start a new qualification`** to begin a new business intake."
                 ),
                 a2ui_messages=[],
@@ -553,9 +553,24 @@ def _run_turn(
     reply_text = _generate_chat_reply(
         session, stage, chat_client, turn_input.user_text, turn_input.conversation_history
     )
+    unmentioned = [
+        f for f in missing_required(session.record, stage)
+        if f.label.lower() not in reply_text.lower()
+    ]
+    if unmentioned and "continue" in reply_text.lower():
+        # The chat model sometimes calls the stage complete while a required
+        # field is still empty on the card; the gate would then refuse the
+        # Continue click it just invited. Say plainly what is still needed.
+        still = ", ".join(f"**{f.label}**" for f in unmentioned)
+        reply_text = f"{reply_text}\n\n_Still needed on the card before **Continue**: {still}._"
     if is_first_stage_open and not session.welcome_shown:
         session.welcome_shown = True
-        reply_text = f"{_welcome_banner()}\n\n---\n\n{reply_text}"
+        if welcome_menu_enabled():
+            # A use case typed straight in: open the intake with one line of
+            # orientation, not the full menu text in front of the question.
+            reply_text = f"{_INTAKE_FROM_CHAT_NOTE}\n\n{reply_text}"
+        else:
+            reply_text = f"{_welcome_banner()}\n\n---\n\n{reply_text}"
 
     store.save(session)
     return TurnOutput(
@@ -1060,6 +1075,11 @@ def _welcome_menu_messages(session: Session) -> list[dict[str, Any]]:
 
     return build_welcome_menu(session.panel_surface_id("welcome"))
 
+
+_INTAKE_FROM_CHAT_NOTE = (
+    "📋 Starting a **Business Value Intake** for this idea. "
+    "_Type `help` for the other workflows (technical review, portfolio)._"
+)
 
 _WELCOME_MENU_INTRO = (
     "### 👋 Welcome to the Gemini Enterprise AI Qualification & CoE Agent\n"
