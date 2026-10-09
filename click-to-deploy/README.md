@@ -30,7 +30,7 @@ Takes about 10–15 minutes, mostly the image build.
 All companies and people in the seed data are fictional (Cymbal).
 
 1. Open the Gemini Enterprise app (see the `gemini_enterprise_console_url`
-   output) and pick **GE Use Case Qualification Agent**.
+   output) and pick **GE Qualification Agent**.
 2. **Phase 1, business intake.** Type: `I want to qualify an agent that drafts
    replies to supplier invoice queries for our 30-person AP team`. Answer the
    form one stage per turn. At the end you get a Business Value Brief with

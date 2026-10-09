@@ -65,7 +65,7 @@ import json
 
 card_text = open("$CARD_FILE").read()
 payload = {
-    "displayName": "GE Use Case Qualification Agent",
+    "displayName": "GE Qualification Agent",
     "description": (
         "Qualifies business use cases for Gemini Enterprise, collects workflow parameters "
         "across a 4-stage interactive A2UI interview, scores complexity and feasibility, "

@@ -76,6 +76,7 @@ starter_prompts = [
 ]
 
 card_obj = json.loads(open(card_path).read())
+card_obj["name"] = display_name
 exts = card_obj.setdefault("capabilities", {}).setdefault("extensions", [])
 sp_uri = "https://www.googleapis.com/gemini-enterprise/a2a/extensions/starter_prompts/v1"
 exts = [e for e in exts if e.get("uri") != sp_uri]
@@ -125,8 +126,6 @@ import json, sys
 path, name, url = sys.argv[1:]
 data = json.load(open(path))
 for a in data.get("agents", []):
-    if a.get("displayName") != name:
-        continue
     try:
         card_url = json.loads(a["a2aAgentDefinition"]["jsonAgentCard"]).get("url", "")
     except (KeyError, TypeError, ValueError):
@@ -134,9 +133,10 @@ for a in data.get("agents", []):
     if card_url.rstrip("/") == url.rstrip("/"):
         print("MATCH", a["name"])
         sys.exit(0)
-    print(f"Agent '{name}' already exists ({a['name']}) but points to {card_url or 'an unknown URL'}, "
-          f"not {url}. Set a different agent_display_name.", file=sys.stderr)
-    sys.exit(3)
+    if a.get("displayName") == name:
+        print(f"Agent '{name}' already exists ({a['name']}) but points to {card_url or 'an unknown URL'}, "
+              f"not {url}. Set a different agent_display_name.", file=sys.stderr)
+        sys.exit(3)
 print("NEXT", data.get("nextPageToken", ""))
 PY
     read -r kind value < "$WORK/match.txt" || true

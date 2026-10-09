@@ -36,7 +36,7 @@ with open("$CARD_FILE") as f:
     card_text = f.read()
 
 payload = {
-    "displayName": "GE Use Case Qualification Agent",
+    "displayName": "GE Qualification Agent",
     "description": (
         "Qualifies business use cases for Gemini Enterprise, collects workflow parameters "
         "across a 4-stage interactive A2UI interview, scores complexity and feasibility, "
