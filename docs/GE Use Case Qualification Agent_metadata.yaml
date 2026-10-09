@@ -23,7 +23,6 @@ purpose: |
   Enterprise AI Centers of Excellence (CoEs) receive dozens of generative AI requests across business units, but rely on disconnected spreadsheets and repetitive workshops to evaluate ROI and technical feasibility.
 
   The GE Use Case Qualification Agent embeds the GE App Use Case Discovery Framework natively inside Gemini Enterprise. Across three guided workflows—Business Value Intake, Technical Architecture Review, and CoE Portfolio Prioritization—stakeholders converse naturally while the agent populates interactive A2UI forms, computes annual hours saved, assigns Capability Levels 1–6 with anti-overcommitment rules, evaluates 22 technical readiness subcriteria, and segments the backlog into actionable quadrants.
-  * **Built with Demo Engineering Skills**: Created end-to-end with the [go/demo-eng-skills](https://demospace.corp.goog/demo/2155) Demo Engineering Skills library
 
 
 business_value: |
@@ -36,9 +35,8 @@ business_value: |
 technical_value: |
   * **Native A2A + Interactive A2UI v0.8 Architecture:** Streams JSON-RPC events from Cloud Run to Gemini Enterprise to render live side-panel forms, tabs, tables, and Vega-Lite quadrant charts alongside chat.
   * **Evidence-Gated Gemini Extraction & Deterministic Scoring:** Pairs Gemini Flash structured output with verbatim quote verification and deterministic Python engines for tiering and 22-point readiness scoring.
-  * **Multi-Actor Optimistic Concurrency:** Persists records in Cloud Storage using three-way merges and generation preconditions so concurrent business and technical sessions never overwrite each other.
+  * **Multi-Actor Optimistic Concurrency & SharePoint Integration:** Persists records in Cloud Storage using three-way merges and generation preconditions so concurrent business and technical sessions never overwrite each other, with optional Microsoft SharePoint integration available to publish Business Value Briefs, Technical Dossiers, and Portfolio Reports directly to enterprise document libraries.
   * **Zero-Trust Click-to-Deploy:** Pinned SHA-256 supply chain, non-root container, Discovery Engine service-agent IAM enforcement, and automated GE license provisioning.
-  * **Built with Demo Engineering Skills**: Architected, built, and validated with the [go/demo-eng-skills](https://demospace.corp.goog/demo/2155) Demo Engineering Skills library
 
 
 
@@ -108,14 +106,6 @@ artifacts:
 
 
     link: https://github.com/cloud-gtm/ge-qualification-agent/releases/latest/download/ge_tech_review.zip
-
-  - title: Demo Engineering Skills Library
-
-
-    type: other_unspecified
-
-
-    link: https://demospace.corp.goog/demo/2155
 
 # - title: Overview Slide Deck
 #

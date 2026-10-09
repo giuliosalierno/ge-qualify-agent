@@ -23,7 +23,7 @@ manifest:
       on Vertex AI, computes deterministic capability tiers (Levels 1-6), 22-point technical
       readiness scores, and portfolio quadrants, and persists records to Cloud Storage with
       3-way merge optimistic concurrency.
-    source_repo: github.com/giuliosalierno/ge-qualify-agent
+    source_repo: github.com/cloud-gtm/ge-qualification-agent
 
   industry_and_use_case:
     parameterizable: true
