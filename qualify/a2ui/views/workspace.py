@@ -144,28 +144,29 @@ def stage_statuses(
 # ---------------------------------------------------------------------------
 
 
-def _progress_bar(done: int, total: int) -> str:
-    pct = round(100 * done / total) if total else 0
-    return f"{'▰' * done}{'▱' * (total - done)}  {pct}%"
-
-
 def _stage_description(st: StageStatus) -> str:
     n = len(st.answers)
-    answers = f"{n} answer{'s' if n != 1 else ''}" if n else "no answers yet"
+    answers = f"{n} answer{'s' if n != 1 else ''}"
     if st.state == "confirmed":
-        return f"Confirmed · {answers}" + (f" · {len(st.missing)} missing" if st.missing else "")
+        return f"Confirmed · {answers}" + (f" · {len(st.missing)} open" if st.missing else "")
     if st.state == "skipped":
         return "Skipped · needs follow-up"
     if st.state == "current":
-        return f"In progress · {answers}" + (
-            f" · {len(st.missing)} required missing" if st.missing else ""
+        if n == 0:
+            return (
+                f"In progress · {len(st.missing)} required fields"
+                if st.missing
+                else "In progress"
+            )
+        return f"In progress · {answers} captured" + (
+            f" · {len(st.missing)} required left" if st.missing else " · ready to confirm"
         )
     return "Not started"
 
 
 def _stage_body(st: StageStatus) -> str:
-    lines = [f"- **{label}:** {value}" for label, value in st.answers]
-    lines += [f"- **{label}:** _missing (required)_" for label in st.missing]
+    lines = [f"- ✅ **{label}:** {value}" for label, value in st.answers]
+    lines += [f"- ☐ **{label}** _(required)_" for label in st.missing]
     if not lines:
         return "_Nothing captured yet._"
     return "\n".join(lines)
@@ -190,40 +191,8 @@ def _progress_tab(pack: Pack, statuses: list[StageStatus], complete: bool) -> li
     done = sum(1 for s in statuses if s.state in ("confirmed", "skipped"))
     n_skipped = sum(1 for s in statuses if s.state == "skipped")
 
-    headline = (
-        f"All {total} stages done" if complete else f"{done} of {total} stages done"
-    )
-    bar = _progress_bar(done, total) + (f" · {n_skipped} skipped" if n_skipped else "")
-
-    # Stages not reached yet are summarised in one line: listing every field
-    # of every future stage on the first turn reads as a wall of failures.
-    seen = [s for s in statuses if s.state != "todo"]
-    gaps = [
-        f"- **{s.idx + 1}. {s.stage.label}:** {', '.join(s.missing)}"
-        for s in seen
-        if s.missing
-    ]
-    gaps += [
-        f"- **{s.idx + 1}. {s.stage.label}:** skipped, not yet confirmed"
-        for s in seen
-        if s.state == "skipped" and not s.missing
-    ]
-    n_todo = len(statuses) - len(seen)
-    if n_todo:
-        gaps.append(f"- {n_todo} more stage{'s' if n_todo != 1 else ''} not started yet")
-    if gaps:
-        title = "⚠️ **Still open**" if complete else "⚠️ **Missing before you submit**"
-        missing_text = title + "\n\n" + "\n".join(gaps)
-    else:
-        missing_text = "✅ Every required answer is captured."
-
-    ids = ["ws-pg-head", "ws-pg-bar", "ws-pg-missing", "ws-pg-rule"]
-    nodes: list[ui.Component] = [
-        ui.text("ws-pg-head", headline, "h4"),
-        ui.text("ws-pg-bar", bar, "caption"),
-        ui.text("ws-pg-missing", missing_text, "body"),
-        ui.divider("ws-pg-rule"),
-    ]
+    ids: list[str] = []
+    nodes: list[ui.Component] = []
 
     first_open = next((s.idx for s in statuses if s.state == "skipped"), None)
     for st in statuses:
@@ -245,6 +214,46 @@ def _progress_tab(pack: Pack, statuses: list[StageStatus], complete: bool) -> li
         nodes.append(ui.text(body_id, _stage_body(st), "body"))
         nodes += btn_nodes
         ids.append(sid)
+
+    # Stages not reached yet are summarised in one line: listing every field
+    # of every future stage on the first turn reads as a wall of failures.
+    seen = [s for s in statuses if s.state != "todo"]
+    gaps = [
+        f"- **{s.idx + 1}. {s.stage.label}:** {', '.join(s.missing)}"
+        for s in seen
+        if s.missing
+    ]
+    gaps += [
+        f"- **{s.idx + 1}. {s.stage.label}:** skipped, not yet confirmed"
+        for s in seen
+        if s.state == "skipped" and not s.missing
+    ]
+    n_todo = len(statuses) - len(seen)
+    if n_todo:
+        gaps.append(f"- {n_todo} more stage{'s' if n_todo != 1 else ''} not started yet")
+    if gaps:
+        title = "⚠️ **Still open**" if complete else "⚠️ **Missing before you submit**"
+        missing_text = title + "\n\n" + "\n".join(gaps)
+        summary_title = "⚠️ Open items before submit" if complete else "📋 Submission readiness"
+        summary_desc = f"{done} of {total} stages done" + (
+            f" · {n_skipped} skipped" if n_skipped else ""
+        )
+    else:
+        missing_text = "✅ Every required answer is captured."
+        summary_title = "✅ Ready to submit"
+        summary_desc = f"All {total} stages complete"
+
+    ids.append("ws-pg-summary")
+    nodes += [
+        ui.panel(
+            "ws-pg-summary",
+            summary_title,
+            ["ws-pg-missing"],
+            description=summary_desc,
+            expanded=bool(complete and gaps),
+        ),
+        ui.text("ws-pg-missing", missing_text, "body"),
+    ]
 
     nodes.insert(0, ui.column("ws-progress", ids))
     return nodes
@@ -275,12 +284,19 @@ def _checklist_tab(record: UseCaseRecord) -> list[ui.Component]:
     else:
         block = "✅ No blockers found."
 
-    ids = ["ws-ck-head", "ws-ck-meta", "ws-ck-block", "ws-ck-rule"]
+    ids = ["ws-ck-summary"]
     nodes: list[ui.Component] = [
+        ui.panel(
+            "ws-ck-summary",
+            f"📊 Technical readiness — {score.readiness_pct}% ({score.earned}/{score.maximum})",
+            ["ws-ck-head", "ws-ck-meta", "ws-ck-block"],
+            description=f"Feasibility: {score.feasibility_profile} · Key 2: {key2}",
+            expanded=bool(score.blockers or score.unconfirmed_blockers),
+        ),
         ui.text(
             "ws-ck-head",
-            f"Technical readiness {score.readiness_pct}% ({score.earned}/{score.maximum})",
-            "h4",
+            f"**Technical readiness {score.readiness_pct}% ({score.earned}/{score.maximum})**",
+            "body",
         ),
         ui.text(
             "ws-ck-meta",
@@ -289,7 +305,6 @@ def _checklist_tab(record: UseCaseRecord) -> list[ui.Component]:
             "caption",
         ),
         ui.text("ws-ck-block", block, "body"),
-        ui.divider("ws-ck-rule"),
     ]
 
     for n, (dimension, rows) in enumerate(score.by_dimension().items(), start=1):
@@ -627,11 +642,11 @@ def build_workspace_view(
     rid = record.meta.record_id
     done = sum(1 for s in statuses if s.state in ("confirmed", "skipped"))
     phase = "Technical review" if is_tech else "Business intake"
-    status = "complete" if complete else f"{done}/{len(statuses)} stages done"
+    status = "complete" if complete else f"{done} of {len(statuses)} stages done"
 
     nodes += [
         ui.text("ws-title", name, "h3"),
-        ui.text("ws-meta", f"`{rid}` · {phase} · {status}", "caption"),
+        ui.text("ws-meta", f"{rid} · {phase} · {status}", "caption"),
         ui.tabs("ws-tabs", [tab_items[k] for k in order]),
     ]
     root = ui.canvas_root(

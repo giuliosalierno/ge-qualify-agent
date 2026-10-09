@@ -124,11 +124,19 @@ def test_stage_states_and_buttons() -> None:
 
 def test_missing_required_fields_are_listed() -> None:
     by_id = _components(_view())
+    assert by_id["ws-pg-summary"]["component"] == "MaterialExpansionPanel"
+    assert by_id["ws-pg-summary"]["expanded"] is False
+    assert by_id["ws-progress"]["children"][0].startswith("ws-st-")
+    assert by_id["ws-progress"]["children"][-1] == "ws-pg-summary"
     text = by_id["ws-pg-missing"]["text"]
     assert "Missing before you submit" in text
     assert "Who does this work" in text  # stage 1, confirmed with a gap
     assert "Your name" not in text  # stage 4 not reached: summarised instead
     assert "2 more stages not started yet" in text
+    # Captions must never contain raw markdown backticks.
+    for c in by_id.values():
+        if c["component"] == "Text" and c.get("variant") == "caption":
+            assert "`" not in c["text"], c
 
 
 def test_answers_use_option_labels() -> None:

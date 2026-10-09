@@ -263,7 +263,7 @@ def build_brief_view(
     hours = ev.annual_hours_saved
     nodes += [
         ui.text("br-title", f"Business Value Brief — {title}", "h3"),
-        ui.text("br-meta", f"`{record.meta.record_id}` · {sub_date} · {gate}", "caption"),
+        ui.text("br-meta", f"{record.meta.record_id} · {sub_date} · {gate}", "caption"),
         ui.tabs(
             "br-tabs",
             [("Brief", "br-brief"), ("Scores", "br-scores"), ("Next steps", "br-next")],
