@@ -34,7 +34,7 @@ variable "genai_location" {
 variable "agent_display_name" {
   description = "Agent name in Gemini Enterprise. Registration updates an existing agent with this name, so it must be unique per GE app."
   type        = string
-  default     = "GE Qualification Agent"
+  default     = "Qualification Agent"
 }
 
 variable "container_image" {

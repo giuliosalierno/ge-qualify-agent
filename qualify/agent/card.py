@@ -64,7 +64,7 @@ def build_agent_card(base_url: str) -> AgentCard:
     )
 
     return AgentCard(
-        name="GE Qualification Agent",
+        name="Qualification Agent",
         description=(
             "Gemini Enterprise qualification agent. Conducts business intake and "
             "sizing interviews with an interactive A2UI living form."
