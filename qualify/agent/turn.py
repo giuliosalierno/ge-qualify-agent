@@ -605,7 +605,6 @@ def _handle_action_outcome(
                 from qualify.connectors.storage import sync_to_storage  # noqa: PLC0415
                 from qualify.sinks.sheets import sync_to_optional_sheet  # noqa: PLC0415
 
-                import os as _os  # noqa: PLC0415
                 sync_to_optional_sheet(session.record)
                 sp_res = sync_to_storage(
                     session.record,
@@ -1273,7 +1272,6 @@ def _try_a2ui_probe(user_text: str | None, session: Session) -> TurnOutput | Non
     if user_text.strip().lower() not in ("a2ui probe openurl", "probe openurl"):
         return None
 
-    import os as _os  # noqa: PLC0415
 
     from qualify.a2ui.signin import build_openurl_probe  # noqa: PLC0415
 
@@ -1593,7 +1591,6 @@ def _try_portfolio_review(
     if not match_command(user_text, _PORTFOLIO_TRIGGERS, max_tail_words=3):
         return None
 
-    import os as _os  # noqa: PLC0415
 
     from qualify.a2ui.signin import build_signin_card  # noqa: PLC0415
     from qualify.connectors.storage import (  # noqa: PLC0415
