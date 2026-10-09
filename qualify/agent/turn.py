@@ -479,6 +479,10 @@ def _run_turn(
         store.save(session)
         return menu_output
 
+    intake_output = _try_start_intake(store, turn_input.user_text, session)
+    if intake_output is not None:
+        return intake_output
+
     signin_output = _maybe_offer_signin(session)
     if signin_output is not None:
         store.save(session)
@@ -1164,6 +1168,30 @@ def _try_welcome_menu(user_text: str | None, session: Session) -> TurnOutput | N
     )
 
 
+_INTAKE_TRIGGERS = (
+    "business value intake",
+    "business intake",
+    "new business intake",
+    "new qualification",
+    "new intake",
+    "phase 1 intake",
+    "start phase 1",
+)
+
+
+def _try_start_intake(
+    store: SessionStore, user_text: str | None, session: Session
+) -> TurnOutput | None:
+    """Opens Stage 1 deterministically when the user clicks or types a start-intake command."""
+    if not user_text:
+        return None
+    if not (_at_conversation_start(session) or session.is_complete):
+        return None
+    if not match_command(user_text, _INTAKE_TRIGGERS, max_tail_words=2):
+        return None
+    return _start_intake(store, session)
+
+
 def _start_intake(store: SessionStore, session: Session) -> TurnOutput:
     """Opens the Business Value Intake, from the welcome menu's button.
 
@@ -1705,6 +1733,9 @@ _PORTFOLIO_TRIGGERS = (
     "prioritise portfolio",
     "portfolio prioritization",
     "portfolio prioritisation",
+    "coe portfolio prioritization",
+    "coe portfolio prioritisation",
+    "coe portfolio review",
     "prioritize use cases",
     "prioritise use cases",
     "score backlog",

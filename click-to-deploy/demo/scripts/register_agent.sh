@@ -42,16 +42,62 @@ python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "$CARD"
 # --- 2. Build the request body ---------------------------------------------
 BODY="$WORK/body.json"
 python3 - "$CARD" "$DISPLAY_NAME" > "$BODY" <<'PY'
-import json, sys
+import base64, json, sys
 card_path, display_name = sys.argv[1], sys.argv[2]
+
+ICON_SVG = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0b57d0"/>
+      <stop offset="55%" stop-color="#1a73e8"/>
+      <stop offset="100%" stop-color="#4285f4"/>
+    </linearGradient>
+    <linearGradient id="spark" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#a8c7fa"/>
+    </linearGradient>
+  </defs>
+  <circle cx="64" cy="64" r="64" fill="url(#bg)"/>
+  <circle cx="64" cy="64" r="58" fill="none" stroke="rgba(255,255,255,0.22)" stroke-width="2"/>
+  <rect x="28" y="30" width="58" height="70" rx="10" fill="#ffffff" opacity="0.96"/>
+  <rect x="44" y="23" width="26" height="12" rx="6" fill="#d3e3fd" stroke="#0b57d0" stroke-width="2"/>
+  <circle cx="40" cy="50" r="5" fill="#1a73e8"/>
+  <rect x="50" y="47" width="26" height="6" rx="3" fill="#0b57d0"/>
+  <circle cx="40" cy="66" r="5" fill="#fbbc04"/>
+  <rect x="50" y="63" width="22" height="6" rx="3" fill="#444746"/>
+  <circle cx="40" cy="82" r="5" fill="#34a853"/>
+  <rect x="50" y="79" width="28" height="6" rx="3" fill="#137333"/>
+  <path d="M95 24 C95 36, 99 40, 111 40 C99 40, 95 44, 95 56 C95 44, 91 40, 79 40 C91 40, 95 36, 95 24 Z" fill="url(#spark)"/>
+</svg>"""
+icon_data_uri = "data:image/svg+xml;base64," + base64.b64encode(ICON_SVG.encode("utf-8")).decode("ascii")
+
+starter_prompts = [
+    "Start a Business Value Intake (Phase 1)",
+    "Run a Technical Architecture Review (Phase 2)",
+    "Run a Portfolio Prioritization (Phase 3)",
+]
+
+card_obj = json.loads(open(card_path).read())
+exts = card_obj.setdefault("capabilities", {}).setdefault("extensions", [])
+sp_uri = "https://www.googleapis.com/gemini-enterprise/a2a/extensions/starter_prompts/v1"
+if not any(e.get("uri") == sp_uri for e in exts):
+    exts.append({
+        "uri": sp_uri,
+        "description": "Google Gemini Enterprise starter prompts extension to show contextually aware prompts on chat start.",
+        "params": {"prompts": starter_prompts},
+    })
+
 print(json.dumps({
     "displayName": display_name,
     "description": (
-        "Qualifies Gemini Enterprise use cases: an interactive A2UI interview "
-        "that sizes business value, reviews technical feasibility and ranks "
-        "the portfolio."
+        "Turn unstructured AI ideas into quantified Business Value Briefs, "
+        "22-point Technical Architecture Dossiers, and a 4-quadrant CoE Portfolio.\n"
+        "📋 Phase 1: Business Value Intake · 🏗️ Phase 2: Technical Architecture Review · 📊 Phase 3: CoE Portfolio Prioritization"
     ),
-    "a2aAgentDefinition": {"jsonAgentCard": open(card_path).read()},
+    "icon": {"content": icon_data_uri},
+    "starterPrompts": [{"text": t} for t in starter_prompts],
+    "customPlaceholderText": "Describe a new AI use case idea, or choose a workflow above...",
+    "a2aAgentDefinition": {"jsonAgentCard": json.dumps(card_obj)},
     "sharingConfig": {"scope": "ALL_USERS"},
 }))
 PY
@@ -104,7 +150,7 @@ EXISTING="$(find_agent)"
 
 if [ -n "$EXISTING" ]; then
   echo "Updating $EXISTING ..."
-  URL="https://discoveryengine.googleapis.com/v1alpha/${EXISTING}?updateMask=displayName,description,a2aAgentDefinition,sharingConfig"
+  URL="https://discoveryengine.googleapis.com/v1alpha/${EXISTING}?updateMask=displayName,description,icon,starterPrompts,customPlaceholderText,a2aAgentDefinition,sharingConfig"
   METHOD=PATCH
 else
   echo "Creating agent in engine $ENGINE_ID ..."

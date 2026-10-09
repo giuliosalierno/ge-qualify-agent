@@ -61,7 +61,7 @@ _LEAD_INS = tuple(
     )
 )
 
-_PUNCT_RE = re.compile(r"[,.!?;:()\"`*]+")
+_PUNCT_RE = re.compile(r"[^\w\s'-]+")
 
 
 def normalize_command(user_text: str | None) -> str:
