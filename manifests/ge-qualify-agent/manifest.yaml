@@ -50,9 +50,9 @@ manifest:
   brand_surface:
     parameterizable: false
     reason: >-
-      The agent renders inside Gemini Enterprise using native A2UI v0.8 components
-      (Cards, TextFields, ChoicePickers, Tabs, VegaCharts) which inherit the host
-      Gemini Enterprise theme and typography.
+      The agent renders inside Gemini Enterprise using native A2UI v0.9 composite catalog
+      components (Cards, TextFields, ChoicePickers, Tabs, MaterialExpansionPanels, Charts)
+      which inherit the host Gemini Enterprise theme and typography.
     ui_framework: a2ui
     customizable_elements: []
 

@@ -33,7 +33,7 @@ business_value: |
 
 
 technical_value: |
-  * **Native A2A + Interactive A2UI v0.8 Architecture:** Streams JSON-RPC events from Cloud Run to Gemini Enterprise to render live side-panel forms, tabs, tables, and Vega-Lite quadrant charts alongside chat.
+  * **Native A2A + Interactive A2UI v0.9 Architecture:** Streams JSON-RPC events from Cloud Run to Gemini Enterprise using the A2UI v0.9 composite catalog to render live side-panel forms, tabs, expansion panels, tables, and interactive 2×2 quadrant scatter charts alongside chat.
   * **Evidence-Gated Gemini Extraction & Deterministic Scoring:** Pairs Gemini Flash structured output with verbatim quote verification and deterministic Python engines for tiering and 22-point readiness scoring.
   * **Multi-Actor Optimistic Concurrency & SharePoint Integration:** Persists records in Cloud Storage using three-way merges and generation preconditions so concurrent business and technical sessions never overwrite each other, with optional Microsoft SharePoint integration available to publish Business Value Briefs, Technical Dossiers, and Portfolio Reports directly to enterprise document libraries.
   * **Zero-Trust Click-to-Deploy:** Pinned SHA-256 supply chain, non-root container, Discovery Engine service-agent IAM enforcement, and automated GE license provisioning.
