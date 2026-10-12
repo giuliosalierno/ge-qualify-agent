@@ -62,10 +62,11 @@ owner: giuliosalierno
 # Demo Assets
 
 
-# Upload docs/video-assets/shots/scene-00-hero-card.png and screenshots via the go/demos editor
-# and uncomment the returned https://storage.cloud.google.com/... URLs below:
-# images:
-#   - https://storage.cloud.google.com/demo-hub-images-prod/scene-00-hero-card.png
+images:
+  - https://github.com/cloud-gtm/ge-qualification-agent/raw/main/docs/screenshots/01-welcome-menu.png
+  - https://github.com/cloud-gtm/ge-qualification-agent/raw/main/docs/screenshots/02-portfolio-ranked-list.png
+  - https://github.com/cloud-gtm/ge-qualification-agent/raw/main/docs/screenshots/03-portfolio-quadrant-matrix.png
+  - https://github.com/cloud-gtm/ge-qualification-agent/raw/main/docs/screenshots/04-technical-review-and-brief.png
 
 
 # click_to_deploy_path:
@@ -90,22 +91,6 @@ artifacts:
 
 
     link: https://github.com/cloud-gtm/ge-qualification-agent
-
-  - title: Standalone Skill - Business Value Intake
-
-
-    type: other_unspecified
-
-
-    link: https://github.com/cloud-gtm/ge-qualification-agent/releases/latest/download/ge_intake_business.zip
-
-  - title: Standalone Skill - Technical Architecture Review
-
-
-    type: other_unspecified
-
-
-    link: https://github.com/cloud-gtm/ge-qualification-agent/releases/latest/download/ge_tech_review.zip
 
 # - title: Overview Slide Deck
 #
