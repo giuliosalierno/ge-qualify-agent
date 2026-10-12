@@ -1,229 +1,285 @@
-<!-- linter off -->
-<!-- common_typos_disable -->
+# GE Use Case Qualification Agent-go/demos2213
 
-# **Demo Guide: GE Use Case Qualification Agent**
+**GE Use Case Qualification Agent**
+* **Status:** Approved
+* **Document Owner:** [giuliosalierno](https://moma.corp.google.com/person/giuliosalierno)
+* **Tech Lead:** giuliosalierno@google.com
+* **Demo Leads & Contributors:** giuliosalierno@google.com
+* **Document Self-link:** https://github.com/cloud-gtm/ge-qualification-agent/blob/main/docs/demo-guide-ge-qualify-agent.md
+* **Link to go/demos:** [go/demos/demo/2213](https://demospace.corp.goog/demo/2213)
+* **Demo Design Document (DDD):** https://github.com/cloud-gtm/ge-qualification-agent/blob/main/docs/ddd-ge-qualify-agent.md
+* **GitHub Repository:** https://github.com/cloud-gtm/ge-qualification-agent (`main` branch for Click-to-Deploy; `integrations` branch for optional SharePoint integration)
 
-*Save the finished document as `docs/demo-guide-ge-qualify-agent.md`. Every input and sample output below is verified against the live end-to-end run on `gemini-3.8-flash` and GCS record store.*
-
----
-
-## **1. Resources**
-
-*   **Status:** APPROVED
-*   **Owner:** giuliosalierno
-*   **Document Self-link:** docs/demo-guide-ge-qualify-agent.md
-*   **Demo Page:** docs/GE Use Case Qualification Agent_metadata.yaml (pending `go/demos` ID upon publication)
-*   **Design Doc (DDD):** [docs/ddd-ge-qualify-agent.md](./ddd-ge-qualify-agent.md)
-*   **Code Repository:** https://github.com/cloud-gtm/ge-qualification-agent (`deploy/godemos` branch)
-*   **Demo Video:** N/A (Storyboard manifest ready at `docs/video-assets/scenes.json`)
+> **Sharing Permissions Note:** When hosting this Demo Guide in Google Docs, share with **Viewer** access to:
+> * Alphabet FTEs: `alphabet@google.com`
+> * Alphabet TVCs: `alphabet-extendedworkforce@google.com`
+> * Google Interns: `googlers-intern@google.com`
 
 ---
 
-## **2. Storyboard**
+## Table of Contents
 
-### **2.1. Target Audience & Goal**
-
-*   **Target Audience:** Enterprise AI Center of Excellence (CoE) Leads, CIOs/CTOs, Solution Architects, and Business Unit Leaders evaluating Gemini Enterprise.
-*   **Goal:** Showcase Gemini Enterprise as a governed AI intake and portfolio engine—demonstrating how a raw business idea is captured via conversational chat + live A2UI forms (Phase 1), handed over to a Solution Architect for a 22-point technical readiness review (Phase 2), and ranked alongside the enterprise backlog in a 4-quadrant Portfolio matrix (Phase 3).
-
-### **2.2. Scenes**
-
----
-
-**Scene 1: Welcome and Workflow Orientation**
-
-**Voiceover:**
-Every enterprise AI Center of Excellence faces the same bottleneck: dozens of business teams submit vague AI ideas in spreadsheets, and architects spend weeks chasing basic sizing and security details. Inside Gemini Enterprise, the Use Case Qualification Agent replaces that guesswork with a governed three-phase workflow across Business Owners, Solution Architects, and CoE Leads.
-
-**Action:**
-- Select `@GE Use Case Qualification Agent` from the Gemini Enterprise agent menu so the agent chip is active.
-- Type `"hello what can you do?"`
-- Click the **Submit** button.
-- The agent responds with a welcome overview and renders the interactive A2UI welcome card with three workflow buttons: **Business Value Intake**, **Technical Architecture Review**, and **Portfolio Prioritization**.
-- Pause for 3 seconds. Let the clean interface land.
-- Click the **Business Value Intake** button.
-
-**Screenshot:**
-[SCREENSHOT-1: Gemini Enterprise chat showing the Welcome message and the A2UI Welcome Card with Business Value Intake, Technical Architecture Review, and Portfolio Prioritization buttons, followed by Stage 1 of 4 — Problem and users card]
+1. [Argolis Set Up](#argolis-set-up)
+2. [Setup](#setup)
+3. [Introduction and Overview](#introduction-and-overview)
+4. [Argolis Automated Deployment — "Click-To-Deploy"](#argolis-automated-deployment--click-to-deploy)
+5. [Demo Walkthrough](#demo-walkthrough)
+6. [Talk Track](#talk-track)
+7. [Output](#output)
+8. [Organization Policies](#organization-policies)
+9. [Costs](#costs)
+10. [Qwiklabs](#qwiklabs)
+11. [Feedback](#feedback)
+12. [Summary](#summary)
+13. [Demo Release Notes](#demo-release-notes)
 
 ---
 
-**Scene 2: Phase 1 (Stages 1 & 2) — Problem Capture and Deterministic ROI Sizing**
+## Argolis Set Up
 
-**Voiceover:**
-Let's step into the shoes of Maria Rossi, an Accounts Payable manager. Instead of filling out a rigid form, Maria describes her team's pain point in plain English. Watch the A2UI card on the right: the agent extracts the initiative name, role, headcount, and manual SAP steps directly from her words—and refuses to invent anything she didn't state. Next, when she shares her weekly volume and time saved per query, the agent deterministically calculates ten thousand hours saved per year.
+*Skip this section if you already have an active GCP Argolis account.*
 
-**Action:**
-- Type `"I want to qualify an agent that drafts replies to supplier invoice queries for our 30-person accounts payable team. Today AP clerks read each supplier email, look the invoice up in SAP, check the payment status and type a reply by hand. We need search capabilities over our invoices and contracts. Call it Supplier query assistant, Finance department."`
-- Click the **Submit** button.
-- Wait for the agent to pre-fill `Supplier query assistant`, `AP clerks`, `30`, and `Finance department` on the Stage 1 card.
-- Pause for 2 seconds so the audience sees the auto-populated A2UI fields.
-- Click the **Continue** button.
-- Type `"Each clerk handles about 40 queries a week; each takes around 15 minutes today and the agent should save about 10 minutes per query."`
-- Click the **Submit** button.
-- Hold for 3 seconds on the updated Effort and Value card showing `40`, `15`, and `10` minutes saved.
-- Click the **Continue** button.
+### Environment: Argolis (go/argolis)
+* Customer Engineers (CEs) and Technical Sellers should deploy this demo into their own **GCP Argolis** environment.
+* **Click-to-Deploy** automated deployment works with Argolis Self-Managed Organizations (SMOs).
+* **Don’t have an Argolis GCP Environment?**
+  1. Check eligibility at `go/argolis-eligibility`.
+  2. Request your environment at `go/argolis`.
 
-**Screenshot:**
-[SCREENSHOT-2: Stage 1 and Stage 2 A2UI cards auto-populated from chat with 30 AP clerks, 40 queries/week, 15 minutes baseline, and 10 minutes saved]
+### Open GCP Cloud Console
+* Open [Google Cloud Console](https://console.cloud.google.com/) using a dedicated Chrome profile signed in with your Argolis credentials (`admin@<your-ldap>.altostrat.com`). See `go/argolis-tips` for best practices.
 
----
-
-**Scene 3: Phase 1 (Stages 3 & 4) — Capability Tiering and Business Value Brief**
-
-**Voiceover:**
-Now Maria names the underlying systems—SAP and a shared Outlook mailbox—along with confidential data rules and project ownership. When she clicks Submit, the agent applies anti-overcommitment rules to map the use case to Capability Level 5—a Workflow Agent with a custom MCP server—and opens the completed Business Value Brief right in the side panel, sizing the opportunity at ten thousand hours a year.
-
-**Action:**
-- Type `"The data lives in SAP and the shared Outlook mailbox. It is confidential financial data, and permissions must be respected."`
-- Click the **Submit** button.
-- Wait for the Stage 3 card to select `SAP`, `Email or calendar`, `confidential`, and ACL preservation.
-- Click the **Continue** button.
-- Type `"Submitted by Maria Rossi, AP operations manager. Business owner Luca Bianchi, sponsor the CFO."`
-- Click the **Submit** button.
-- Wait for the Stage 4 Ownership card to populate.
-- Click the **Continue** button.
-- Hold for 4 seconds — this is the money shot for Phase 1: the side panel opens the complete **Business Value Brief** showing `10,000 hrs/yr`, `Strategic Bets`, and Capability Level 5 (`Tier 3: Pro-Code — Workflow agent with custom MCP server`).
-
-**Screenshot:**
-[SCREENSHOT-3: Completed Business Value Brief rendered in the Gemini Enterprise side panel showing 10,000 hrs/yr savings, Strategic Bets quadrant badge, and Level 5 capability tier]
+### License and Restrictions
+* **Gemini Enterprise Trial & User License:** Automatically provisioned during Click-to-Deploy by `click-to-deploy/demo/scripts/ensure_ge_license.sh`, which starts the 30-day Gemini Enterprise free trial on the deployed Argolis project and assigns a Gemini Enterprise seat license to your Argolis user (`admin@<your-ldap>.altostrat.com`).
+* **Demo Seed Data License:** 100% synthetic enterprise records (`Cymbal Insurance`, `Cymbal Retail`, `Cymbal Bank`) generated deterministically by `click-to-deploy/demo/seed/generate_seed.py`. Contains no customer PII or restricted third-party data and is safe for live customer demonstrations.
 
 ---
 
-**Scene 4: Phase 2 (Stages 1 to 3) — Solution Architect Handover, Network, and IAM**
+## Setup
 
-**Voiceover:**
-Maria's intake is saved to Cloud Storage. Now Paolo Verdi, a Solution Architect, opens his own chat and asks for pending technical reviews. He picks Maria's Supplier Query Assistant alongside pre-seeded Cymbal opportunities. Notice that the Phase 1 business baseline is locked at the top while the brief stays open in the side panel. Paolo walks through systems, Milan on-prem network transit over Private Service Connect, and Entra ID authentication with EU data residency.
+### Demo Dataset & Storage
+* **Seed Records Location:** Pre-generated JSON `UseCaseRecord` files in `click-to-deploy/demo/seed/records/` (`UC-2026-DEMO01.json`, `UC-2026-DEMO02.json`, `UC-2026-DEMO03.json`) and portfolio summaries (`portfolio/latest.json`, `portfolio/latest.md`).
+* **Cloud Storage Bucket:** During deployment, Terraform creates `gs://<project-id>-ge-qualify-agent/` with object versioning enabled and uploads the 3 seed records so the agent is immediately ready for Phase 2 (Technical Review) and Phase 3 (Portfolio Prioritization) demos without requiring a prior Phase 1 run.
 
-**Action:**
-- Type `"technical review"`
-- Click the **Submit** button.
-- The agent lists the 3 opportunities waiting for technical review (`Supplier query assistant`, `KYC document pre-check`, and `Claims intake triage`).
-- Type `"Supplier query assistant"`
-- Click the **Submit** button.
-- Pause for 3 seconds to highlight the locked Opportunity Summary header and the Stage 1 of 5 Systems card.
-- Type `"SAP S/4HANA is updated in real time and the Outlook mailbox continuously. Tech owner is Paolo Verdi from the ERP team."`
-- Click the **Submit** button.
-- Click the **Continue** button.
-- Type `"SAP runs on-prem in our Milan data centre, Outlook is Microsoft 365. Traffic goes over Private Service Connect. We have not yet confirmed whether there is an airgap or transit blocker."`
-- Click the **Submit** button.
-- Click the **Continue** button.
-- Type `"Users sign in with Entra ID SSO, the service uses a service account with least privilege. Data is confidential, must stay in the EU, and cloud policy allows Google Cloud."`
-- Click the **Submit** button.
-- Click the **Continue** button.
+### Platforms & Services Used
+* **Gemini Enterprise (Discovery Engine):** Host web application and native A2A + A2UI v0.9 client.
+* **Cloud Run (`ge-qualify-agent`):** Serverless Python 3.13 Starlette A2A JSON-RPC SSE server streaming text and interactive A2UI v0.9 surfaces.
+* **Vertex AI (`gemini-3.8-flash`):** Evidence-gated structured extraction (with verbatim quote verification) and consultative response generation.
+* **Cloud Storage:** Multi-actor optimistic concurrency record store (3-way field-level merge + `if_generation_match` preconditions).
 
-**Screenshot:**
-[SCREENSHOT-4: Technical Architecture Review header locking the Phase 1 baseline alongside Stage 2 Network and Stage 3 Security & IAM A2UI cards]
+### Gemini Enterprise Demo Access — How to Log In
+1. Sign in to the [Google Cloud Console](https://console.cloud.google.com/) as your Argolis user (`admin@<your-ldap>.altostrat.com`).
+2. Navigate to **AI Applications (Agent Builder) → Apps** (`https://console.cloud.google.com/gen-app-builder/engines`).
+3. Open the **`GE Qualification Agent Workspace`** engine (`ge-qualify-engine`).
+4. Click the **Web App URL** link on the Overview / Integration page to open the Gemini Enterprise web interface, and select **Qualification Agent** from the left navigation bar.
+5. **Pre-warm tip:** Two minutes before your customer session, send `hello what can you do?` (or click **Launch the agent**) once to wake the Cloud Run service from scale-to-zero.
 
 ---
 
-**Scene 5: Phase 2 (Stages 4 & 5) — Grounding, Readiness, and the 22-Point Technical Dossier**
+## Introduction and Overview
 
-**Voiceover:**
-In the final two stages, Paolo confirms strict document-level ACL preservation, citation provenance, a five-second latency SLA, and an in-progress Google Cloud landing zone. Submitting completes the 22-subcriteria evaluation: the agent generates the Technical Architecture Dossier with a sixty-eight percent readiness score, distinguishes unconfirmed transit questions from hard blockers, and compiles an actionable Sprint 1 Access Checklist.
+### Overview & Purpose
+Enterprise AI Centers of Excellence (CoEs) receive dozens of generative AI requests across business units, but rely on disconnected spreadsheets and repetitive workshops to evaluate ROI and technical feasibility.
 
-**Action:**
-- Type `"ACLs must be preserved, answers need citations, about 2,000 queries a day, under 5 seconds is fine. Use a balanced model."`
-- Click the **Submit** button.
-- Click the **Continue** button.
-- Type `"Network security lead is Giulia Neri. The landing zone is in progress."`
-- Click the **Submit** button.
-- Click the **Continue** button.
-- Hold for 4 seconds on the **Technical Architecture Dossier** in the side panel showing `readiness 68%`, `Custom Agent in GE App`, `Key 2 pending`, and the 22-subcriteria breakdown.
+The **GE Use Case Qualification Agent** embeds the **GE App Use Case Discovery Framework** natively inside Gemini Enterprise. Across three guided workflows—**Business Value Intake**, **Technical Architecture Review**, and **CoE Portfolio Prioritization**—stakeholders converse naturally while the agent populates interactive A2UI v0.9 forms, computes auditable annual hours saved, assigns Gemini Enterprise Capability Levels 1–6 with anti-overcommitment rules, evaluates 22 technical readiness subcriteria, and segments the backlog into a 4-quadrant portfolio matrix.
 
-**Screenshot:**
-[SCREENSHOT-5: Technical Architecture Dossier open in the side panel showing 68% readiness score, Custom Agent in GE App feasibility profile, and the 22-subcriteria checklist]
+### Objectives & Key Features Covered
+1. **Phase 1 — Business Value Intake (Business Unit Owner):**
+   * 4-stage conversational intake (`1. Problem and users` → `2. Sizing the value` → `3. Systems and data` → `4. Sign-off`).
+   * Evidence-gated extraction that pre-fills A2UI cards only from facts explicitly stated by the user.
+   * Deterministic ROI formula (`Users × Weekly Frequency × Minutes Saved ÷ 60 × 50 weeks`) and Capability Level 1–6 recommendation grounded in the Gemini Enterprise Connector Catalog.
+2. **Phase 2 — Technical Architecture Review (Solution Architect):**
+   * Locks the Phase 1 business baseline in Cloud Storage and opens the **Business Value Brief** in the side panel for reference.
+   * Evaluates 22 technical readiness subcriteria across 5 stages (`1. Systems & Data` → `2. Network` → `3. Security & IAM` → `4. Grounding & Models` → `5. Operational Readiness`).
+   * Produces a **Technical Architecture Dossier** with a deterministic readiness score (`0–100%`), Key 2 status, and a Sprint #1 Access Checklist.
+3. **Phase 3 — CoE Portfolio Prioritization (AI CoE Lead):**
+   * Scores every qualified initiative on **Business Value (1–5)** and **Technical Feasibility (1–5)**.
+   * Renders a ranked portfolio table, a collapsible **Scoring & Quadrant Guide**, and an interactive **2×2 Value vs. Feasibility Quadrant Matrix** (`Quick Wins`, `Strategic Bets`, `Departmental Niche`, `Deprioritized`).
 
----
+### Target Audience
+* Enterprise AI Center of Excellence (CoE) Leads, Chief AI / Digital Officers, Solution Architects, and Business Unit Sponsors evaluating **Gemini Enterprise**.
 
-**Scene 6: Phase 3 — CoE Portfolio Prioritization Matrix**
-
-**Voiceover:**
-Finally, the AI Center of Excellence Lead types portfolio review to see the entire enterprise backlog in one view. The agent combines Maria and Paolo's newly qualified use case with the existing Cymbal portfolio—ninety-five thousand five hundred hours of annual value across six hundred and sixty users—and plots every opportunity into four quadrants. Store Policy Assistant and Claims Intake Triage stand out as immediate Quick Wins, while our SAP Supplier Query Assistant is scoped as a high-value Strategic Bet.
-
-**Action:**
-- Type `"portfolio review"`
-- Click the **Submit** button.
-- Wait for the **Portfolio prioritization** dashboard to open in the side panel.
-- Hold for 4 seconds on the Vega-Lite 4-quadrant scatter plot (`Quick Wins`, `Strategic Bets`, `Departmental Niche`, `Deprioritized`) and the ranked opportunity table showing `4 opportunities · 95,500 hrs/yr · 660 users`.
-- Scroll slowly through the portfolio table and quadrant breakdown.
-
-**Screenshot:**
-[SCREENSHOT-6: CoE Portfolio Prioritization side panel showing the 4-quadrant VegaChart scatter plot, 95,500 hrs/yr total savings across 4 opportunities, and action buttons per use case]
+### Architecture Diagram
+![Architecture Overview](https://raw.githubusercontent.com/giuliosalierno/ge-qualify-agent/deploy/godemos/docs/architecture-overview.png)
 
 ---
 
-## **3. Prerequisites & Access**
+## Argolis Automated Deployment — "Click-To-Deploy"
 
-*   **Demo App URL:** Deploy into your Argolis project via `go/demos` Click-to-Deploy (or run `terraform apply` in `click-to-deploy/demo/terraform/`), then open the `gemini_enterprise_console_url` Terraform output (`https://console.cloud.google.com/gen-app-builder/locations/global/engines/<engine-id>/overview?project=<project-id>`) and launch the Gemini Enterprise web app URL.
-*   **How to log in:** Sign in with your Argolis user account (`admin@<your-domain>.altostrat.com`).
-*   **Licenses / Reservations:** Automatically handled. The Click-to-Deploy script `click-to-deploy/demo/scripts/ensure_ge_license.sh` starts the 30-day Gemini Enterprise free trial and assigns a license seat to your Argolis user during deployment.
-*   **One-time setup:** None required. Three synthetic Cymbal records (`UC-2026-DEMO01`, `UC-2026-DEMO02`, `UC-2026-DEMO03`) are seeded automatically into the Cloud Storage bucket (`<project>-ge-qualify-agent`) by Terraform.
-*   **Reset between runs:** Type `qualify another` or `start a new qualification` in chat to start a fresh Business Value Intake with a new unique `UC-2026-<HEX>` ID without overwriting previous records. To reset the entire bucket back to the 3 seed records, re-run `terraform apply` (or delete non-`DEMO` files from `gs://<project>-ge-qualify-agent/records/`).
-*   **Pre-warm steps:** Two minutes before presenting, open the Gemini Enterprise web app, select `@GE Use Case Qualification Agent`, and send `hello what can you do?` once to wake the Cloud Run container from scale-to-zero.
+### Option A: 1-Click Deployment via `go/demos` (Recommended)
+1. Open [go/demos/demo/2213](https://demospace.corp.goog/demo/2213).
+2. Click the **Click-To-Deploy** button and select your Argolis Self-Managed Organization (SMO).
+3. Deployment takes approximately **12–15 minutes**. You will receive an email notification once complete, and the project will appear under the `Argolis-click-to-deploy` folder in your Argolis organization.
 
----
+### Option B: Manual Terraform Deployment (CLI)
+If you prefer to deploy into an existing Argolis project from Cloud Shell or your workstation:
 
-## **4. Demo Script**
+```bash
+git clone https://github.com/cloud-gtm/ge-qualification-agent.git
+cd ge-qualification-agent/click-to-deploy/demo/terraform
 
-*Quick-reference table for presenters. Every row represents a single user turn or A2UI button click verified against the live agent.*
+terraform init
+terraform apply \
+  -var="project_id=<YOUR_ARGOLIS_PROJECT_ID>" \
+  -var="project_name=<YOUR_ARGOLIS_PROJECT_NAME>" \
+  -var="project_number=<YOUR_ARGOLIS_PROJECT_NUMBER>" \
+  -var="org_id=<YOUR_ARGOLIS_ORG_ID>" \
+  -var="gcp_account_name=admin@<YOUR_LDAP>.altostrat.com" \
+  -var="deployment_service_account_name=<DEPLOYER_SA_EMAIL>" \
+  -var="data_location=us-central1" \
+  -var="secret_stored_project=<YOUR_ARGOLIS_PROJECT_ID>"
+```
 
-| Step | Talk track | Input | Sample Output / Action |
-|---|---|---|---|
-| 1 | Introduce the AI CoE intake challenge and open the agent's workflow menu. | `hello what can you do?` | Agent displays the Welcome message and A2UI card with 3 buttons: **Business Value Intake**, **Technical Architecture Review**, and **Portfolio Prioritization**. Click **Business Value Intake**. |
-| 2 | Describe Maria Rossi's Accounts Payable use case in natural language (Stage 1: Problem & Users). | `I want to qualify an agent that drafts replies to supplier invoice queries for our 30-person accounts payable team. Today AP clerks read each supplier email, look the invoice up in SAP, check the payment status and type a reply by hand. We need search capabilities over our invoices and contracts. Call it Supplier query assistant, Finance department.` | Agent extracts `Supplier query assistant`, `AP clerks`, `30`, and `Finance department` onto the Stage 1 A2UI card. Click **Continue** on the card. |
-| 3 | Provide weekly task frequency and minutes saved so the agent computes annual ROI (Stage 2: Effort & Value). | `Each clerk handles about 40 queries a week; each takes around 15 minutes today and the agent should save about 10 minutes per query.` | Agent populates `40` queries/wk, `15` min baseline, and `10` min saved (`10,000 hrs/yr` across 30 clerks). Click **Continue** on the card. |
-| 4 | Specify data sources, sensitivity, and ACL rules (Stage 3: Data & Systems). | `The data lives in SAP and the shared Outlook mailbox. It is confidential financial data, and permissions must be respected.` | Agent checks `SAP` and `Email or calendar`, sets classification to `confidential`, and enables ACL preservation. Click **Continue** on the card. |
-| 5 | Confirm business ownership and generate the Business Value Brief (Stage 4: Ownership). | `Submitted by Maria Rossi, AP operations manager. Business owner Luca Bianchi, sponsor the CFO.` | Agent fills `Maria Rossi`, `Luca Bianchi`, and `the CFO`. Click **Continue** (Submit) on the card -> Side panel opens the **Business Value Brief** (`10,000 hrs/yr`, `Strategic Bets`, Level 5 Pro-Code MCP). |
-| 6 | Switch persona to Paolo Verdi (Solution Architect) and list opportunities awaiting technical review. | `technical review` | Agent lists 3 pending opportunities: `Supplier query assistant`, `KYC document pre-check` (`UC-2026-DEMO03`), and `Claims intake triage` (`UC-2026-DEMO01`). |
-| 7 | Select the newly created opportunity (or `Claims intake triage` for the 5-minute shortcut) to lock the Phase 1 baseline. | `Supplier query assistant` | Agent displays the locked Phase 1 Opportunity Summary header, opens the Business Brief in the side panel, and renders Stage 1 of 5 (**Systems and data landscape**). |
-| 8 | Confirm backend freshness and technical owner (Tech Stage 1: Systems & Data). | `SAP S/4HANA is updated in real time and the Outlook mailbox continuously. Tech owner is Paolo Verdi from the ERP team.` | Agent sets data freshness to `realtime_assumed` and tech owner to `Paolo Verdi`. Click **Continue** on the card. |
-| 9 | Provide hosting location and network transit path (Tech Stage 2: Infrastructure & Network). | `SAP runs on-prem in our Milan data centre, Outlook is Microsoft 365. Traffic goes over Private Service Connect. We have not yet confirmed whether there is an airgap or transit blocker.` | Agent records Milan on-prem + M365 hosting, `psc` transit path, and `unknown` (unconfirmed) transit blocker status. Click **Continue** on the card. |
-| 10 | Confirm SSO identity, service auth, EU residency, and cloud policy approval (Tech Stage 3: Security & IAM). | `Users sign in with Entra ID SSO, the service uses a service account with least privilege. Data is confidential, must stay in the EU, and cloud policy allows Google Cloud.` | Agent populates `entra_id`, `read_only_scoped`, `confidential`, `eu_only`, and `authorised`. Click **Continue** on the card. |
-| 11 | Set ACL enforcement, citation policy, query volume, and latency SLA (Tech Stage 4: Grounding & Models). | `ACLs must be preserved, answers need citations, about 2,000 queries a day, under 5 seconds is fine. Use a balanced model.` | Agent sets ACL preservation `true`, `strict` citations, `qps_estimated`, and `sub_10s` latency. Click **Continue** on the card. |
-| 12 | Confirm network security lead and landing zone status to generate the 22-point Technical Dossier (Tech Stage 5: Operational Readiness). | `Network security lead is Giulia Neri. The landing zone is in progress.` | Agent fills `Giulia Neri` and `in_progress`. Click **Continue** (Submit) on the card -> Side panel opens the **Technical Architecture Dossier** (`readiness 68%`, `Custom Agent in GE App`, 22-subcriteria breakdown, Access Checklist). |
-| 13 | Switch persona to the AI CoE Lead and rank the entire enterprise backlog. | `portfolio review` | Side panel opens the **Portfolio prioritization** view (`4 opportunities · 95,500 hrs/yr · 660 users · 1 Quick Wins`) with the 4-quadrant Vega-Lite chart and ranked table. |
-
-### **4.1. Screenshot Capture Checklist**
-
-*All 6 storyboard scenes have pre-rendered SVG/PNG visual previews generated in `docs/demo-guide-assets/ge-qualify-agent/` for offline viewing and slide decks; when recording or updating live Gemini Enterprise screenshots from an Argolis tenant, capture the following states:*
-
-*   **SCREENSHOT-1:** Gemini Enterprise chat after sending `hello what can you do?` and clicking **Business Value Intake**, showing the Welcome card and Stage 1 of 4 card.
-*   **SCREENSHOT-2:** Stage 1 and Stage 2 A2UI cards populated with `Supplier query assistant`, `30` AP clerks, `40` queries/week, `15` min baseline, and `10` min saved.
-*   **SCREENSHOT-3:** Side panel open on the finished **Business Value Brief** showing `10,000 hrs/yr`, `Strategic Bets`, and Capability Level 5.
-*   **SCREENSHOT-4:** Technical Architecture Review view showing the locked Opportunity Summary header and Stage 2/3 Network & Security A2UI cards.
-*   **SCREENSHOT-5:** Side panel open on the finished **Technical Architecture Dossier** showing `readiness 68%`, `Custom Agent in GE App`, and the 22-subcriteria rubric.
-*   **SCREENSHOT-6:** Side panel open on the **CoE Portfolio Prioritization** dashboard showing the 4-quadrant scatter plot and the 4-opportunity table (`95,500 hrs/yr`).
+When `terraform apply` finishes, it outputs `cloud_run_url`, `records_bucket`, and `gemini_enterprise_console_url`.
 
 ---
 
-## **5. Sample Queries**
+## Demo Walkthrough
 
-*Copy-pasteable commands and prompts verified against the running agent:*
+### Step 1: Launch & Workflow Orientation
+1. Open the Gemini Enterprise web app and select **Qualification Agent**.
+2. Click the **Launch the agent** conversation starter chip (or type `hello what can you do?`).
+3. The agent renders the welcome overview and an interactive A2UI card with three workflow launchers:
+   * **Qualify a new use case** (Phase 1 — Business Value Intake)
+   * **Start a technical review** (Phase 2 — Technical Architecture Review)
+   * **Open portfolio review** (Phase 3 — CoE Portfolio Prioritization)
 
-*   `hello what can you do?`
-*   `I want to qualify an agent that drafts replies to supplier invoice queries for our 30-person accounts payable team. Today AP clerks read each supplier email, look the invoice up in SAP, check the payment status and type a reply by hand. We need search capabilities over our invoices and contracts. Call it Supplier query assistant, Finance department.`
-*   `Each clerk handles about 40 queries a week; each takes around 15 minutes today and the agent should save about 10 minutes per query.`
-*   `The data lives in SAP and the shared Outlook mailbox. It is confidential financial data, and permissions must be respected.`
-*   `Submitted by Maria Rossi, AP operations manager. Business owner Luca Bianchi, sponsor the CFO.`
-*   `technical review`
-*   `technical review Claims intake triage`
-*   `technical review KYC document pre-check`
-*   `SAP S/4HANA is updated in real time and the Outlook mailbox continuously. Tech owner is Paolo Verdi from the ERP team.`
-*   `SAP runs on-prem in our Milan data centre, Outlook is Microsoft 365. Traffic goes over Private Service Connect. We have not yet confirmed whether there is an airgap or transit blocker.`
-*   `Users sign in with Entra ID SSO, the service uses a service account with least privilege. Data is confidential, must stay in the EU, and cloud policy allows Google Cloud.`
-*   `ACLs must be preserved, answers need citations, about 2,000 queries a day, under 5 seconds is fine. Use a balanced model.`
-*   `Network security lead is Giulia Neri. The landing zone is in progress.`
-*   `portfolio review`
-*   `qualify another`
-*   `help`
+![Welcome Menu](https://raw.githubusercontent.com/giuliosalierno/ge-qualify-agent/deploy/godemos/docs/screenshots/01-welcome-menu.png)
 
 ---
 
-## **6. Revision History**
-
-| **Version** | **Date** | **Changes** | **Author(s)** |
-|---|---|---|---|
-| 1.0 | 2026-10-09 | Initial Demo Guide and 6-scene storyboard verified against live E2E run (`e2e_transcript_4.md`) | giuliosalierno |
+### Step 2: Phase 1 — Business Value Intake (Business Owner Persona)
+1. Click **Qualify a new use case** (or describe a use case directly in chat).
+2. **Stage 1 (Problem and users):** Enter or paste:
+   ```text
+   I want to qualify an agent that drafts replies to supplier invoice queries for our 30-person accounts payable team. Today AP clerks read each supplier email, look the invoice up in SAP, check the payment status and type a reply by hand. We need search capabilities over our invoices and contracts. Call it Supplier query assistant, Finance department.
+   ```
+   * Observe how the agent extracts `Supplier query assistant`, `AP clerks`, `30`, and `Finance department` into the Stage 1 A2UI form and updates the **Workspace** side panel (`Progress` tab) with collapsible stage expansion panels. Click **Continue**.
+3. **Stage 2 (Sizing the value):** Enter:
+   ```text
+   Each clerk handles about 40 queries a week; each takes around 15 minutes today and the agent should save about 10 minutes per query.
+   ```
+   * The agent populates `40` queries/week, `15` min baseline, and `10` min saved (`10,000 hours/year` across 30 clerks). Click **Continue**.
+4. **Stage 3 (Systems and data):** Enter:
+   ```text
+   The data lives in SAP and the shared Outlook mailbox. It is confidential financial data, and permissions must be respected.
+   ```
+   * Click **Continue**.
+5. **Stage 4 (Sign-off):** Enter:
+   ```text
+   Submitted by Maria Rossi, AP operations manager. Business owner Luca Bianchi, sponsor the CFO.
+   ```
+   * Click **Continue**. The side panel opens the completed **Business Value Brief** (`Documents` tab) showing `10,000 hours a year`, the **Recommended approach** grounded in the Gemini Enterprise Connector Catalog, and next steps.
 
 ---
+
+### Step 3: Phase 2 — Technical Architecture Review (Solution Architect Persona)
+1. Type `technical review` (or click **Start a technical review**).
+2. The agent lists all qualified opportunities awaiting technical review (including the pre-seeded `Claims intake triage` and `KYC document pre-check`, plus any newly qualified use cases).
+3. Select `Claims intake triage` (or `Supplier query assistant`).
+4. Notice the side panel opens **`Workspace — Claims intake triage`** with the locked **Business Value Brief** in the `Documents` tab, stage-by-stage tracking in the `Progress` tab, and the 22-point readiness rubric in the `Checklist` tab.
+
+![Technical Architecture Review and Business Value Brief](https://raw.githubusercontent.com/giuliosalierno/ge-qualify-agent/deploy/godemos/docs/screenshots/04-technical-review-and-brief.png)
+
+5. Walk through the 5 technical stages via chat or A2UI cards (`1. Systems & Data` → `2. Network` → `3. Security & IAM` → `4. Grounding & Models` → `5. Operational Readiness`) to generate the **Technical Architecture Dossier** and **Sprint #1 Access Checklist**.
+
+---
+
+### Step 4: Phase 3 — CoE Portfolio Prioritization (AI CoE Lead Persona)
+1. Type `portfolio review` (or click **Open portfolio review**).
+2. The side panel opens **AI CoE Portfolio Prioritization** with three tabs:
+   * **`Ranked list` tab:** Displays all opportunities ranked by quadrant and composite score (`60% value, 40% feasibility`), plus the collapsible **ℹ️ Scoring & Quadrant Guide** explaining how Value (1–5), Feasibility (1–5), and Quadrant rankings are calculated.
+   * **`Matrix` tab:** Renders the interactive A2UI v0.9 2×2 scatter chart plotting **Technical feasibility (1–5)** on the X-axis against **Business value (1–5)** on the Y-axis across **Quick Wins**, **Strategic Bets**, **Departmental Niche**, and **Deprioritized** quadrants, with bubble size proportional to annual hours saved.
+   * **`Actions` tab:** Provides one-click buttons to open any opportunity's workspace or launch its technical review.
+
+![Portfolio Ranked List](https://raw.githubusercontent.com/giuliosalierno/ge-qualify-agent/deploy/godemos/docs/screenshots/02-portfolio-ranked-list.png)
+
+![Portfolio Quadrant Matrix](https://raw.githubusercontent.com/giuliosalierno/ge-qualify-agent/deploy/godemos/docs/screenshots/03-portfolio-quadrant-matrix.png)
+
+---
+
+## Talk Track
+
+The talk track below corresponds to each stage of the live demo, pairing what to say with the exact action to take and the capability highlighted.
+
+| Talk-track | Action | Area of Focus |
+| :--- | :--- | :--- |
+| "Every enterprise AI Center of Excellence faces the same bottleneck: business teams submit vague AI ideas in spreadsheets, and architects spend weeks chasing basic sizing and security details. Inside Gemini Enterprise, the Use Case Qualification Agent replaces that guesswork with a governed three-phase workflow across Business Owners, Solution Architects, and CoE Leads." | Click **Launch the agent** (or type `hello what can you do?`). Pause on the 3-workflow A2UI Welcome Card, then click **Qualify a new use case**. | **Intro & Native A2A + A2UI v0.9 Architecture:** Streaming interactive cards inside Gemini Enterprise alongside chat. |
+| "Let's step into the shoes of Maria Rossi, an Accounts Payable manager. Instead of filling out a rigid form, Maria describes her team's pain point in plain English. Watch the A2UI card and the Workspace panel on the right: the agent extracts the initiative name, role, headcount, and manual process directly from her words—and refuses to invent anything she didn't state." | Paste: `I want to qualify an agent that drafts replies to supplier invoice queries for our 30-person accounts payable team. Today AP clerks read each supplier email, look the invoice up in SAP, check the payment status and type a reply by hand. We need search capabilities over our invoices and contracts. Call it Supplier query assistant, Finance department.` → Click **Continue**. | **Phase 1 (Stage 1) — Evidence-Gated Extraction:** Zero-hallucination form pre-fill with verbatim quote verification. |
+| "Next, Maria shares her weekly task volume and expected time savings per query. Rather than relying on an LLM to guess ROI, a deterministic Python engine calculates 10,000 hours saved per year across 30 clerks over 50 work weeks." | Paste: `Each clerk handles about 40 queries a week; each takes around 15 minutes today and the agent should save about 10 minutes per query.` → Click **Continue**. | **Phase 1 (Stage 2) — Deterministic Value Sizing:** Auditable hours-saved math (`30 × 40 × 10 ÷ 60 × 50 = 10,000 hrs/yr`). |
+| "Now Maria names the underlying systems—SAP and a shared Outlook mailbox—along with confidential data rules and executive sponsorship. When she submits Stage 4, the agent grounds its recommendation against the Gemini Enterprise Connector Catalog (Levels 1–6) and opens the finished Business Value Brief right in the side panel." | Stage 3: `The data lives in SAP and the shared Outlook mailbox. It is confidential financial data, and permissions must be respected.` → Click **Continue**.<br>Stage 4: `Submitted by Maria Rossi, AP operations manager. Business owner Luca Bianchi, sponsor the CFO.` → Click **Continue**. | **Phase 1 Deliverable — Business Value Brief & Anti-Overcommitment Tiering:** Matching the simplest GE capability (Levels 1–6) before committing engineering capacity. |
+| "Maria's Business Value Brief is now locked in Cloud Storage using optimistic concurrency. Next, Paolo Verdi, a Solution Architect, starts a Technical Architecture Review. Notice how the side panel keeps the Business Value Brief open for reference in the Documents tab while tracking technical readiness across 5 stages and 22 subcriteria." | Type `technical review`, then select `Supplier query assistant` (or `Claims intake triage` for a 2-minute shortcut). Walk through Stages 1–5 or inspect the `Progress` and `Checklist` tabs in the Workspace panel. | **Phase 2 — Seamless Business-to-Technical Handoff & 22-Point Readiness Rubric:** Eliminating redundant discovery workshops and producing a Sprint #1 Access Checklist. |
+| "Finally, the AI CoE Lead opens the Portfolio Prioritization view to rank the entire enterprise backlog. In the Ranked List tab, every initiative is scored on Business Value (1–5) and Feasibility (1–5) with a transparent Scoring & Quadrant Guide. Switching to the Matrix tab plots the entire portfolio into four quadrants—instantly separating immediate Quick Wins from Strategic Bets and blocked initiatives." | Type `portfolio review` (or click **Open portfolio review**). Show the **Ranked list** table, expand **ℹ️ Scoring & Quadrant Guide**, and switch to the **Matrix** tab. | **Phase 3 — Board-Ready CoE Portfolio Prioritization:** 2×2 Value vs. Feasibility scatter matrix and composite ranking. |
+
+---
+
+## Output
+
+Running the demo produces three structured deliverables persisted in `gs://<project-id>-ge-qualify-agent/` and rendered live in the Gemini Enterprise side panel:
+
+1. **Business Value Brief (`Documents` tab & `records/<ID>.json`):**
+   * Executive summary, team & sponsor attribution, auditable annual hours saved, systems & data sensitivity, and a **Recommended approach** grounded in the Gemini Enterprise Connector Catalog (Capability Levels 1–6: No-Code Prompt/Skill → Knowledge Datastore Agent → Low-Code Workflow Agent → Pro-Code ADK / Custom MCP Agent).
+2. **22-Point Technical Architecture Dossier & Sprint #1 Access Checklist (`Checklist` & `Documents` tabs):**
+   * Deterministic technical readiness score (`0–100%`), Key 2 status (`Pass`, `Conditional`, or `Blocked`), per-stage subcriteria breakdown (Systems, Network/PSC, IAM/Residency, Grounding/ACLs, Operational Readiness), and named owner sign-offs required before Sprint #1.
+3. **CoE Portfolio Prioritization Report (`portfolio/latest.json` & `portfolio/latest.md`):**
+   * Ranked opportunity table, composite scores (`0.6 × Value + 0.4 × Feasibility`), and the 4-quadrant scatter matrix (**Quick Wins**, **Strategic Bets**, **Departmental Niche**, **Deprioritized**).
+4. **Optional Microsoft SharePoint Integration (`integrations` branch):**
+   * When configured with `STORAGE_PROVIDER=sharepoint`, the agent automatically publishes formatted Business Value Briefs, Technical Dossiers, and Portfolio Reports directly to enterprise SharePoint document libraries.
+
+---
+
+## Organization Policies
+
+Click-to-Deploy modifies only a single Organization Policy constraint in your Argolis project (`click-to-deploy/org_policy/project_config.json`):
+
+* **Disable Service Account Creation (`constraints/iam.disableServiceAccountCreation`):**
+  * **Why modified:** Argolis enforces `constraints/iam.disableServiceAccountCreation` by default. Automation sets this boolean constraint to `Not enforced` (`enforce: false`) so Terraform can create the dedicated least-privilege runtime service account (`ge-qualify-agent-sa@<project-id>.iam.gserviceaccount.com`).
+  * **No Compute Engine VM relaxations required:** Because the architecture is 100% serverless (Cloud Run + Cloud Storage + Vertex AI + Discovery Engine), `constraints/compute.vmExternalIpAccess` and `constraints/compute.requireShieldedVm` remain untouched and enforced.
+
+---
+
+## Costs
+
+* **Idle Cost:** **~$0.05 / day**
+  * Cloud Run is configured with `min_instance_count = 0` (scales to zero when idle).
+  * Cloud Storage stores <1 MB of JSON seed records.
+  * Gemini Enterprise uses the 30-day free trial activated during deployment.
+* **Active Demo Cost:** **<$0.10 per complete 3-phase walkthrough**
+  * Uses `gemini-3.8-flash` on Vertex AI and a single `1 vCPU / 1 GiB` Cloud Run instance during active turns.
+* **Saving Costs:**
+  * When you are finished with your customer engagement, delete the Click-to-Deploy project under the `Argolis-click-to-deploy` folder in [Cloud Resource Manager](https://console.cloud.google.com/cloud-resource-manager).
+
+---
+
+## Qwiklabs
+
+To build deeper hands-on familiarity with the Google Cloud products featured in this demo, review the following labs on `https://ce.qwiklabs.com`:
+
+* **Gemini Enterprise & Vertex AI Agent Builder:** *Vertex AI Search and Conversation: Qwik Start*
+* **Cloud Run Serverless Deployment:** *Developing a Backend Service with Cloud Run*
+* **Vertex AI Generative Models:** *Generative AI with Vertex AI: Prompt Design*
+
+*(If you do not yet have Creator access on `https://ce.qwiklabs.com`, complete the CE Qwiklabs Onboarding course on Grow; see `go/ce-qwiklabs-acess-error` for troubleshooting).*
+
+---
+
+## Feedback
+
+Comments and feedback are greatly appreciated and help us improve this demo!
+
+1. Open [go/demos/demo/2213](https://demospace.corp.goog/demo/2213) and click the **Feedback** button.
+2. Reference **GE Use Case Qualification Agent (Demo #2213)** and share your feedback on the qualification workflows, A2UI v0.9 experience, Click-to-Deploy automation, or customer reception.
+
+---
+
+## Summary
+
+As demonstrated in this walkthrough, the **GE Use Case Qualification Agent** transforms Gemini Enterprise from a general-purpose assistant into a governed enterprise AI intake, architecture review, and portfolio prioritization platform. By combining conversational extraction, interactive A2UI v0.9 side-panel surfaces, deterministic ROI and 22-point technical readiness scoring, and Cloud Storage optimistic concurrency, Customer Engineers and AI CoE Leads can qualify and rank customer use cases live in under 10 minutes.
+
+---
+
+## Demo Release Notes
+
+| Date | Version | Notes |
+| :--- | :--- | :--- |
+| Oct 12, 2026 | 1.0 | Initial `go/demos` Click-to-Deploy release (`Demo #2213`): 3-phase qualification workflow (Business Value Intake, 22-point Technical Architecture Review, 4-quadrant CoE Portfolio Prioritization), A2UI v0.9 composite catalog surfaces, automated Gemini Enterprise license provisioning, and pre-seeded Cymbal portfolio in Cloud Storage. |
