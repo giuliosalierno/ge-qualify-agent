@@ -72,7 +72,7 @@ images:
 # click_to_deploy_path:
 
 
-demo_guide: docs/demo-guide-ge-qualify-agent.md # replace with the Google Doc URL before publishing
+demo_guide: https://github.com/cloud-gtm/ge-qualification-agent/blob/main/docs/demo-guide-ge-qualify-agent.md
 
 
 artifacts:
@@ -82,7 +82,7 @@ artifacts:
     type: document
 
 
-    link: docs/ddd-ge-qualify-agent.md # replace with the Google Doc URL before publishing
+    link: https://github.com/cloud-gtm/ge-qualification-agent/blob/main/docs/ddd-ge-qualify-agent.md
 
   - title: GitHub Repository
 
