@@ -122,57 +122,12 @@ Balancer).
 
 ## The standalone skills
 
-| Skill | Phase | Interview | Deliverable |
-| :--- | :--- | :--- | :--- |
-| `ge-intake-business` | 1 — Front office | 4 stages, 5 turns | Business Value Brief |
-| `ge-review-tech` | 2 — Back office | 5 stages, 6 turns | Technical Architecture Dossier & Access Checklist |
+Lightweight chat-only versions of Phase 1 and Phase 2 that run as standard Gemini Enterprise skills (one stage per turn in chat, rendering the final deliverable as markdown):
 
-Download and add them to Gemini Enterprise:
-
-- [`ge-intake-business`](https://github.com/cloud-gtm/ge-qualification-agent/releases/latest/download/ge_intake_business.zip) ([source](skills/ge_intake_business/SKILL.md))
-- [`ge-review-tech`](https://github.com/cloud-gtm/ge-qualification-agent/releases/latest/download/ge_tech_review.zip) ([source](skills/ge_tech_review/SKILL.md))
-
-Both run as a consultative interview, **one stage per turn**, entirely in
-chat: no Canvas or Google Doc is created mid-interview, because each Canvas
-hand-off creates a document and can take minutes. Every unverified field stays
-a literal `⚠️ [Pending Stage X Discovery]` placeholder until the customer
-confirms it. The final turn renders the finished deliverable as markdown in
-chat and offers to create a Google Doc only on request. Run them in order: the
-Business Value Brief from phase 1 is the input to phase 2.
-
-### `ge-intake-business` — business intake and value qualification
-
-Same four stages as the agent's Phase 1:
-
-1. **Problem & users** — problem description, as-is workflow, user personas
-   and BU.
-2. **Effort & value** — users (U), weekly task frequency (T), baseline minutes
-   per task (M) and the customer's own minutes saved per task (S), annualised
-   over 50 work weeks. No invented benchmarks.
-3. **Data & systems → capability level** — data sources, read vs. write-back,
-   data classification, document-level permissions. The skill then assesses
-   the least complex **GE App capability level (1–6)** with anti-overcommitment
-   rules; the tier (No-Code / Low-Code / Pro-Code) is derived from the level.
-4. **Ownership & next steps** — business owner, executive sponsor, production
-   catcher team, primary adoption KPI.
-
-### `ge-review-tech` — technical architecture and security review
-
-1. **Systems & data landscape** — repositories, programmatic interfaces, schema
-   readiness, data freshness.
-2. **Infrastructure & network baseline** — hosting, transit path to Google Cloud
-   (HA-VPN, Interconnect, PSC, public HTTPS), firewall and proxy constraints.
-3. **Security, IAM least-privilege & governance** — user and service auth, data
-   classification, residency, cloud processing policy.
-4. **Data grounding security & model routing** — document-level ACL
-   preservation, citation provenance, Flash vs Pro model profile.
-5. **Operational readiness & prerequisites** — named technical owners, GCP
-   landing zone status, Sprint #1 prerequisites.
-
-Output: a Technical Readiness Score (0–100%), a Feasibility Profile of **Pure GE
-App**, **Custom Agent in GE App** or **Blockers / High Risk**, the Phase 1
-capability level confirmed or revised against the technical findings, and an
-Access Checklist.
+| Skill | Phase | Interview | Deliverable | Source & Package |
+| :--- | :--- | :--- | :--- | :--- |
+| `ge-intake-business` | 1 — Front office | 4 stages, 5 turns | Business Value Brief | [`SKILL.md`](skills/ge_intake_business/SKILL.md) · [`.zip`](https://github.com/cloud-gtm/ge-qualification-agent/releases/latest/download/ge_intake_business.zip) |
+| `ge-review-tech` | 2 — Back office | 5 stages, 6 turns | Technical Architecture Dossier & Access Checklist | [`SKILL.md`](skills/ge_tech_review/SKILL.md) · [`.zip`](https://github.com/cloud-gtm/ge-qualification-agent/releases/latest/download/ge_tech_review.zip) |
 
 ### Capability levels
 
@@ -185,18 +140,12 @@ Access Checklist.
 | 5 | Workflow agent with custom MCP server | Tier 3: Pro-Code |
 | 6 | Custom high-code agent (ADK / A2A) | Tier 3: Pro-Code |
 
-The agent, both skills and the grounding skill share this table;
-`tests/test_capability_tiers.py` fails if they drift apart.
-
 ### Packaging and evaluation
 
 ```bash
 python3 skills/package_skills.py   # rebuild the zips (repo root, git-ignored)
 python3 skills/run_eval.py         # skill verification tests
 ```
-
-`skills/ge_capability_grounding/` is not distributed on its own: the agent
-appends it to its system instruction, and it ships in the container.
 
 ---
 
