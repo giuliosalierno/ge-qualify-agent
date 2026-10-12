@@ -137,4 +137,5 @@ products:
   - vertex_ai
 
 
-# content_restriction_labels:
+content_restriction_labels:
+  - private
