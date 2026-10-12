@@ -5,7 +5,7 @@
 * **Document Owner:** [giuliosalierno](https://moma.corp.google.com/person/giuliosalierno)
 * **Tech Lead:** giuliosalierno@google.com
 * **Demo Leads & Contributors:** giuliosalierno@google.com
-* **Document Self-link:** https://github.com/cloud-gtm/ge-qualification-agent/blob/main/docs/demo-guide-ge-qualify-agent.md
+* **Document Self-link:** https://docs.google.com/document/d/1nFsrfmTHBmbgb79LpRNCdEOTaOnSrWGCLgeEmswpQj8/edit?tab=t.0
 * **Link to go/demos:** [go/demos/demo/2213](https://demospace.corp.goog/demo/2213)
 * **Demo Design Document (DDD):** https://github.com/cloud-gtm/ge-qualification-agent/blob/main/docs/ddd-ge-qualify-agent.md
 * **GitHub Repository:** https://github.com/cloud-gtm/ge-qualification-agent (`main` branch for Click-to-Deploy; `integrations` branch for optional SharePoint integration)
