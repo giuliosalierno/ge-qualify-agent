@@ -63,10 +63,10 @@ owner: giuliosalierno
 
 
 images:
-  - https://github.com/cloud-gtm/ge-qualification-agent/raw/main/docs/screenshots/01-welcome-menu.png
-  - https://github.com/cloud-gtm/ge-qualification-agent/raw/main/docs/screenshots/02-portfolio-ranked-list.png
-  - https://github.com/cloud-gtm/ge-qualification-agent/raw/main/docs/screenshots/03-portfolio-quadrant-matrix.png
-  - https://github.com/cloud-gtm/ge-qualification-agent/raw/main/docs/screenshots/04-technical-review-and-brief.png
+  - https://raw.githubusercontent.com/giuliosalierno/ge-qualify-agent/deploy/godemos/docs/screenshots/01-welcome-menu.png
+  - https://raw.githubusercontent.com/giuliosalierno/ge-qualify-agent/deploy/godemos/docs/screenshots/02-portfolio-ranked-list.png
+  - https://raw.githubusercontent.com/giuliosalierno/ge-qualify-agent/deploy/godemos/docs/screenshots/03-portfolio-quadrant-matrix.png
+  - https://raw.githubusercontent.com/giuliosalierno/ge-qualify-agent/deploy/godemos/docs/screenshots/04-technical-review-and-brief.png
 
 
 # click_to_deploy_path:
