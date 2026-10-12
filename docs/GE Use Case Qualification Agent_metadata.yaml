@@ -28,7 +28,7 @@ purpose: |
 business_value: |
   * **Eliminate Unquantified AI Science Projects:** Calculates auditable annual hours saved from user headcount, weekly frequency, and minutes saved per task over 50 work weeks without invented benchmarks.
   * **Prevent Costly Over-Engineering:** Maps every request to the simplest Gemini Enterprise capability (Levels 1–6, from no-code skills to pro-code custom agents) before committing engineering capacity.
-  * **Cut Technical Discovery Time by 70%:** Locks Phase 1 business baselines in Cloud Storage so Solution Architects immediately review systems, network transit, IAM, and ACLs without re-interviewing the business.
+  * **Accelerate Technical Discovery:** Locks Phase 1 business baselines in Cloud Storage so Solution Architects immediately review systems, network transit, IAM, and ACLs without re-interviewing the business.
   * **Board-Ready Portfolio Prioritization:** Automatically scores Business Value (1–5) and Feasibility (1–5) to rank opportunities into Quick Wins, Strategic Bets, Departmental Niche, and Deprioritized quadrants.
 
 
