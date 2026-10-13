@@ -6,7 +6,7 @@
 | **Self-link:** docs/ddd-ge-qualify-agent.md | **Last Updated:** 2026-10-09 |
 |---|---|
 | **Authors:** giuliosalierno | **Status:** APPROVED |
-| **Team/Org:** Cloud Customer Engineering | **Demo Type:** Live |
+| **Team/Org:** FDE | **Demo Type:** Live |
 | **Target Tier:** Tier 2 (Customer-Ready, default) | **Governing Standard:** [Cloud Demo Standard](https://docs.google.com/document/d/1XeeyP_8xPTw4NpzCOd8VxYrUf1Ul60RM8b8jqcbFbCs) |
 | **Demo Page (External):** docs/GE Use Case Qualification Agent_metadata.yaml | **Demo Narrative/Guide:** [docs/demo-guide-ge-qualify-agent.md](./demo-guide-ge-qualify-agent.md) |
 | **Related PRD/Design Doc:** [GE App Use Case Discovery Framework](../docs/framework.md) | **Git Repository:** https://github.com/cloud-gtm/ge-qualification-agent |
