@@ -33,7 +33,7 @@ field it proposes is shown for the user to confirm or correct.
 
 | Phase | Stages | Output |
 | :--- | :--- | :--- |
-| 1. Business intake | Problem and users · Effort and value · Data and systems · Ownership and next steps | Business Value Brief: annual hours saved, capability tier (Levels 1–6) |
+| 1. Business intake | Problem and users · Effort and value · Data and systems · Ownership and next steps | Business Value Brief: annual hours saved, capability tier (Levels 1-6) |
 | 2. Technical review | Systems and data landscape · Infrastructure and network · Security, IAM and governance · Data grounding and model routing · Operational readiness | Technical Architecture Dossier: 22-subcriteria readiness score, feasibility profile, access checklist |
 | 3. Portfolio | Ranks every qualified use case by value and feasibility | Portfolio report with four quadrants |
 
@@ -126,8 +126,8 @@ Lightweight chat-only versions of Phase 1 and Phase 2 that run as standard Gemin
 
 | Skill | Phase | Interview | Deliverable | Source & Package |
 | :--- | :--- | :--- | :--- | :--- |
-| `ge-intake-business` | 1 — Front office | 4 stages, 5 turns | Business Value Brief | [`SKILL.md`](skills/ge_intake_business/SKILL.md) · [`.zip`](https://github.com/cloud-gtm/ge-qualification-agent/releases/latest/download/ge_intake_business.zip) |
-| `ge-review-tech` | 2 — Back office | 5 stages, 6 turns | Technical Architecture Dossier & Access Checklist | [`SKILL.md`](skills/ge_tech_review/SKILL.md) · [`.zip`](https://github.com/cloud-gtm/ge-qualification-agent/releases/latest/download/ge_tech_review.zip) |
+| `ge-intake-business` | 1 - Front office | 4 stages, 5 turns | Business Value Brief | [`SKILL.md`](skills/ge_intake_business/SKILL.md) · [`.zip`](https://github.com/cloud-gtm/ge-qualification-agent/releases/latest/download/ge_intake_business.zip) |
+| `ge-review-tech` | 2 - Back office | 5 stages, 6 turns | Technical Architecture Dossier & Access Checklist | [`SKILL.md`](skills/ge_tech_review/SKILL.md) · [`.zip`](https://github.com/cloud-gtm/ge-qualification-agent/releases/latest/download/ge_tech_review.zip) |
 
 ### Capability levels
 
@@ -135,8 +135,8 @@ Lightweight chat-only versions of Phase 1 and Phase 2 that run as standard Gemin
 | :--- | :--- | :--- |
 | 1 | Default assistant | Tier 1: No-Code |
 | 2 | Assistant with custom skill | Tier 1: No-Code |
-| 3 | Workflow Builder — chat agent | Tier 2: Low-Code |
-| 4 | Workflow Builder — workflow agent | Tier 2: Low-Code |
+| 3 | Workflow Builder - chat agent | Tier 2: Low-Code |
+| 4 | Workflow Builder - workflow agent | Tier 2: Low-Code |
 | 5 | Workflow agent with custom MCP server | Tier 3: Pro-Code |
 | 6 | Custom high-code agent (ADK / A2A) | Tier 3: Pro-Code |
 
