@@ -256,9 +256,9 @@ def _assign_quadrant(
         return "Deprioritized"
     if value_score >= 3 and feasibility_score >= 4:
         return "Quick Wins"
-    if value_score >= 3 and feasibility_score >= 2:
+    if value_score >= 3:
         return "Strategic Bets"
-    if value_score < 3 and feasibility_score >= 4:
+    if feasibility_score >= 4:
         return "Departmental Niche"
     return "Deprioritized"
 
