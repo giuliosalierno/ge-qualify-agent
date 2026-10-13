@@ -142,8 +142,22 @@ def test_drawn_regions_match_the_scoring_for_every_cell(feas: int, value: int) -
     """The shading must say what the scoring says, for every score pair."""
     assert _region_at(feas, value) == _assign_quadrant(value, feas, False)
     # And for the furthest a spread point can sit from the cell centre.
-    for dx, dy in ((0.28, 0.28), (-0.28, -0.28), (0.28, -0.28), (-0.28, 0.28)):
+    for dx, dy in ((0.24, 0.24), (-0.24, -0.24), (0.24, -0.24), (-0.24, 0.24)):
         assert _region_at(feas + dx, value + dy) == _assign_quadrant(value, feas, False)
+
+
+def test_four_quadrant_backgrounds_cover_full_quadrants() -> None:
+    regions = {r["quadrant"]: r for r in quadrant_regions()}
+    assert len(quadrant_regions()) == 4
+    assert set(regions) == {"Quick Wins", "Strategic Bets", "Departmental Niche", "Deprioritized"}
+    # Strategic Bets (top-left quadrant) spans the full left half, matching Deprioritized.
+    assert regions["Strategic Bets"]["x"] == regions["Deprioritized"]["x"]
+    assert regions["Strategic Bets"]["x2"] == regions["Deprioritized"]["x2"]
+    spec = quadrant_matrix_spec([])
+    assert spec["layer"][0]["mark"]["opacity"] >= 0.15
+    label_mark = spec["layer"][1]["mark"]
+    assert label_mark["align"] == {"expr": "datum.align"}
+    assert label_mark["baseline"] == {"expr": "datum.baseline"}
 
 
 def test_blocked_points_are_labelled() -> None:

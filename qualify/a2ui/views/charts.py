@@ -4,11 +4,10 @@ The quadrant matrix is the visual centre of the demo: business value on y,
 feasibility on x, bubble size for hours saved, colour for quadrant.
 
 Scores are integers 1–5. The quadrant boundaries from
-``scoring.portfolio._assign_quadrant`` (value >= 3, feasibility >= 4, and
-feasibility >= 2 for a Strategic Bet) are therefore drawn *between* integers,
-at 2.5, 3.5 and 1.5. Every score cell then sits wholly inside one shaded
-region, and points spread within a cell can never cross a boundary — which
-an earlier version, with the lines on 3 and 4, did.
+``scoring.portfolio._assign_quadrant`` (value >= 3, feasibility >= 4) are
+drawn *between* integers, at 2.5 and 3.5. Every score cell then sits wholly
+inside one of the four shaded quadrant regions, and points spread within a
+cell can never cross a boundary.
 """
 
 from __future__ import annotations
@@ -42,10 +41,10 @@ QUADRANT_COLOURS = {
 CHART_WIDTH = 600
 CHART_HEIGHT = 420
 
-_LO, _HI = 0.5, 5.5
+_LO, _HI = 0.35, 5.65
 #: Largest offset from the cell centre. Below 0.5, so a spread point stays in
-#: its cell and therefore in its quadrant.
-_SPREAD = 0.28
+#: its cell and therefore in its quadrant, while leaving headroom below _HI.
+_SPREAD = 0.24
 _NAME_MAX = 24
 
 
@@ -111,9 +110,8 @@ def quadrant_regions() -> list[dict[str, Any]]:
     """The four quadrants as rectangles, matching ``_assign_quadrant``."""
     return [
         _region(FEASIBILITY_LINE, _HI, VALUE_LINE, _HI, "Quick Wins"),
-        _region(STRATEGIC_LINE, FEASIBILITY_LINE, VALUE_LINE, _HI, "Strategic Bets"),
+        _region(_LO, FEASIBILITY_LINE, VALUE_LINE, _HI, "Strategic Bets"),
         _region(FEASIBILITY_LINE, _HI, _LO, VALUE_LINE, "Departmental Niche"),
-        _region(_LO, STRATEGIC_LINE, VALUE_LINE, _HI, "Deprioritized"),
         _region(_LO, FEASIBILITY_LINE, _LO, VALUE_LINE, "Deprioritized"),
     ]
 
@@ -134,10 +132,10 @@ def quadrant_matrix_spec(
     ``portfolio.build_portfolio_view``), so it draws once the panel is open.
     """
     region_labels = [
-        {"x": _HI - 0.08, "y": _HI - 0.12, "label": "QUICK WINS", "quadrant": "Quick Wins", "align": "right"},
-        {"x": STRATEGIC_LINE + 0.08, "y": _HI - 0.12, "label": "STRATEGIC BETS", "quadrant": "Strategic Bets", "align": "left"},
-        {"x": _HI - 0.08, "y": _LO + 0.12, "label": "DEPARTMENTAL NICHE", "quadrant": "Departmental Niche", "align": "right"},
-        {"x": _LO + 0.08, "y": _LO + 0.12, "label": "DEPRIORITIZED", "quadrant": "Deprioritized", "align": "left"},
+        {"x": _HI - 0.12, "y": _HI - 0.12, "label": "QUICK WINS", "quadrant": "Quick Wins", "align": "right", "baseline": "top"},
+        {"x": _LO + 0.12, "y": _HI - 0.12, "label": "STRATEGIC BETS", "quadrant": "Strategic Bets", "align": "left", "baseline": "top"},
+        {"x": _HI - 0.12, "y": _LO + 0.12, "label": "DEPARTMENTAL NICHE", "quadrant": "Departmental Niche", "align": "right", "baseline": "bottom"},
+        {"x": _LO + 0.12, "y": _LO + 0.12, "label": "DEPRIORITIZED", "quadrant": "Deprioritized", "align": "left", "baseline": "bottom"},
     ]
     colour = {
         "field": "quadrant",
@@ -171,7 +169,7 @@ def quadrant_matrix_spec(
         "height": height,
         "autosize": {"type": "fit", "contains": "padding"},
         "config": {
-            "view": {"stroke": None},
+            "view": {"stroke": "#dadce0", "strokeWidth": 1},
             "axis": {"labelFontSize": 12, "titleFontSize": 13, "titleFontWeight": "normal", "titleColor": "#5f6368"},
             "legend": {"orient": "bottom", "direction": "horizontal", "labelFontSize": 12, "symbolSize": 140},
         },
@@ -179,7 +177,7 @@ def quadrant_matrix_spec(
             # Shaded quadrants.
             {
                 "data": {"values": quadrant_regions()},
-                "mark": {"type": "rect", "opacity": 0.09},
+                "mark": {"type": "rect", "opacity": 0.15},
                 "encoding": {
                     "x": x_axis,
                     "x2": {"field": "x2"},
@@ -191,24 +189,30 @@ def quadrant_matrix_spec(
             # Quadrant names in their corners, tinted like the quadrant.
             {
                 "data": {"values": region_labels},
-                "mark": {"type": "text", "fontSize": 11, "fontWeight": "bold", "opacity": 0.7, "baseline": "middle"},
+                "mark": {
+                    "type": "text",
+                    "fontSize": 11,
+                    "fontWeight": "bold",
+                    "opacity": 0.85,
+                    "align": {"expr": "datum.align"},
+                    "baseline": {"expr": "datum.baseline"},
+                },
                 "encoding": {
                     "x": plain_x,
                     "y": plain_y,
                     "text": {"field": "label"},
-                    "align": {"field": "align"},
                     "color": {**colour, "legend": None},
                 },
             },
             # Boundaries.
             {
                 "data": {"values": [{"x": FEASIBILITY_LINE}]},
-                "mark": {"type": "rule", "strokeDash": [5, 4], "color": "#9aa0a6"},
+                "mark": {"type": "rule", "strokeDash": [5, 4], "strokeWidth": 1.5, "color": "#80868b"},
                 "encoding": {"x": plain_x},
             },
             {
                 "data": {"values": [{"y": VALUE_LINE}]},
-                "mark": {"type": "rule", "strokeDash": [5, 4], "color": "#9aa0a6"},
+                "mark": {"type": "rule", "strokeDash": [5, 4], "strokeWidth": 1.5, "color": "#80868b"},
                 "encoding": {"y": plain_y},
             },
             # Bubbles. Index 4: tests and views read the points from here.
