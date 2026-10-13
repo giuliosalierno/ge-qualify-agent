@@ -10,13 +10,13 @@
 | **Target Tier:** Tier 2 (Customer-Ready, default) | **Governing Standard:** [Cloud Demo Standard](https://docs.google.com/document/d/1XeeyP_8xPTw4NpzCOd8VxYrUf1Ul60RM8b8jqcbFbCs) |
 | **Demo Page (External):** docs/GE Use Case Qualification Agent_metadata.yaml | **Demo Narrative/Guide:** [docs/demo-guide-ge-qualify-agent.md](./demo-guide-ge-qualify-agent.md) |
 | **Related PRD/Design Doc:** [GE App Use Case Discovery Framework](../docs/framework.md) | **Git Repository:** https://github.com/cloud-gtm/ge-qualification-agent |
-| **Replaces / Complements:** N/A — first demo in this space | **Created:** 2026-10-09 |
+| **Replaces / Complements:** N/A - first demo in this space | **Created:** 2026-10-09 |
 
 ---
 
 ## **1. Executive Summary**
 
-This demo shows how an enterprise AI Center of Excellence (CoE) uses a native Gemini Enterprise agent with interactive A2UI forms to qualify, architecturally review, and rank AI use cases across business units in minutes rather than weeks of disconnected spreadsheets and workshops. It turns unstructured business requests into quantified Business Value Briefs (annual hours saved and Capability Levels 1–6), 22-subcriteria Technical Architecture Dossiers, and a 4-quadrant Portfolio Prioritization matrix inside Gemini Enterprise.
+This demo shows how an enterprise AI Center of Excellence (CoE) uses a native Gemini Enterprise agent with interactive A2UI forms to qualify, architecturally review, and rank AI use cases across business units in minutes rather than weeks of disconnected spreadsheets and workshops. It turns unstructured business requests into quantified Business Value Briefs (annual hours saved and Capability Levels 1-6), 22-subcriteria Technical Architecture Dossiers, and a 4-quadrant Portfolio Prioritization matrix inside Gemini Enterprise.
 
 ---
 
@@ -35,8 +35,8 @@ Enterprise AI Centers of Excellence (CoEs) receive dozens of generative AI reque
 
 ### **2.3. User Groups & Key Concerns**
 *   **Business Unit Owners (Front Office):** Want to articulate their workflow pain in plain language without knowing cloud architecture, and receive immediate sizing and no-code guidance.
-*   **Solution Architects & IT Security (Back Office):** Need complete technical specifications—data sources, network transit, IAM/ACL preservation, data residency, and latency SLAs—scored against a deterministic readiness rubric.
-*   **AI CoE Leads & Executives:** Need an objective, apples-to-apples portfolio view ranking every intake by Business Value (1–5) and Technical Feasibility (1–5) into actionable delivery quadrants.
+*   **Solution Architects & IT Security (Back Office):** Need complete technical specifications - data sources, network transit, IAM/ACL preservation, data residency, and latency SLAs - scored against a deterministic readiness rubric.
+*   **AI CoE Leads & Executives:** Need an objective, apples-to-apples portfolio view ranking every intake by Business Value (1-5) and Technical Feasibility (1-5) into actionable delivery quadrants.
 
 ---
 
@@ -51,9 +51,9 @@ Demonstrate how Gemini Enterprise and the GE Use Case Qualification Agent compre
 *   Provide a reference architecture for building production A2A + A2UI agents on Cloud Run backed by Gemini on the Gemini Enterprise Agent Platform (formerly Vertex AI).
 
 ### **3.3. In-Scope (Core Demo Features)**
-*   **Phase 1 — Business Value Intake (4 stages):** Conversational + A2UI form capture of Problem & Users, Effort & Value (annual hours saved over 50 work weeks), Data & Systems, and Ownership, producing a **Business Value Brief** and deterministic **Capability Level (1–6)** assignment.
-*   **Phase 2 — Technical Architecture Review (5 stages):** Handover of locked Phase 1 baselines to a Solution Architect to evaluate Systems & Data, Network & Transit, Security & IAM, Data Grounding & Model Routing, and Operational Readiness, producing a **22-subcriteria Technical Architecture Dossier**, **Key 2 Readiness status**, and **Access Checklist**.
-*   **Phase 3 — CoE Portfolio Prioritization:** Aggregation of all qualified records (including 3 pre-seeded Cymbal opportunities) into a 4-quadrant matrix (**Quick Wins**, **Strategic Bets**, **Departmental Niche**, **Deprioritized**) with Vega-Lite visualizations and drill-down actions.
+*   **Phase 1 - Business Value Intake (4 stages):** Conversational + A2UI form capture of Problem & Users, Effort & Value (annual hours saved over 50 work weeks), Data & Systems, and Ownership, producing a **Business Value Brief** and deterministic **Capability Level (1-6)** assignment.
+*   **Phase 2 - Technical Architecture Review (5 stages):** Handover of locked Phase 1 baselines to a Solution Architect to evaluate Systems & Data, Network & Transit, Security & IAM, Data Grounding & Model Routing, and Operational Readiness, producing a **22-subcriteria Technical Architecture Dossier**, **Key 2 Readiness status**, and **Access Checklist**.
+*   **Phase 3 - CoE Portfolio Prioritization:** Aggregation of all qualified records (including 3 pre-seeded Cymbal opportunities) into a 4-quadrant matrix (**Quick Wins**, **Strategic Bets**, **Departmental Niche**, **Deprioritized**) with Vega-Lite visualizations and drill-down actions.
 *   **Two Standalone GE Skills:** `ge-intake-business` and `ge-review-tech` packaged for zero-infrastructure chat-only qualification.
 
 ### **3.4. Out-of-Scope**
@@ -65,7 +65,7 @@ Demonstrate how Gemini Enterprise and the GE Use Case Qualification Agent compre
 | Priority | Business Requirement | User Story |
 |---|---|---|
 | P0 | Interactive 4-stage Business Intake with live A2UI form pre-filling | As a Business Owner, I want to describe my use case in chat and see the structured form fields populate automatically so I can verify and submit a Business Value Brief in under 3 minutes. |
-| P0 | Deterministic ROI sizing and GE Capability Level (1–6) mapping | As a CoE Lead, I need annual hours saved (`U × T × S × 50 / 60`) and capability tiers calculated deterministically with anti-overcommitment rules so estimates are auditable. |
+| P0 | Deterministic ROI sizing and GE Capability Level (1-6) mapping | As a CoE Lead, I need annual hours saved (`U × T × S × 50 / 60`) and capability tiers calculated deterministically with anti-overcommitment rules so estimates are auditable. |
 | P0 | Phase 1 → Phase 2 handover and 5-stage Technical Review | As a Solution Architect, I want to pick a pending Business Value Brief in a separate chat, keep its business baseline locked, and score 22 technical subcriteria to produce a Technical Architecture Dossier. |
 | P0 | CoE Portfolio Prioritization matrix with pre-seeded Cymbal records | As a CoE Lead, I want to type `portfolio review` on first launch and immediately inspect a 4-quadrant portfolio combining pre-seeded Cymbal use cases and newly qualified opportunities. |
 | P1 | Optimistic concurrency and multi-actor record integrity in Cloud Storage | As a platform owner, I need concurrent business and technical sessions to merge cleanly via GCS generation preconditions so neither persona overwrites the other's work. |
@@ -76,28 +76,28 @@ Demonstrate how Gemini Enterprise and the GE Use Case Qualification Agent compre
 ## **4. Demo Strategy & Narrative**
 
 ### **4.1. Demo Thesis**
-Today, I will show you how Gemini Enterprise and the GE Use Case Qualification Agent replace weeks of fragmented AI intake spreadsheets with a governed, three-phase agentic workflow—turning a raw finance automation idea into a quantified 10,000-hour/year Business Value Brief, a 22-point Technical Architecture Dossier, and a prioritized CoE portfolio in under 10 minutes.
+Today, I will show you how Gemini Enterprise and the GE Use Case Qualification Agent replace weeks of fragmented AI intake spreadsheets with a governed, three-phase agentic workflow - turning a raw finance automation idea into a quantified 10,000-hour/year Business Value Brief, a 22-point Technical Architecture Dossier, and a prioritized CoE portfolio in under 10 minutes.
 
 ### **4.2. Overall Narrative Approach**
 *   **Focus on Value, Not Features:** Frame every stage around preventing the two biggest AI CoE failures: building low-value science projects and over-engineering simple no-code assistants into expensive custom builds.
 *   **Feature -> Benefit -> Value:**
     *   *Dual Chat + A2UI Form Extraction* -> Stakeholders speak naturally while the agent fills structured fields with evidence checks -> *Zero form fatigue and 100% structured data capture.*
-    *   *Anti-Overcommitment Capability Engine (Levels 1–6)* -> Automatically routes read-only Drive Q&A to Level 2 (No-Code Skill) and SAP/Outlook workflows to Level 5 (Pro-Code MCP) -> *Saves months of unnecessary engineering.*
+    *   *Anti-Overcommitment Capability Engine (Levels 1-6)* -> Automatically routes read-only Drive Q&A to Level 2 (No-Code Skill) and SAP/Outlook workflows to Level 5 (Pro-Code MCP) -> *Saves months of unnecessary engineering.*
     *   *Cross-Session GCS Record Handover* -> Architects pick up exact business baselines without re-interviewing the business -> *Cuts technical scoping lead time by 70%.*
 
 ### **4.3. Demo Narrative & Storyboard**
 *   **Setup:** Introduce **Maria Rossi** (AP Operations Manager at Cymbal) who wants an AI agent to help her 30 accounts payable clerks handle supplier invoice emails, **Paolo Verdi** (Solution Architect) who must vet SAP and M365 security, and the **AI CoE Lead** who must decide what to fund first.
 *   **Product in Action:**
     1.  **Welcome & Orientation:** Presenter opens Gemini Enterprise, selects `@GE Use Case Qualification Agent`, and types `hello what can you do?`. The agent renders the welcome card with three workflow entry points.
-    2.  **Act 1 — Business Value Intake (Maria):** Presenter clicks **Business Value Intake** and describes the *Supplier query assistant* in natural language. Across 4 stages (Problem & Users → Effort & Value → Data & Systems → Ownership), the agent extracts fields into the A2UI card, calculates **10,000 hours/year saved** (`30 clerks × 40 queries/wk × 10 min saved × 50 weeks`), assigns **Level 5 (Tier 3: Pro-Code — Workflow agent with custom MCP server)**, and generates the **Business Value Brief**.
-    3.  **Act 2 — Technical Architecture Review (Paolo):** Presenter types `technical review`, selects the newly created *Supplier query assistant* record alongside seeded Cymbal opportunities, and walks through the 5 technical stages (SAP S/4HANA real-time freshness, Milan on-prem PSC transit, Entra ID SSO + EU data residency, strict citations + ACL preservation, landing zone in progress). The agent produces the **Technical Architecture Dossier** (68% readiness across 22 subcriteria).
-    4.  **Act 3 — CoE Portfolio Prioritization (CoE Lead):** Presenter types `portfolio review`. The agent scores all 4 opportunities (3 Cymbal seeds + the new AP use case totaling **95,500 hrs/yr** across **660 users**) and plots them on the 4-quadrant chart, highlighting *Claims intake triage* (`UC-2026-DEMO01`) as the top **Quick Win** and *Supplier query assistant* as a **Strategic Bet**.
-*   **Resolution:** In under 10 minutes, three personas moved from an unstructured idea to a board-ready Business Brief, an architect-verified Technical Dossier, and a ranked CoE portfolio—all inside Gemini Enterprise.
+    2.  **Act 1 - Business Value Intake (Maria):** Presenter clicks **Business Value Intake** and describes the *Supplier query assistant* in natural language. Across 4 stages (Problem & Users → Effort & Value → Data & Systems → Ownership), the agent extracts fields into the A2UI card, calculates **10,000 hours/year saved** (`30 clerks × 40 queries/wk × 10 min saved × 50 weeks`), assigns **Level 5 (Tier 3: Pro-Code - Workflow agent with custom MCP server)**, and generates the **Business Value Brief**.
+    3.  **Act 2 - Technical Architecture Review (Paolo):** Presenter types `technical review`, selects the newly created *Supplier query assistant* record alongside seeded Cymbal opportunities, and walks through the 5 technical stages (SAP S/4HANA real-time freshness, Milan on-prem PSC transit, Entra ID SSO + EU data residency, strict citations + ACL preservation, landing zone in progress). The agent produces the **Technical Architecture Dossier** (68% readiness across 22 subcriteria).
+    4.  **Act 3 - CoE Portfolio Prioritization (CoE Lead):** Presenter types `portfolio review`. The agent scores all 4 opportunities (3 Cymbal seeds + the new AP use case totaling **95,500 hrs/yr** across **660 users**) and plots them on the 4-quadrant chart, highlighting *Claims intake triage* (`UC-2026-DEMO01`) as the top **Quick Win** and *Supplier query assistant* as a **Strategic Bet**.
+*   **Resolution:** In under 10 minutes, three personas moved from an unstructured idea to a board-ready Business Brief, an architect-verified Technical Dossier, and a ranked CoE portfolio - all inside Gemini Enterprise.
 
 ### **4.4. Differentiators**
-*   **Native A2A + Interactive A2UI Side-Panel Forms inside Gemini Enterprise** — *vs. Microsoft Copilot Studio / generic chat-only intake bots; shown in Act 1 & Act 2 when natural-language chat turns dynamically patch live A2UI form cards, tables, and Vega charts alongside the conversation.*
-*   **Evidence-Gated Extraction & Deterministic Scoring Engine** — *vs. prompt-only LLM wrappers that hallucinate ROI benchmarks or let users self-inflate scores; shown in Act 1 Stage 2 & Act 2 Stage 5 where every extracted field is verified against the user's verbatim text and scored by deterministic Python rules (`qualify/scoring/`).*
-*   **Multi-Persona Handover with Three-Way Merge Concurrency** — *vs. isolated single-session chat threads; shown in Act 2 & Act 3 when the Solution Architect and CoE Lead seamlessly load, review, and rank the Business Owner's record from Cloud Storage.*
+*   **Native A2A + Interactive A2UI Side-Panel Forms inside Gemini Enterprise** - *vs. Microsoft Copilot Studio / generic chat-only intake bots; shown in Act 1 & Act 2 when natural-language chat turns dynamically patch live A2UI form cards, tables, and Vega charts alongside the conversation.*
+*   **Evidence-Gated Extraction & Deterministic Scoring Engine** - *vs. prompt-only LLM wrappers that hallucinate ROI benchmarks or let users self-inflate scores; shown in Act 1 Stage 2 & Act 2 Stage 5 where every extracted field is verified against the user's verbatim text and scored by deterministic Python rules (`qualify/scoring/`).*
+*   **Multi-Persona Handover with Three-Way Merge Concurrency** - *vs. isolated single-session chat threads; shown in Act 2 & Act 3 when the Solution Architect and CoE Lead seamlessly load, review, and rank the Business Owner's record from Cloud Storage.*
 
 ### **4.5. Call to Action (CTA)**
 Deploy the GE Use Case Qualification Agent into your Argolis project via **go/demos Click-to-Deploy** (or install the standalone `ge-intake-business` and `ge-review-tech` skills) to run a live AI Use Case Discovery & Portfolio Prioritization workshop with your customer's CoE.
@@ -106,9 +106,9 @@ Deploy the GE Use Case Qualification Agent into your Argolis project via **go/de
 
 | Audience | Duration | Highlight | Skip or Mention Only |
 |---|---|---|---|
-| **C-suite / AI CoE Executive** | 5–7 min | Act 1 Stage 1–2 (value sizing), Business Value Brief output, and Act 3 Portfolio Prioritization 4-quadrant matrix | Act 2 stages 2–4 (detailed network/IAM/grounding subcriteria) — jump straight to a pre-seeded record's dossier |
+| **C-suite / AI CoE Executive** | 5-7 min | Act 1 Stage 1-2 (value sizing), Business Value Brief output, and Act 3 Portfolio Prioritization 4-quadrant matrix | Act 2 stages 2-4 (detailed network/IAM/grounding subcriteria) - jump straight to a pre-seeded record's dossier |
 | **Solution Architect / IT Security** | 15 min | Full Act 1 → Act 2 handover, 22-subcriteria technical rubric, blocker detection (Key 2 gating), and Cloud Run IAM architecture | Deep dive into Python unit tests or Terraform state internals |
-| **Developer / Demo Engineer** | 25–30 min | Full 3-act flow plus A2A SSE streaming, A2UI surface patching, YAML interview pack definitions (`business.yaml`, `tech.yaml`), and C2D Terraform | High-level CoE governance background |
+| **Developer / Demo Engineer** | 25-30 min | Full 3-act flow plus A2A SSE streaming, A2UI surface patching, YAML interview pack definitions (`business.yaml`, `tech.yaml`), and C2D Terraform | High-level CoE governance background |
 
 ---
 
@@ -156,8 +156,8 @@ flowchart LR
 *   **Supplementary Diagram (optional):** See [`click-to-deploy/README.md`](../click-to-deploy/README.md) and root [`README.md`](../README.md) for the optional SharePoint / Load Balancer + IAP production topology.
 
 ### **5.2. Core Components & Google Cloud Services**
-*   **Gemini Enterprise (Discovery Engine — `discoveryengine.googleapis.com`):** Hosts the enterprise search & assistant web interface (`google_discovery_engine_search_engine`), renders A2UI surfaces (cards, inputs, tabs, Vega charts, markdown canvases), and invokes the agent over A2A using the Discovery Engine service agent (`service-<PROJECT_NUMBER>@gcp-sa-discoveryengine.iam.gserviceaccount.com`).
-*   **Gemini on Gemini Enterprise Agent Platform (formerly Vertex AI — `aiplatform.googleapis.com`):** Powers dual-pass structured field extraction (`GeminiExtractionClient`) and consultative stage replies (`GeminiChatClient`) using the latest Gemini Flash tier (`MODEL` env var, default `gemini-3.8-flash`, served from `GOOGLE_CLOUD_LOCATION=global`).
+*   **Gemini Enterprise (Discovery Engine - `discoveryengine.googleapis.com`):** Hosts the enterprise search & assistant web interface (`google_discovery_engine_search_engine`), renders A2UI surfaces (cards, inputs, tabs, Vega charts, markdown canvases), and invokes the agent over A2A using the Discovery Engine service agent (`service-<PROJECT_NUMBER>@gcp-sa-discoveryengine.iam.gserviceaccount.com`).
+*   **Gemini on Gemini Enterprise Agent Platform (formerly Vertex AI - `aiplatform.googleapis.com`):** Powers dual-pass structured field extraction (`GeminiExtractionClient`) and consultative stage replies (`GeminiChatClient`) using the latest Gemini Flash tier (`MODEL` env var, default `gemini-3.8-flash`, served from `GOOGLE_CLOUD_LOCATION=global`).
 *   **Cloud Run v2 (`run.googleapis.com`):** Hosts the stateless Python 3.12 Starlette/Uvicorn container (`ge-qualify-agent`), scaled `0..1` with `roles/run.invoker` granted exclusively to the Discovery Engine service agent (no `allUsers` access).
 *   **Cloud Storage (`storage.googleapis.com`):** Two private buckets with uniform bucket-level access and `public_access_prevention = "enforced"`:
     *   Records bucket (`<project>-ge-qualify-agent`): Stores active conversation sessions (`sessions/*.json`), completed use case records (`records/*.json`), and portfolio snapshots (`portfolio/latest.md`, `portfolio/latest.json`), pre-populated with 3 synthetic Cymbal records.
@@ -169,18 +169,18 @@ flowchart LR
 *   **Declarative Interview Packs (`qualify/packs/business.yaml`, `qualify/packs/tech.yaml`):** Define stages, fields, types, option hints, validation rules, and whether a stage is required or skippable.
 *   **Evidence-Gated Extraction (`qualify/a2ui/patcher.py`):** The LLM proposes field values paired with verbatim quotes from the user's message; a deterministic check rejects any extraction whose quote does not appear in the user's actual words, preventing hallucinated form fills.
 *   **Deterministic Scoring (`qualify/scoring/`):**
-    *   `tier.py`: Evaluates data sources, write-back actions, orchestration complexity, and governance flags to assign Capability Levels 1–6 and Delivery Tiers 1–3 with anti-overcommitment rules.
-    *   `technical.py`: Scores 22 subcriteria across 5 architectural categories (0–100%), distinguishes unconfirmed (`unknown`) vs. confirmed hard blockers on critical gates (2.4 Transit Blocker, 3.5 Cloud Policy), and computes `key2_ready`.
-    *   `portfolio.py`: Computes Value (1–5) and Feasibility (1–5) scores and segments records into 4 quadrants.
+    *   `tier.py`: Evaluates data sources, write-back actions, orchestration complexity, and governance flags to assign Capability Levels 1-6 and Delivery Tiers 1-3 with anti-overcommitment rules.
+    *   `technical.py`: Scores 22 subcriteria across 5 architectural categories (0-100%), distinguishes unconfirmed (`unknown`) vs. confirmed hard blockers on critical gates (2.4 Transit Blocker, 3.5 Cloud Policy), and computes `key2_ready`.
+    *   `portfolio.py`: Computes Value (1-5) and Feasibility (1-5) scores and segments records into 4 quadrants.
 *   **Reopenable A2A Task Store (`qualify/agent/task_store.py`):** Wraps `InMemoryTaskStore` so every turn returns `completed` (allowing Gemini Enterprise to render the turn cleanly) while permitting A2UI button clicks on older cards to reopen the task seamlessly.
 *   **Per-Context Async Lock & Optimistic Concurrency (`qualify/agent/executor.py`, `qualify/sinks/record_store.py`):** Serializes turns per `context_id` via `WeakValueDictionary[str, asyncio.Lock]`, runs synchronous turn execution in `asyncio.to_thread`, and performs a 3-way merge against `Session.record_base` with GCS `if_generation_match` preconditions and 412 retry.
 
 ### **5.4. Data Details**
 *   **Source:** 100% synthetic data under the fictional **Cymbal** brand (`Cymbal Insurance`, `Cymbal Retail`, `Cymbal Bank`). Zero customer or internal Google data.
 *   **Format & Volume:** Three pre-generated JSON records (`click-to-deploy/demo/seed/records/UC-2026-DEMO01.json` through `DEMO03.json`) plus pre-rendered portfolio summaries (`portfolio/latest.json`, `portfolio/latest.md`), totaling ~15 KB:
-    1.  `UC-2026-DEMO01` — **Claims intake triage** (Cymbal Insurance, 120 handlers, 28,000 hrs/yr, Level 4 Low-Code Workflow Agent, waiting for Phase 2 tech review).
-    2.  `UC-2026-DEMO02` — **Store policy assistant** (Cymbal Retail, 450 store managers, 45,000 hrs/yr, Level 2 No-Code Custom Skill, both Phase 1 & Phase 2 complete, 100% tech readiness — **Quick Win**).
-    3.  `UC-2026-DEMO03` — **KYC document pre-check** (Cymbal Bank, 60 analysts, 12,500 hrs/yr, Level 6 Pro-Code High-Code Agent, waiting for Phase 2 tech review).
+    1.  `UC-2026-DEMO01` - **Claims intake triage** (Cymbal Insurance, 120 handlers, 28,000 hrs/yr, Level 4 Low-Code Workflow Agent, waiting for Phase 2 tech review).
+    2.  `UC-2026-DEMO02` - **Store policy assistant** (Cymbal Retail, 450 store managers, 45,000 hrs/yr, Level 2 No-Code Custom Skill, both Phase 1 & Phase 2 complete, 100% tech readiness - **Quick Win**).
+    3.  `UC-2026-DEMO03` - **KYC document pre-check** (Cymbal Bank, 60 analysts, 12,500 hrs/yr, Level 6 Pro-Code High-Code Agent, waiting for Phase 2 tech review).
 *   **Generation/Refresh:** Regenerated deterministically via `uv run python click-to-deploy/demo/seed/generate_seed.py` and verified against schema drift by `tests/test_seed_data.py`.
 
 ### **5.5. Serving & Deployment Options**
@@ -253,7 +253,7 @@ The primary user interface in Click-to-Deploy is **Gemini Enterprise**, which co
 ### **6.1. Demo Quality & Reproducibility**
 *   **Deployment Idempotency:** Tested across full `terraform apply` → `terraform plan` (exit code 0, zero drift) → `terraform destroy` → `terraform apply` cycles in Argolis project `ge-qualify-c2d-test`. Discovery Engine data stores and engines use a `random_id` suffix so destroying and re-creating in the same project never collides with GCP's soft-delete tombstones, and `register_agent.sh` updates existing agent registrations in place.
 *   **Pre-flight Validation:** `ensure_ge_license.sh` and `register_agent.sh` validate access tokens, paginate existing agents, and retry transient IAM/Discovery Engine propagation delays (`403`, `429`, `5xx`, `FAILED_PRECONDITION`).
-*   **Resilience & Latency (LLM/Agentic demos):** Fast path handles deterministic commands (`help`, `technical review`, `portfolio review`, stage navigation) without LLM latency (~1–3s); extraction + chat turns run on `gemini-3.8-flash` in ~4–9s over SSE (`message/stream`). If Gemini extraction fails or returns invalid JSON, the turn engine degrades gracefully and keeps the A2UI form editable so the presenter can type or select values directly on the card.
+*   **Resilience & Latency (LLM/Agentic demos):** Fast path handles deterministic commands (`help`, `technical review`, `portfolio review`, stage navigation) without LLM latency (~1-3s); extraction + chat turns run on `gemini-3.8-flash` in ~4-9s over SSE (`message/stream`). If Gemini extraction fails or returns invalid JSON, the turn engine degrades gracefully and keeps the A2UI form editable so the presenter can type or select values directly on the card.
 *   **Responsible AI & Safety Defaults (GenAI demos):** Evidence gating requires every extracted field to cite a verbatim substring of the user's message; ROI math and capability levels are computed by deterministic Python functions rather than free-form LLM generation.
 *   **Freshness & Maintenance:** Model ID is externalized via `var.model` / `MODEL` env var; 871 automated pytest unit and integration tests validate schema, scoring, A2UI compilation, supply-chain hashes, and seed data integrity.
 
@@ -261,7 +261,7 @@ The primary user interface in Click-to-Deploy is **Gemini Enterprise**, which co
 *   **Bug Fixes/Support:** Maintained by the demo owner (`giuliosalierno`) via GitHub issues and PRs on `cloud-gtm/ge-qualification-agent`.
 *   **"One-Click" Deployment:** Fully automated via `go/demos` Click-to-Deploy (`click-to-deploy/`).
 *   **24/7 Access:** Each presenter deploys an isolated instance into their own Argolis project; standalone skills (`ge-intake-business.zip`, `ge-tech_review.zip`) also provide zero-backend fallback.
-*   **Deprecation Plan:** Active — reviewed quarterly against Gemini Enterprise A2A/A2UI protocol updates and Gemini model releases.
+*   **Deprecation Plan:** Active - reviewed quarterly against Gemini Enterprise A2A/A2UI protocol updates and Gemini model releases.
 
 ### **6.3. Security & Compliance**
 *   **Secrets:** Zero hardcoded credentials in source. Per-deployment signing secret is generated by Terraform (`random_id.oauth_state_secret`) and mounted from Secret Manager.
@@ -274,17 +274,17 @@ The primary user interface in Click-to-Deploy is **Gemini Enterprise**, which co
 *   **Accessibility (a11y):** Uses native Gemini Enterprise A2UI components (`TextField`, `ChoicePicker`, `MaterialRadioButton`, `MaterialSelect`, `Tabs`, `Button`), which inherit Gemini Enterprise's WCAG AA contrast, keyboard navigation, and ARIA semantics.
 
 ### **6.5. Testing & Reliability**
-*   **Testing:** 871 automated tests (`uv run pytest -q`) covering pack loading, evidence-gated extraction, capability tiering, 22-point technical scoring, portfolio quadrant math, GCS optimistic concurrency, supply-chain hash pinning, and full multi-turn E2E A2A streaming (`scratch/e2e_demo.py` — 16/16 checks passing against live Vertex AI and GCS).
+*   **Testing:** 871 automated tests (`uv run pytest -q`) covering pack loading, evidence-gated extraction, capability tiering, 22-point technical scoring, portfolio quadrant math, GCS optimistic concurrency, supply-chain hash pinning, and full multi-turn E2E A2A streaming (`scratch/e2e_demo.py` - 16/16 checks passing against live Vertex AI and GCS).
 *   **Canned Backup (recommended for any live delivery):** Pre-seeded Cymbal records (`UC-2026-DEMO01`, `UC-2026-DEMO02`, `UC-2026-DEMO03`) are uploaded to GCS at deploy time so presenters can jump straight to Phase 2 (`technical review Claims intake triage`) or Phase 3 (`portfolio review`) even if they skip Phase 1 live typing.
-*   **Offline/Mock Fallback (required for Tier 3):** N/A — Tier 2 Customer-Ready demo (additionally, every A2UI form card supports direct manual input if an LLM extraction turn is skipped).
+*   **Offline/Mock Fallback (required for Tier 3):** N/A - Tier 2 Customer-Ready demo (additionally, every A2UI form card supports direct manual input if an LLM extraction turn is skipped).
 
 ### **6.6. Risks, Assumptions & Dependencies**
 
 | Risk / Dependency | Likelihood | Impact | Mitigation |
 |---|---|---|---|
-| Discovery Engine service agent IAM propagation takes 30–60s on first deploy | High | Medium | Terraform `time_sleep.after_identities` and `time_sleep.after_build_iam` (60s) plus retry loops in `build.tf` and `register_agent.sh` absorb first-time propagation delays automatically. |
+| Discovery Engine service agent IAM propagation takes 30-60s on first deploy | High | Medium | Terraform `time_sleep.after_identities` and `time_sleep.after_build_iam` (60s) plus retry loops in `build.tf` and `register_agent.sh` absorb first-time propagation delays automatically. |
 | Presenter's Argolis user lacks an active Gemini Enterprise license | Medium | High | `ensure_ge_license.sh` automatically starts the 30-day free trial and assigns a seat to `var.gcp_account_name` during `terraform apply`. |
-| First Cloud Run request after scale-to-zero experiences a ~5–8s cold start | High | Low | Demo Guide §3 instructs the presenter to send `hello what can you do?` 2 minutes before going live to warm the instance. |
+| First Cloud Run request after scale-to-zero experiences a ~5-8s cold start | High | Low | Demo Guide §3 instructs the presenter to send `hello what can you do?` 2 minutes before going live to warm the instance. |
 | LLM extraction misses an ambiguous phrasing during live improvisation | Low | Low | Every stage renders an interactive A2UI form card where the presenter can edit any field or click **Skip for now** / **Continue** deterministically. |
 
 *   **Assumptions:** Presenter deploys into an Argolis project where `orgpolicy.googleapis.com` and `discoveryengine.googleapis.com` can be enabled.
@@ -299,7 +299,7 @@ The primary user interface in Click-to-Deploy is **Gemini Enterprise**, which co
 | **Product PM** | giuliosalierno | Alignment with Gemini Enterprise A2A and A2UI specifications |
 
 ### **6.8. Known Limitations & Live Demo Workarounds**
-*   **Cloud Run Cold Start (~5–8s on first turn):** Send `hello what can you do?` in the Gemini Enterprise agent chat 2 minutes before presenting so the container is warm.
+*   **Cloud Run Cold Start (~5-8s on first turn):** Send `hello what can you do?` in the Gemini Enterprise agent chat 2 minutes before presenting so the container is warm.
 *   **Persistent `@agent` Chip in Gemini Enterprise:** Once `@GE Use Case Qualification Agent` is selected in the Gemini Enterprise chat bar, keep the agent chip active for all commands (`technical review`, `portfolio review`). If a prompt is answered by the generic Gemini assistant instead of the qualification agent, re-select `@GE Use Case Qualification Agent` from the mention menu.
 *   **Partial Field Extraction on Short Answers:** If a presenter types a brief answer that leaves a required stage field blank, the agent appends `_Still needed on the card before **Continue**: ..._`. Either type the missing detail in chat or fill the highlighted input directly on the A2UI form card and click **Continue**.
 
