@@ -76,7 +76,7 @@ Demonstrate how Gemini Enterprise and the GE Use Case Qualification Agent compre
 ## **4. Demo Strategy & Narrative**
 
 ### **4.1. Demo Thesis**
-Today, I will show you how Gemini Enterprise and the GE Use Case Qualification Agent replace weeks of fragmented AI intake spreadsheets with a governed, three-phase agentic workflow - turning a raw finance automation idea into a quantified 10,000-hour/year Business Value Brief, a 22-point Technical Architecture Dossier, and a prioritized CoE portfolio in under 10 minutes.
+Today, I will show you how Gemini Enterprise and the GE Use Case Qualification Agent replace weeks of fragmented AI intake spreadsheets with a governed, three-phase agentic workflow - turning a raw finance automation idea into a quantified 10,000-hour/year Business Value Brief, a 22-point Technical Architecture Dossier, and a prioritized CoE portfolio.
 
 ### **4.2. Overall Narrative Approach**
 *   **Focus on Value, Not Features:** Frame every stage around preventing the two biggest AI CoE failures: building low-value science projects and over-engineering simple no-code assistants into expensive custom builds.
@@ -92,7 +92,7 @@ Today, I will show you how Gemini Enterprise and the GE Use Case Qualification A
     2.  **Act 1 - Business Value Intake (Maria):** Presenter clicks **Business Value Intake** and describes the *Supplier query assistant* in natural language. Across 4 stages (Problem & Users → Effort & Value → Data & Systems → Ownership), the agent extracts fields into the A2UI card, calculates **10,000 hours/year saved** (`30 clerks × 40 queries/wk × 10 min saved × 50 weeks`), assigns **Level 5 (Tier 3: Pro-Code - Workflow agent with custom MCP server)**, and generates the **Business Value Brief**.
     3.  **Act 2 - Technical Architecture Review (Paolo):** Presenter types `technical review`, selects the newly created *Supplier query assistant* record alongside seeded Cymbal opportunities, and walks through the 5 technical stages (SAP S/4HANA real-time freshness, Milan on-prem PSC transit, Entra ID SSO + EU data residency, strict citations + ACL preservation, landing zone in progress). The agent produces the **Technical Architecture Dossier** (68% readiness across 22 subcriteria).
     4.  **Act 3 - CoE Portfolio Prioritization (CoE Lead):** Presenter types `portfolio review`. The agent scores all 4 opportunities (3 Cymbal seeds + the new AP use case totaling **95,500 hrs/yr** across **660 users**) and plots them on the 4-quadrant chart, highlighting *Claims intake triage* (`UC-2026-DEMO01`) as the top **Quick Win** and *Supplier query assistant* as a **Strategic Bet**.
-*   **Resolution:** In under 10 minutes, three personas moved from an unstructured idea to a board-ready Business Brief, an architect-verified Technical Dossier, and a ranked CoE portfolio - all inside Gemini Enterprise.
+*   **Resolution:** Three personas moved from an unstructured idea to a board-ready Business Brief, an architect-verified Technical Dossier, and a ranked CoE portfolio - all inside Gemini Enterprise.
 
 ### **4.4. Differentiators**
 *   **Native A2A + Interactive A2UI Side-Panel Forms inside Gemini Enterprise** - *vs. Microsoft Copilot Studio / generic chat-only intake bots; shown in Act 1 & Act 2 when natural-language chat turns dynamically patch live A2UI form cards, tables, and Vega charts alongside the conversation.*
