@@ -70,6 +70,8 @@ images:
 
 
 # click_to_deploy_path:
+click_to_deploy_path: 2213-ge-use-case-qualification-agent/tree/main/click-to-deploy
+
 
 
 demo_guide: https://docs.google.com/document/d/1nFsrfmTHBmbgb79LpRNCdEOTaOnSrWGCLgeEmswpQj8/edit?tab=t.0
