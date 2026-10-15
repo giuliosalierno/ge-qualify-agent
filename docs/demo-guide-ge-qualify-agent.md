@@ -274,7 +274,7 @@ Comments and feedback are greatly appreciated and help us improve this demo!
 
 ## Summary
 
-As demonstrated in this walkthrough, the **GE Use Case Qualification Agent** transforms Gemini Enterprise from a general-purpose assistant into a governed enterprise AI intake, architecture review, and portfolio prioritization platform. By combining conversational extraction, interactive A2UI v0.9 side-panel surfaces, deterministic ROI and 22-point technical readiness scoring, and Cloud Storage optimistic concurrency, Customer Engineers and AI CoE Leads can qualify and rank customer use cases live in under 10 minutes.
+As demonstrated in this walkthrough, the **GE Use Case Qualification Agent** transforms Gemini Enterprise from a general-purpose assistant into a governed enterprise AI intake, architecture review, and portfolio prioritization platform. By combining conversational extraction, interactive A2UI v0.9 side-panel surfaces, deterministic ROI and 22-point technical readiness scoring, and Cloud Storage optimistic concurrency, Customer Engineers and AI CoE Leads can qualify and rank customer use cases live.
 
 ---
 
