@@ -8,7 +8,7 @@
 * **Document Self-link:** https://docs.google.com/document/d/1nFsrfmTHBmbgb79LpRNCdEOTaOnSrWGCLgeEmswpQj8/edit?tab=t.0
 * **Link to go/demos:** [go/demos/demo/2213](https://demospace.corp.goog/demo/2213)
 * **Demo Design Document (DDD):** https://github.com/cloud-gtm/ge-qualification-agent/blob/main/docs/ddd-ge-qualify-agent.md
-* **GitHub Repository:** https://github.com/cloud-gtm/ge-qualification-agent (`main` branch for Click-to-Deploy; `integrations` branch for optional SharePoint integration)
+* **GitHub Repository:** https://github.com/cloud-gtm/ge-qualification-agent (`main` branch; Click-to-Deploy runs with SharePoint disabled, and the optional SharePoint integration is enabled by deploying with `scripts/deploy.sh`)
 
 > **Sharing Permissions Note:** When hosting this Demo Guide in Google Docs, share with **Viewer** access to:
 > * Alphabet FTEs: `alphabet@google.com`
@@ -223,8 +223,8 @@ Running the demo produces three structured deliverables persisted in `gs://<proj
    * Deterministic technical readiness score (`0-100%`), Key 2 status (`Pass`, `Conditional`, or `Blocked`), per-stage subcriteria breakdown (Systems, Network/PSC, IAM/Residency, Grounding/ACLs, Operational Readiness), and named owner sign-offs required before Sprint #1.
 3. **CoE Portfolio Prioritization Report (`portfolio/latest.json` & `portfolio/latest.md`):**
    * Ranked opportunity table, composite scores (`0.6 × Value + 0.4 × Feasibility`), and the 4-quadrant scatter matrix (**Quick Wins**, **Strategic Bets**, **Departmental Niche**, **Deprioritized**).
-4. **Optional Microsoft SharePoint Integration (`integrations` branch):**
-   * When configured with `STORAGE_PROVIDER=sharepoint`, the agent automatically publishes formatted Business Value Briefs, Technical Dossiers, and Portfolio Reports directly to enterprise SharePoint document libraries.
+4. **Optional Microsoft SharePoint Integration (not enabled in Click-to-Deploy):**
+   * When deployed with `scripts/deploy.sh` and `STORAGE_PROVIDER=sharepoint` (plus a Microsoft Entra app registration and the Load Balancer + IAP from `scripts/setup_lb.sh`), the agent automatically publishes formatted Business Value Briefs, Technical Dossiers, and Portfolio Reports directly to enterprise SharePoint document libraries.
 
 ---
 
