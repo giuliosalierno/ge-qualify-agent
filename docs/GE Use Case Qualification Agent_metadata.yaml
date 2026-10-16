@@ -22,12 +22,12 @@ thumbnail_summary: Qualify, architecturally review, and rank enterprise AI use c
 purpose: |
   Enterprise AI Centers of Excellence (CoEs) receive dozens of generative AI requests across business units, but rely on disconnected spreadsheets and repetitive workshops to evaluate ROI and technical feasibility.
 
-  The GE Use Case Qualification Agent embeds the GE App Use Case Discovery Framework natively inside Gemini Enterprise. Across three guided workflows - Business Value Intake, Technical Architecture Review, and CoE Portfolio Prioritization - stakeholders converse naturally while the agent populates interactive A2UI forms, computes annual hours saved, assigns Capability Levels 1-6 with anti-overcommitment rules, evaluates 22 technical readiness subcriteria, and segments the backlog into actionable quadrants.
+  The GE Use Case Qualification Agent embeds the GE App Use Case Discovery Framework natively inside Gemini Enterprise. Across three guided workflows - Business Value Intake, Technical Architecture Review, and CoE Portfolio Prioritization - stakeholders converse naturally while the agent populates interactive A2UI forms, computes annual hours saved, recommends the appropriate Gemini Enterprise agent tier for each use case (from no-code assistants and custom skills to low-code Workflow Builder agents and pro-code ADK agents), evaluates 22 technical readiness subcriteria, and segments the backlog into actionable quadrants.
 
 
 business_value: |
   * **Eliminate Unquantified AI Science Projects:** Calculates auditable annual hours saved from user headcount, weekly frequency, and minutes saved per task over 50 work weeks without invented benchmarks.
-  * **Prevent Costly Over-Engineering:** Maps every request to the simplest Gemini Enterprise capability (Levels 1-6, from no-code skills to pro-code custom agents) before committing engineering capacity.
+  * **Right-Size the Gemini Enterprise Agent Tier:** Recommends the appropriate Gemini Enterprise capability tier for each use case (Levels 1-6: Tier 1 No-Code Assistant/Skills, Tier 2 Low-Code Workflow Builder, or Tier 3 Pro-Code MCP/ADK Agent) before committing engineering capacity.
   * **Accelerate Technical Discovery:** Locks Phase 1 business baselines in Cloud Storage so Solution Architects immediately review systems, network transit, IAM, and ACLs without re-interviewing the business.
   * **Board-Ready Portfolio Prioritization:** Automatically scores Business Value (1-5) and Feasibility (1-5) to rank opportunities into Quick Wins, Strategic Bets, Departmental Niche, and Deprioritized quadrants.
 
