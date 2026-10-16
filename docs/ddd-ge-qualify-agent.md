@@ -65,7 +65,7 @@ Demonstrate how Gemini Enterprise and the GE Use Case Qualification Agent compre
 | Priority | Business Requirement | User Story |
 |---|---|---|
 | P0 | Interactive 4-stage Business Intake with live A2UI form pre-filling | As a Business Owner, I want to describe my use case in chat and see the structured form fields populate automatically so I can verify and submit a Business Value Brief in under 3 minutes. |
-| P0 | Deterministic ROI sizing and GE Capability Level (1-6) mapping | As a CoE Lead, I need annual hours saved (`U × T × S × 50 / 60`) and capability tiers calculated deterministically with anti-overcommitment rules so estimates are auditable. |
+| P0 | Deterministic ROI sizing and GE Agent Tier (Levels 1-6) mapping | As a CoE Lead, I need annual hours saved (`U × T × S × 50 / 60`) and the appropriate Gemini Enterprise agent tier (No-Code, Low-Code, or Pro-Code) assigned deterministically based on each use case's requirements. |
 | P0 | Phase 1 → Phase 2 handover and 5-stage Technical Review | As a Solution Architect, I want to pick a pending Business Value Brief in a separate chat, keep its business baseline locked, and score 22 technical subcriteria to produce a Technical Architecture Dossier. |
 | P0 | CoE Portfolio Prioritization matrix with pre-seeded Cymbal records | As a CoE Lead, I want to type `portfolio review` on first launch and immediately inspect a 4-quadrant portfolio combining pre-seeded Cymbal use cases and newly qualified opportunities. |
 | P1 | Optimistic concurrency and multi-actor record integrity in Cloud Storage | As a platform owner, I need concurrent business and technical sessions to merge cleanly via GCS generation preconditions so neither persona overwrites the other's work. |
@@ -82,7 +82,7 @@ Today, I will show you how Gemini Enterprise and the GE Use Case Qualification A
 *   **Focus on Value, Not Features:** Frame every stage around preventing the two biggest AI CoE failures: building low-value science projects and over-engineering simple no-code assistants into expensive custom builds.
 *   **Feature -> Benefit -> Value:**
     *   *Dual Chat + A2UI Form Extraction* -> Stakeholders speak naturally while the agent fills structured fields with evidence checks -> *Zero form fatigue and 100% structured data capture.*
-    *   *Anti-Overcommitment Capability Engine (Levels 1-6)* -> Automatically routes read-only Drive Q&A to Level 2 (No-Code Skill) and SAP/Outlook workflows to Level 5 (Pro-Code MCP) -> *Saves months of unnecessary engineering.*
+    *   *Gemini Enterprise Agent Tiering Engine (Levels 1-6)* -> Assigns the appropriate GE agent tier based on the use case (routing read-only Drive Q&A to Tier 1 No-Code Skill and SAP/Outlook workflows to Tier 3 Pro-Code MCP) -> *Saves months of unnecessary engineering.*
     *   *Cross-Session GCS Record Handover* -> Architects pick up exact business baselines without re-interviewing the business -> *Cuts technical scoping lead time by 70%.*
 
 ### **4.3. Demo Narrative & Storyboard**
@@ -169,7 +169,7 @@ flowchart LR
 *   **Declarative Interview Packs (`qualify/packs/business.yaml`, `qualify/packs/tech.yaml`):** Define stages, fields, types, option hints, validation rules, and whether a stage is required or skippable.
 *   **Evidence-Gated Extraction (`qualify/a2ui/patcher.py`):** The LLM proposes field values paired with verbatim quotes from the user's message; a deterministic check rejects any extraction whose quote does not appear in the user's actual words, preventing hallucinated form fills.
 *   **Deterministic Scoring (`qualify/scoring/`):**
-    *   `tier.py`: Evaluates data sources, write-back actions, orchestration complexity, and governance flags to assign Capability Levels 1-6 and Delivery Tiers 1-3 with anti-overcommitment rules.
+    *   `tier.py`: Evaluates data sources, write-back actions, orchestration complexity, and governance flags to assign the appropriate Gemini Enterprise agent tier (Delivery Tiers 1-3, Capability Levels 1-6) for the use case.
     *   `technical.py`: Scores 22 subcriteria across 5 architectural categories (0-100%), distinguishes unconfirmed (`unknown`) vs. confirmed hard blockers on critical gates (2.4 Transit Blocker, 3.5 Cloud Policy), and computes `key2_ready`.
     *   `portfolio.py`: Computes Value (1-5) and Feasibility (1-5) scores and segments records into 4 quadrants.
 *   **Reopenable A2A Task Store (`qualify/agent/task_store.py`):** Wraps `InMemoryTaskStore` so every turn returns `completed` (allowing Gemini Enterprise to render the turn cleanly) while permitting A2UI button clicks on older cards to reopen the task seamlessly.
