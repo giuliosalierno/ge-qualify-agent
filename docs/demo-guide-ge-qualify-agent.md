@@ -81,7 +81,7 @@
 ### Overview & Purpose
 Enterprise AI Centers of Excellence (CoEs) receive dozens of generative AI requests across business units, but rely on disconnected spreadsheets and repetitive workshops to evaluate ROI and technical feasibility.
 
-The **GE Use Case Qualification Agent** embeds the **GE App Use Case Discovery Framework** natively inside Gemini Enterprise. Across three guided workflows - **Business Value Intake**, **Technical Architecture Review**, and **CoE Portfolio Prioritization** - stakeholders converse naturally while the agent populates interactive A2UI v0.9 forms, computes auditable annual hours saved, recommends the appropriate Gemini Enterprise agent tier for each use case (from no-code assistants and skills to low-code Workflow Builder agents and pro-code ADK agents), evaluates 22 technical readiness subcriteria, and segments the backlog into a 4-quadrant portfolio matrix.
+The **GE Use Case Qualification Agent** embeds the **GE App Use Case Discovery Framework** natively inside Gemini Enterprise. Across three guided workflows - **Business Value Intake**, **Technical Architecture Review**, and **CoE Portfolio Prioritization** - stakeholders collaborate through natural chat and interactive A2UI v0.9 forms, as the agent extracts details from conversation or direct form inputs, computes auditable annual hours saved, recommends the appropriate Gemini Enterprise agent tier for each use case (from no-code assistants and skills to low-code Workflow Builder agents and pro-code ADK agents), evaluates 22 technical readiness subcriteria, and segments the backlog into a 4-quadrant portfolio matrix.
 
 ### Objectives & Key Features Covered
 1. **Phase 1 - Business Value Intake (Business Unit Owner):**
