@@ -79,7 +79,7 @@ Demonstrate how Gemini Enterprise and the GE Use Case Qualification Agent compre
 Today, I will show you how Gemini Enterprise and the GE Use Case Qualification Agent replace weeks of fragmented AI intake spreadsheets with a governed, three-phase agentic workflow - turning a raw finance automation idea into a quantified 10,000-hour/year Business Value Brief, a 22-point Technical Architecture Dossier, and a prioritized CoE portfolio.
 
 ### **4.2. Overall Narrative Approach**
-*   **Focus on Value, Not Features:** Frame every stage around preventing the two biggest AI CoE failures: building low-value science projects and over-engineering simple no-code assistants into expensive custom builds.
+*   **Focus on Value, Not Features:** Frame every stage around preventing the two biggest AI CoE failures: building low-value AI projects and over-engineering simple no-code assistants into expensive custom builds.
 *   **Feature -> Benefit -> Value:**
     *   *Dual Chat + A2UI Form Extraction* -> Stakeholders speak naturally while the agent fills structured fields with evidence checks -> *Zero form fatigue and 100% structured data capture.*
     *   *Gemini Enterprise Agent Tiering Engine (Levels 1-6)* -> Assigns the appropriate GE agent tier based on the use case (routing read-only Drive Q&A to Tier 1 No-Code Skill and SAP/Outlook workflows to Tier 3 Pro-Code MCP) -> *Saves months of unnecessary engineering.*

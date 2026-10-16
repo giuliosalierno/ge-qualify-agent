@@ -26,7 +26,7 @@ purpose: |
 
 
 business_value: |
-  * **Eliminate Unquantified AI Science Projects:** Calculates auditable annual hours saved from user headcount, weekly frequency, and minutes saved per task over 50 work weeks without invented benchmarks.
+  * **Eliminate Unquantified AI Projects:** Calculates auditable annual hours saved from user headcount, weekly frequency, and minutes saved per task over 50 work weeks without invented benchmarks.
   * **Right-Size the Gemini Enterprise Agent Tier:** Recommends the appropriate Gemini Enterprise capability tier for each use case (Levels 1-6: Tier 1 No-Code Assistant/Skills, Tier 2 Low-Code Workflow Builder, or Tier 3 Pro-Code MCP/ADK Agent) before committing engineering capacity.
   * **Accelerate Technical Discovery:** Locks Phase 1 business baselines in Cloud Storage so Solution Architects immediately review systems, network transit, IAM, and ACLs without re-interviewing the business.
   * **Board-Ready Portfolio Prioritization:** Automatically scores Business Value (1-5) and Feasibility (1-5) to rank opportunities into Quick Wins, Strategic Bets, Departmental Niche, and Deprioritized quadrants.
