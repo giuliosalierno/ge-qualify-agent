@@ -28,7 +28,7 @@ purpose: |
 business_value: |
   * **Eliminate Unquantified AI Projects:** Calculates annual hours saved directly from the customer's actual team size, weekly task frequency, and time saved per task.
   * **Right-Size the Gemini Enterprise Agent Tier:** Recommends the appropriate Gemini Enterprise capability tier for each use case (Levels 1-6: Tier 1 No-Code Assistant/Skills, Tier 2 Low-Code Workflow Builder, or Tier 3 Pro-Code MCP/ADK Agent) before committing engineering capacity.
-  * **Seamless Handover via Cloud Storage & SharePoint:** Automatically saves Business Value Briefs, Technical Architecture Dossiers, and Portfolio Reports to Google Cloud Storage or Microsoft SharePoint so Solution Architects can immediately review systems, network transit, IAM, and ACLs without re-interviewing the business.
+  * **Accelerate Deal Progression:** Generates shareable Business Value Briefs, Technical Architecture Dossiers, and Portfolio Reports and saves them directly to Microsoft SharePoint or Google Cloud Storage, keeping all account deliverables organized in a single, centralized repository.
   * **Board-Ready Portfolio Prioritization:** Automatically scores Business Value (1-5) and Feasibility (1-5) to rank opportunities into Quick Wins, Strategic Bets, Departmental Niche, and Deprioritized quadrants.
 
 
