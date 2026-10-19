@@ -7,7 +7,7 @@
 * **Demo Leads & Contributors:** giuliosalierno@google.com
 * **Document Self-link:** https://docs.google.com/document/d/1nFsrfmTHBmbgb79LpRNCdEOTaOnSrWGCLgeEmswpQj8/edit?tab=t.0
 * **Link to go/demos:** [go/demos/demo/2213](https://demospace.corp.goog/demo/2213)
-* **Demo Design Document (DDD):** https://github.com/cloud-gtm/ge-qualification-agent/blob/main/docs/ddd-ge-qualify-agent.md
+* **Demo Design Document (DDD):** https://docs.google.com/document/d/1vcF1yPSzpLK3q1-tT1zHk0CV1ySa-VAJC6iz4NIqL9M/edit?resourcekey=0--Th1QWj7nAA5uIwIhEpdaw&tab=t.0
 * **GitHub Repository:** https://github.com/cloud-gtm/ge-qualification-agent (`main` branch; Click-to-Deploy runs with SharePoint disabled, and the optional SharePoint integration is enabled by deploying with `scripts/deploy.sh`)
 
 > **Sharing Permissions Note:** When hosting this Demo Guide in Google Docs, share with **Viewer** access to:
